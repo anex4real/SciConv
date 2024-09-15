@@ -1,0 +1,65 @@
+.alert {
+    padding: 0.75rem 1.25rem;
+    margin-bottom: 0.5rem;
+    border: 1px solid transparent;
+    border-radius: 0.42rem;
+    width: 15em;
+}
+.my-alert {
+    position: absolute;
+    right: 10px;
+    top: 75px;
+    z-index: 1;
+
+}
+
+.alert-primary {
+    background-color: #3F51B5;
+    border-color: #3F51B5;
+    color: white;
+
+}
+
+.alert-success {
+    background-color: green;
+    border-color: green;
+    color: white;
+
+}
+
+.alert-info {
+    background-color: blue;
+    border-color: #8950FC;
+    color: white;
+
+}
+
+.alert-warning {
+    background-color: #FFA800;
+    border-color: #FFA800;
+    color: white;
+
+}
+
+.alert-danger {
+    background-color: firebrick;
+    border-color: firebrick;
+    color: white;
+}
+
+.close {
+    float: right;
+    cursor: pointer;
+}
+
+.message-div {
+    flex: 0 0 85%;
+}
+
+.close-div {
+    flex: 1;
+}
+
+.alert-button {
+    float: right;
+}

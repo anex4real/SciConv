@@ -1,0 +1,54 @@
+<div>
+    <!--    <p class="ml-1">Current Stage: {{ (currentStage$ | async) }}</p>-->
+
+    <div class="chat-input" *ngIf="this.stageSubject.value==stages.Start">
+        <!--<input [(ngModel)]="projectUuid" placeholder="Type your project location here..."/>-->
+        <button (click)="changeStage(stages.ProjectLocation)">Start</button>
+    </div>
+
+    <!--<div class="chat-container" *ngIf="start">-->
+    <div *ngIf="messages.length > 0" class="chat-window">
+        <div *ngFor="let message of messages">
+            <div *ngIf="message.contentShort != undefined"
+                 [ngClass]="{'role-message': message.role === 'system', 'chat-message': message.role === 'assistant',
+             'without-content': message.contentShort === undefined}">
+
+                <strong *ngIf="message.role == 'system'; else elseBlock">researcher</strong>
+                <ng-template #elseBlock>
+                    <strong>{{message.role}}</strong>
+                </ng-template>
+
+                <div *ngIf="message.jsonObject">
+                    <ul>
+                        <li *ngFor="let key of objectKeys(message.contentShort)">
+                            <span class="json-key">{{ key }}:</span>
+                            <ng-container *ngIf="isObject(message.contentShort[key]); else showValue">
+                            </ng-container>
+                            <ng-template #showValue>
+
+                                <!-- Check if the value is not an array -->
+                                <ng-container *ngIf="!Array.isArray(message.contentShort[key])">
+                                    <span class="json-value">{{ message.contentShort[key] }}</span>
+                                </ng-container>
+
+                                <!-- Check if the value is an array and use *ngFor to iterate -->
+                                <ng-container *ngIf="Array.isArray(message.contentShort[key])">
+                                    <span class="json-value"
+                                          *ngFor="let item of message.contentShort[key]">{{item}}</span>
+                                </ng-container>
+                            </ng-template>
+                        </li>
+                    </ul>
+                </div>
+                <div style="white-space: pre-line;" *ngIf="!message.jsonObject">
+                    {{message.contentShort}}
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="chat-input" *ngIf="this.stageSubject.value!=stages.Start">
+        <input [(ngModel)]="userMessage" placeholder="Type your message here..."/>
+        <button (click)="sendMessage()">Send</button>
+    </div>
+</div>

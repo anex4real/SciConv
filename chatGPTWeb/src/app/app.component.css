@@ -1,0 +1,205 @@
+mat-toolbar {
+    #background: #004a9f;
+    background: #00ff00;
+    color: white;
+}
+
+
+.display-block{
+    display: block;
+}
+mat-sidenav {
+    width: 250px;
+    border-right: none;
+    background: #3f51b5;
+
+    color: white;
+    border-radius: 10px;
+    padding: 30px;
+    text-align: left;
+}
+.center{
+    display: flex;
+    justify-content: center;
+    align-items: center;
+
+}
+.left{
+    /*display: flex;
+    justify-content: left;
+    /*align-items: center;
+    text-align: left;*/
+
+}
+.right{
+    display: flex;
+    justify-content: right;
+    align-items: center;
+}
+
+
+
+.content {
+    height: calc(100vh - 98px);
+    border-radius: 10px;
+    margin: 16px;
+    margin-left: 32px;
+
+    display: flex;
+    justify-content: center;
+    align-items: center;
+
+    font-size: 2rem;
+    color: lightgray;
+}
+
+mat-sidenav-container {
+    height: calc(120vh - 65px);
+
+}
+.p-1 {
+    padding: 1em!important;
+}
+
+.mr-2 {
+    margin-right: 2em;
+}
+
+.mb-1 {
+    margin-bottom: 1em;
+}
+.mb-2 {
+    margin-bottom: 2em;
+}
+
+.mat-button-disabled{
+    background: #3f51b5!important;
+    color: white !important;
+}
+
+
+.doc-content {
+    margin-bottom: 6em;
+}
+.mt-5{
+    margin-top: 5em;
+}
+.mt-3{
+    margin-top: 3em;
+}
+.mt-2 {
+    margin-top: 2em;
+}
+
+.mt-1{
+    margin-top: 1em;
+}
+
+.ml-1{
+    margin-left: 1em;
+}
+.ml-2{
+    margin-left: 2em;
+}
+.ml-3{
+    margin-left: 3em;
+}
+
+.pt-0{
+    padding-top: 0em;
+}
+.pt-0-5{
+    padding-top: 0.5em;
+}
+
+.pl-2{
+    padding-left: 2em;
+}
+.pr-0-5{
+    padding-right: 0.5em;
+}
+
+.width40{
+    width: 40%;
+}
+.width50{
+    width: 50%;
+}
+
+.btn-mg-1em {
+    margin: 1em;
+}
+
+.mat-success {
+    background-color: green;
+    color: #fff;
+}
+
+.mat-error {
+    background-color: lightslategray;
+    color: #fff;
+}
+
+.alert-success {
+    background-color: forestgreen;
+}
+.alert-danger {
+    color: firebrick;
+}
+.overflow{
+    overflow: auto;
+}
+.p-0-5{
+    padding: 0.5em;
+}
+.pr-2{
+padding-right: 2em;
+}
+
+.display-flex {
+    display: flex
+}
+
+.flex-size-0-5{
+    flex: 0.5;
+}
+.flex-size-1{
+    flex: 1;
+}
+.flex-size-2{
+    flex: 2;
+}
+.flex-size-3{
+    flex: 3;
+}
+.mb-0{
+    margin-bottom: 0!important;
+}
+.pb-0{
+    padding-bottom: 0!important;
+}
+
+.width90 {
+    width: 90%;
+}
+
+
+.width100 {
+    width: 100%;
+}
+
+.child-centered {
+    text-align: center;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+}
+.child-centered-row {
+    text-align: center;
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+}
+
+
+
