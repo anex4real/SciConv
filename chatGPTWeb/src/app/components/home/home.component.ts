@@ -32,6 +32,7 @@ enum Stage {
 })
 export class HomeComponent implements OnInit {
     protected readonly Array = Array;
+    private fileToUpload: File | null = null;
 
     stages = Stage; // Expose the enum to the template
     stageSubject = new BehaviorSubject<Stage>(Stage.Start); // Default to Initial stage
@@ -454,4 +455,28 @@ export class HomeComponent implements OnInit {
     }
 
 
+    onFileChange(event: any) {
+        const file = event.target.files[0];
+        if (file && (file.type === 'application/x-zip-compressed' || file.type === 'application/zip')) {
+            this.fileToUpload = file;
+        } else {
+            console.log(file.type)
+            console.error('Please select a zip file.');
+            this.fileToUpload = null;
+        }
+    }
+
+    onSubmit() {
+        if (this.fileToUpload) {
+            const formData = new FormData();
+            formData.append('file', this.fileToUpload);
+            this.backend.uploadProject( formData).subscribe((response: any) => {
+                console.log("response");
+                console.log(response);
+                this.messages.push(...response)
+
+                this.changeStage(this.stages.Completed)
+            });
+        }
+    }
 }

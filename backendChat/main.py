@@ -1,12 +1,12 @@
 # import json
 import shutil
+import zipfile
 from copy import copy
 from openai import OpenAI
 import os
 from datetime import datetime
 from flask import Flask, request
 from flask_cors import CORS, cross_origin
-import settingsPython
 from controllers.project import find_files, read_first_50_lines
 from packageExperiment.linux import writeLinuxFile
 from packageExperiment.windows import writeWindowsFIle
@@ -17,10 +17,58 @@ app = Flask(__name__)
 cors = CORS(app, resources={r"/api/*": {"origins": "*"}})
 
 
+@app.route("/project/upload-project", methods=['POST'])
+@cross_origin()
+def upload_file():
+    UPLOAD_FOLDER = 'projects'
+    os.makedirs(UPLOAD_FOLDER, exist_ok=True)
+    if 'file' not in request.files:
+        return makeResponse({'message': 'File is missing'}, 404, False)
+
+    file = request.files["file"]
+
+    if file.filename == '':
+        return makeResponse({'message': 'No selected file'}, 404, False)
+
+    if file and file.filename.endswith('.zip'):
+        # Save the file temporarily
+        temp_path = os.path.join(UPLOAD_FOLDER, file.filename)
+        file.save(temp_path)
+
+        try:
+            with zipfile.ZipFile(temp_path, 'r') as zip_ref:
+                # Check for folders inside the zip file
+                folder_names = set()
+                for member in zip_ref.namelist():
+                    if member.endswith('/'):  # Check if it's a folder
+                        folder_names.add(member.split('/')[0])
+                        projectUuid = list(folder_names)[0]
+
+                if not folder_names:
+                    return makeResponse({'message': 'No folders found in the zip file'}, 400, False)
+
+                projectLocation = os.path.join(UPLOAD_FOLDER, projectUuid)
+                projectLocationRoot = os.path.join(UPLOAD_FOLDER, projectUuid, projectUuid)
+                projectLocationFiles = os.path.join(UPLOAD_FOLDER, projectUuid, "files")
+
+                # Extract all files
+                zip_ref.extractall(projectLocation)
+
+            os.remove(temp_path)  # Remove the zip file after extraction
+            os.rename(projectLocationRoot, projectLocationFiles)
+
+            return makeResponse({'message': 'File uploaded and extracted successfully', 'folders': list(folder_names)},
+                                200, True)
+
+        except zipfile.BadZipFile:
+            return makeResponse({'message': 'Invalid zip file'}, 400, True)
+    else:
+        return makeResponse({'message': 'Only zip files are allowed'}, 400, True)
+
+
 @app.route("/project/<projectUuid>/find_files", methods=['GET'])
 @cross_origin()
 def find_files_project(projectUuid):
-
     directoryPath = 'projects/' + projectUuid + "/files"
     messagesToUser = []
     messagesToChat = []
@@ -31,12 +79,12 @@ def find_files_project(projectUuid):
                 "jsonObject": False,
                 "contentShort": None,
                 "content": 'The stage of this iteration is: FindProjectFiles'
-                        '\nPlease provide a categorized list of Executable Files and Configuration Files.'
-                            '\nFormat your response as follows:' 
-                            '\n{ "ExecutableFiles": [List of files], "ConfigurationFiles": [List of files] } in valid JSON format.'
-                        '\nFor example:' 
-                        '\n{ "ExecutableFiles": ["file1.exe", "file2.py", "file3.sh"], "ConfigurationFiles": ["config.yaml"] }'
-                            '\nHere are the files to categorize: ' + str(all_files)}
+                           '\nPlease provide a categorized list of Executable Files and Configuration Files.'
+                           '\nFormat your response as follows:'
+                           '\n{ "ExecutableFiles": [List of files], "ConfigurationFiles": [List of files] } in valid JSON format.'
+                           '\nFor example:'
+                           '\n{ "ExecutableFiles": ["file1.exe", "file2.py", "file3.sh"], "ConfigurationFiles": ["config.yaml"] }'
+                           '\nHere are the files to categorize: ' + str(all_files)}
     messagesToUser.append(message1)
     messagesToChat.append(message1)
     try:
@@ -45,13 +93,13 @@ def find_files_project(projectUuid):
 
         completion = client.chat.completions.create(
             # model="gpt-3.5-turbo",
-            model="gpt-4-turbo",
+            # model="gpt-4-turbo",
+            model="gpt-4o",
             messages=
-                messagesToChat
+            messagesToChat
 
         )
         messageText = completion.choices[0].message.content
-
 
         # TODO comentar
         # messageText = '{"ExecutableFiles": ["myfile.py", "main.py"], "ConfigurationFiles": []}'
@@ -71,7 +119,7 @@ def find_files_project(projectUuid):
 
         return makeResponse(messagesToUser, 201, True)
     except Exception as error:
-        #TODO alterar
+        # TODO alterar
         message2 = {"role": "assistant",
                     "contentShort": str(error),
                     "content": str(error),
@@ -98,15 +146,15 @@ def parameters_to_use_confirmation(projectUuid):
     message1 = {"role": "system",
                 "jsonObject": False,
                 "contentShort": None,
-                "content":  "I will interact with you, and in each iteration, I will inform you of the stage name. "
-                            "In the previous phase (ProjectLocation), the user selected the project location, which is the name of a folder.\n"
-                            "The stage of this iteration is: ParametersToUse.\n"
-                            "Consider the following message and determine if the system has provided a command to run an experiment, "
-                            "or if it indicates a desire to change the information from the ProjectLocation stage.\n"
-                            "Here are your options:\n"
-                            "- Reply 'ParametersToUse' if the system has provided a command to run an experiment.\n"
-                            "- Reply 'ProjectLocation' if the system wants to change the information from the ProjectLocation stage.\n"
-                            "Message: " + myMessage}
+                "content": "I will interact with you, and in each iteration, I will inform you of the stage name. "
+                           "In the previous phase (ProjectLocation), the user selected the project location, which is the name of a folder.\n"
+                           "The stage of this iteration is: ParametersToUse.\n"
+                           "Consider the following message and determine if the system has provided a command to run an experiment, "
+                           "or if it indicates a desire to change the information from the ProjectLocation stage.\n"
+                           "Here are your options:\n"
+                           "- Reply 'ParametersToUse' if the system has provided a command to run an experiment.\n"
+                           "- Reply 'ProjectLocation' if the system wants to change the information from the ProjectLocation stage.\n"
+                           "Message: " + myMessage}
     messagesToUser = []
     messagesToUser.append(message1)
     messagesToChat.append(message1)
@@ -116,7 +164,8 @@ def parameters_to_use_confirmation(projectUuid):
     completion = client.chat.completions.create(
         # model="gpt-4",
         # model="gpt-3.5-turbo",
-        model="gpt-4-turbo",
+        # model="gpt-4-turbo",
+        model="gpt-4o",
         messages=
         messagesToChat,
 
@@ -131,14 +180,14 @@ def parameters_to_use_confirmation(projectUuid):
     if firstMessageText == "ParametersToUse":
         message1confirmation = {"role": "system",
                                 "jsonObject": False,
-                                "content":"The stage of this iteration is: ParametersToUse\n"
-                                        "Consider the following message and the available files on the project that you provided in a previous message. "
-                                        "They are inside the ExecutableFiles variable. Extract the command to run an experiment from the following message and "
-                                        "verify if it is a valid command taking into account the existing files in the project.\n"
-                                        'Message: ' + myMessage + '\n'
-                                        "Your answer follows two options:\n"
-                                        "- Reply 'ParametersToUse' if this message does not contain a valid command.\n"
-                                        "- If this message contains a valid command, your answer should only contain the command to execute the experiment.",
+                                "content": "The stage of this iteration is: ParametersToUse\n"
+                                           "Consider the following message and the available files on the project that you provided in a previous message. "
+                                           "They are inside the ExecutableFiles variable. Extract the command to run an experiment from the following message and "
+                                           "verify if it is a valid command taking into account the existing files in the project.\n"
+                                           'Message: ' + myMessage + '\n'
+                                                                     "Your answer follows two options:\n"
+                                                                     "- Reply 'ParametersToUse' if this message does not contain a valid command.\n"
+                                                                     "- If this message contains a valid command, your answer should only contain the command to execute the experiment.",
                                 "contentShort": None,
                                 }
 
@@ -149,7 +198,8 @@ def parameters_to_use_confirmation(projectUuid):
         completion = client.chat.completions.create(
             # model="gpt-4",
             # model="gpt-3.5-turbo",
-            model="gpt-4-turbo",
+            ##model="gpt-4-turbo",
+            model="gpt-4o",
             messages=
             messagesToChat,
 
@@ -189,7 +239,8 @@ def parameters_to_use_confirmation(projectUuid):
         completion = client.chat.completions.create(
             # model="gpt-4",
             # model="gpt-3.5-turbo",
-            model="gpt-4-turbo",
+            # model="gpt-4-turbo",
+            model="gpt-4o",
             messages=
             confirmationMessage,
 
@@ -277,7 +328,8 @@ def infer_files_to_run(projectUuid):
     client = OpenAI()
     completion = client.chat.completions.create(
         # model="gpt-3.5-turbo",
-        model="gpt-4-turbo",
+        # model="gpt-4-turbo",
+        model="gpt-4o",
         messages=[
             messagesToChat,
         ]
@@ -355,7 +407,8 @@ def read_first_50_lines_project(projectUuid):
     client = OpenAI()
     completion = client.chat.completions.create(
         # model="gpt-3.5-turbo",
-        model="gpt-4-turbo",
+        # model="gpt-4-turbo",
+        model="gpt-4o",
         messages=[
             messagesToChat,
         ]
@@ -419,7 +472,8 @@ def find_configurations_change(projectUuid):
     client = OpenAI()
     completion = client.chat.completions.create(
         # model="gpt-3.5-turbo",
-        model="gpt-4-turbo",
+        # model="gpt-4-turbo",
+        model="gpt-4o",
         messages=
         messagesToChat,
 
@@ -507,7 +561,8 @@ def buildDockerFileChat(projectUuid):
     completion = client.chat.completions.create(
         # model="gpt-4",
         # model="gpt-3.5-turbo",
-        model="gpt-4-turbo",
+        # model="gpt-4-turbo",
+        model="gpt-4o",
         messages=
         messagesToChat,
 
@@ -540,7 +595,8 @@ def buildDockerFileChat(projectUuid):
     completion = client.chat.completions.create(
         # model="gpt-4",
         # model="gpt-3.5-turbo",
-        model="gpt-4-turbo",
+        # model="gpt-4-turbo",
+        model="gpt-4o",
         messages=
         messagesToChat,
 
@@ -615,7 +671,8 @@ def chat_interation(projectUuid):
     client = OpenAI()
     completion = client.chat.completions.create(
         # model="gpt-3.5-turbo",
-        model="gpt-4-turbo",
+        # model="gpt-4-turbo",
+        model="gpt-4o",
         messages=
         messagesToChat,
 
@@ -697,7 +754,8 @@ def buildDockerImageChat(projectUuid):
             client = OpenAI()
             completion = client.chat.completions.create(
                 # model="gpt-3.5-turbo",
-                model="gpt-4-turbo",
+                # model="gpt-4-turbo",
+                model="gpt-4o",
                 messages=messagesToChat
             )
             messageText = completion.choices[0].message.content
@@ -714,7 +772,8 @@ def buildDockerImageChat(projectUuid):
                 client = OpenAI()
                 completion = client.chat.completions.create(
                     # model="gpt-3.5-turbo",
-                    model="gpt-4-turbo",
+                    # model="gpt-4-turbo",
+                    model="gpt-4o",
                     messages=messagesToChat
                 )
                 messageText = completion.choices[0].message.content
@@ -855,7 +914,8 @@ def runDockerContainerChat(projectUuid):
             client = OpenAI()
             completion = client.chat.completions.create(
                 # model="gpt-3.5-turbo",
-                model="gpt-4-turbo",
+                # model="gpt-4-turbo",
+                model="gpt-4o",
                 messages=messagesToChat
             )
             messageText = completion.choices[0].message.content
@@ -955,9 +1015,8 @@ def researchArtifactChat(projectUuid):
 
 
 if __name__ == '__main__':
-    settingsPython.initializeAllPythonVersions()
     # TODO é necssario escrever FLASK_RUN_PORT=8080 nas variaveis de ambiente da execução para a porta a executar ser a correta
-    app.run(host='127.0.0.1', port=8080)
+    app.run(host='0.0.0.0', port=8080)
 
     # TODO Correr experiencias com interface grafica
     # Não é necesario ter export no dockerfile, o container tem que ser corrido desta maneira

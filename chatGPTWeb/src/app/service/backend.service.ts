@@ -3,13 +3,17 @@ import {Router} from '@angular/router';
 import {Observable} from "rxjs";
 import {Message} from "../interface/interfaces";
 import {HttpClient} from "@angular/common/http";
+import {environment} from "../../environments/environment";
 
 
 @Injectable({
     providedIn: 'root'
 })
 export class BackendService {
-    baseUrl = 'http://localhost:8080';
+    //baseUrl = 'http://localhost:8080';
+    //baseUrl = 'http://backend:8080';
+    baseUrl: string = environment.baseUrl;  // Set the baseUrl from environment
+
 
 
 
@@ -106,5 +110,9 @@ export class BackendService {
             messages: messages
         });
 
+    }
+
+    uploadProject(formData: FormData) {
+        return this.http.post(`${this.baseUrl}/project/upload-project`, formData);
     }
 }

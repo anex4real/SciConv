@@ -1,9 +1,14 @@
 <div>
-    <!--    <p class="ml-1">Current Stage: {{ (currentStage$ | async) }}</p>-->
-
     <div class="chat-input" *ngIf="this.stageSubject.value==stages.Start">
+        <form (ngSubmit)="onSubmit()" #fileUploadForm="ngForm">
+            <input type="file" (change)="onFileChange($event)" accept=".zip"/>
+            <button type="submit">Upload</button>
+        </form>
+    </div>
+    <div class="chat-input" *ngIf="this.stageSubject.value==stages.Start">
+
         <!--<input [(ngModel)]="projectUuid" placeholder="Type your project location here..."/>-->
-        <button (click)="changeStage(stages.ProjectLocation)">Start</button>
+        <button (click)="changeStage(stages.ProjectLocation)">Use a previous project</button>
     </div>
 
     <!--<div class="chat-container" *ngIf="start">-->

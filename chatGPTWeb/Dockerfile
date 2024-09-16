@@ -3,10 +3,12 @@ WORKDIR /webapp
 COPY . .
 RUN npm install
 EXPOSE 4200
-#RUN npm run start
-CMD ["npm", "run", "start"]
+RUN npm run build
+# Serve the application using a simple static file server
+# Use `serve` package to serve the production build
+RUN npm install -g serve
 
-#RUN chmod a+x script.sh
+CMD ["serve", "-s", "dist", "-l", "4200"]
 
 #CMD ./script.sh
 

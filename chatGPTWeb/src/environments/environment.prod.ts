@@ -1,10 +1,5 @@
 export const environment = {
-  production: true
+  production: true,
+  //baseUrl: 'http://backend:8080'
+  baseUrl: 'http://127.0.0.1:8080'
 };
-
-
-/*
-Copyright Google LLC. All Rights Reserved.
-Use of this source code is governed by an MIT-style license that
-can be found in the LICENSE file at https://angular.io/license
-*/
