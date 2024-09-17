@@ -1,4 +1,3 @@
-# import json
 import shutil
 import zipfile
 from copy import copy
@@ -22,20 +21,26 @@ cors = CORS(app, resources={r"/api/*": {"origins": "*"}})
 def upload_file():
     UPLOAD_FOLDER = 'projects'
     os.makedirs(UPLOAD_FOLDER, exist_ok=True)
+    messagesToUser = []
+
     if 'file' not in request.files:
-        return makeResponse({'message': 'File is missing'}, 404, False)
+        print("File is missing")
+        appendMessage(messagesToUser, contentShort="File is missing", stage="Start")
+        return makeResponse(messagesToUser, 201, True)
 
     file = request.files["file"]
 
     if file.filename == '':
-        return makeResponse({'message': 'No selected file'}, 404, False)
+        print("No selected file")
+        appendMessage(messagesToUser, contentShort="No selected file", stage="Start")
+        return makeResponse(messagesToUser, 201, True)
 
-    if file and file.filename.endswith('.zip'):
-        # Save the file temporarily
-        temp_path = os.path.join(UPLOAD_FOLDER, file.filename)
-        file.save(temp_path)
+    try:
+        if file and file.filename.endswith('.zip'):
+            # Save the file temporarily
+            temp_path = os.path.join(UPLOAD_FOLDER, file.filename)
+            file.save(temp_path)
 
-        try:
             with zipfile.ZipFile(temp_path, 'r') as zip_ref:
                 # Check for folders inside the zip file
                 folder_names = set()
@@ -45,7 +50,9 @@ def upload_file():
                         projectUuid = list(folder_names)[0]
 
                 if not folder_names:
-                    return makeResponse({'message': 'No folders found in the zip file'}, 400, False)
+                    print("No folders found in the zip file")
+                    appendMessage(messagesToUser, contentShort="No folders found in the zip file", stage="Start")
+                    return makeResponse(messagesToUser, 201, True)
 
                 projectLocation = os.path.join(UPLOAD_FOLDER, projectUuid)
                 projectLocationRoot = os.path.join(UPLOAD_FOLDER, projectUuid, projectUuid)
@@ -57,13 +64,17 @@ def upload_file():
             os.remove(temp_path)  # Remove the zip file after extraction
             os.rename(projectLocationRoot, projectLocationFiles)
 
-            return makeResponse({'message': 'File uploaded and extracted successfully', 'folders': list(folder_names)},
-                                200, True)
+            appendMessage(messagesToUser, content=projectUuid, stage="FindProjectFiles")
+            return makeResponse(messagesToUser, 201, True)
+        else:
+            print("Only zip files are allowed")
+            appendMessage(messagesToUser, contentShort="Only zip files are allowed", stage="Start")
+            return makeResponse(messagesToUser, 201, True)
 
-        except zipfile.BadZipFile:
-            return makeResponse({'message': 'Invalid zip file'}, 400, True)
-    else:
-        return makeResponse({'message': 'Only zip files are allowed'}, 400, True)
+    except Exception as e:
+        print(str(e))
+        appendMessage(messagesToUser, contentShort=str(e), stage="Start")
+        return makeResponse(messagesToUser, 201, True)
 
 
 @app.route("/project/<projectUuid>/find_files", methods=['GET'])
@@ -74,66 +85,70 @@ def find_files_project(projectUuid):
     messagesToChat = []
 
     all_files = find_files(directoryPath)
+    numberInteractions = 3
+    chatMessage = ""
 
-    message1 = {"role": "system",
-                "jsonObject": False,
-                "contentShort": None,
-                "content": 'The stage of this iteration is: FindProjectFiles'
-                           '\nPlease provide a categorized list of Executable Files and Configuration Files.'
-                           '\nFormat your response as follows:'
-                           '\n{ "ExecutableFiles": [List of files], "ConfigurationFiles": [List of files] } in valid JSON format.'
-                           '\nFor example:'
-                           '\n{ "ExecutableFiles": ["file1.exe", "file2.py", "file3.sh"], "ConfigurationFiles": ["config.yaml"] }'
-                           '\nHere are the files to categorize: ' + str(all_files)}
-    messagesToUser.append(message1)
-    messagesToChat.append(message1)
     try:
-        # TODO descomentar
-        client = OpenAI()
-
-        completion = client.chat.completions.create(
-            # model="gpt-3.5-turbo",
-            # model="gpt-4-turbo",
-            model="gpt-4o",
-            messages=
-            messagesToChat
-
-        )
-        messageText = completion.choices[0].message.content
-
-        # TODO comentar
-        # messageText = '{"ExecutableFiles": ["myfile.py", "main.py"], "ConfigurationFiles": []}'
-        # messageText = '{"ExecutableFiles": ["newproject\\\\main.py", "main2.py", "main3.py", "new\\\\main.py", "new\\\\main2.py", "new\\\\main3.py", "new\\\\newnew\\\\main2.py", "new\\\\newnew\\\\main3.py"]}'
-
-        try:
-            message2 = {"role": "assistant",
-                        "content": json.loads(messageText),
+        while numberInteractions > 0:
+            message1 = {"role": "system",
+                        "jsonObject": False,
                         "contentShort": None,
-                        "jsonObject": True}
-        except Exception as e:
-            message2 = {"role": "assistant",
-                        "contentShort": None,
-                        "content": messageText,
-                        "jsonObject": False}
-        messagesToUser.append(message2)
+                        "content": chatMessage + 'The stage of this iteration is: FindProjectFiles'
+                                                 '\nPlease provide a categorized list of Executable Files and Configuration Files.'
+                                                 '\nFormat your response as follows:'
+                                                 '\n{ "ExecutableFiles": [List of files], "ConfigurationFiles": [List of files] } in valid JSON format.'
+                                                 '\nFor example:'
+                                                 '\n{ "ExecutableFiles": ["./file1.exe", "./file2.py", "./file3.sh", "./folder1/file2.py",], "ConfigurationFiles": ["config.yaml"] }'
+                                                 '\nHere are the files to categorize: ' + str(all_files)}
+            messagesToUser.append(message1)
+            messagesToChat.append(message1)
+            # TODO descomentar
+            client = OpenAI()
 
-        return makeResponse(messagesToUser, 201, True)
+            completion = client.chat.completions.create(
+                # model="gpt-3.5-turbo",
+                # model="gpt-4-turbo",
+                model="gpt-4o",
+                messages=
+                messagesToChat
+            )
+            messageText = completion.choices[0].message.content
+            messageText = messageText.replace("```", "")
+            messageText = messageText.replace("json", "")
+
+            # TODO comentar
+            # messageText = '{"ExecutableFiles": ["./myfile.py", "main.py"], "ConfigurationFiles": []}'
+            # messageText = '{"ExecutableFiles": ["newproject\\\\main.py", "main2.py", "main3.py", "new\\\\main.py", "new\\\\main2.py", "new\\\\main3.py", "new\\\\newnew\\\\main2.py", "new\\\\newnew\\\\main3.py"]}'
+
+            try:
+                userMessage = json.loads(messageText)
+                if len(userMessage["ExecutableFiles"]) > 0:
+                    appendMessage(messagesToUser, content=userMessage,
+                                  contentShort="The requirements for running the experiment '" + projectUuid + "' were met",
+                                  jsonObject=False, stage="ParametersToUse")
+                else:
+                    appendMessage(messagesToUser, contentShort="There are no files to execute. ", jsonObject=False,
+                                  stage="Start")
+                return makeResponse(messagesToUser, 201, True)
+
+            except Exception as e:
+                numberInteractions -= 1
+                print("numberInteractions" + str(numberInteractions))
+                chatMessage = "The previous result is incorrect. Please consider the following information.\n"
+
     except Exception as error:
-        # TODO alterar
-        message2 = {"role": "assistant",
-                    "contentShort": str(error),
-                    "content": str(error),
-                    "jsonObject": False,
-                    "state": "alterar"}
-        messagesToUser.append(message2)
-
+        appendMessage(messagesToUser, content=str(error), contentShort=str(error), stage="Start")
         return makeResponse(messagesToUser, 201, True)
+
+    appendMessage(messagesToUser, content="Some error occurred", contentShort="Some error occurred", stage="Start")
+    return makeResponse(messagesToUser, 201, True)
 
 
 @app.route('/project/<projectUuid>/parameters-to-use-confirmation', methods=['POST'])
 @cross_origin()
 def parameters_to_use_confirmation(projectUuid):
     requestData = json.loads(request.data)
+    messagesToUser = []
 
     if "messages" in requestData:
         messagesToChat = requestData["messages"]
@@ -141,100 +156,26 @@ def parameters_to_use_confirmation(projectUuid):
         length = len(messagesToChat)
         myMessage = messagesToChat[length - 1]["content"]
     else:
-        return makeResponse({'message': 'Messages are missing'}, 404, True)
-
-    message1 = {"role": "system",
-                "jsonObject": False,
-                "contentShort": None,
-                "content": "I will interact with you, and in each iteration, I will inform you of the stage name. "
-                           "In the previous phase (ProjectLocation), the user selected the project location, which is the name of a folder.\n"
-                           "The stage of this iteration is: ParametersToUse.\n"
-                           "Consider the following message and determine if the system has provided a command to run an experiment, "
-                           "or if it indicates a desire to change the information from the ProjectLocation stage.\n"
-                           "Here are your options:\n"
-                           "- Reply 'ParametersToUse' if the system has provided a command to run an experiment.\n"
-                           "- Reply 'ProjectLocation' if the system wants to change the information from the ProjectLocation stage.\n"
-                           "Message: " + myMessage}
-    messagesToUser = []
-    messagesToUser.append(message1)
-    messagesToChat.append(message1)
-    messagesToChat = convert_json_to_string(messagesToChat)
-    # TODO descomentar
-    client = OpenAI()
-    completion = client.chat.completions.create(
-        # model="gpt-4",
-        # model="gpt-3.5-turbo",
-        # model="gpt-4-turbo",
-        model="gpt-4o",
-        messages=
-        messagesToChat,
-
-    )
-
-    firstMessageText = completion.choices[0].message.content
-    # messageText = "NOT UPDATED"
-    # messageText = '{"PL": "Python", "PLVersion": "Python 3.10",  "Dependencies": ["numpy", "matplotlib", "scikit-learn"],  "DependenciesVersion": ["numpy==1.21.5", "matplotlib==3.5.1", "scikit-learn==1.2.0"]}'
-
-    print(firstMessageText)
-
-    if firstMessageText == "ParametersToUse":
-        message1confirmation = {"role": "system",
-                                "jsonObject": False,
-                                "content": "The stage of this iteration is: ParametersToUse\n"
-                                           "Consider the following message and the available files on the project that you provided in a previous message. "
-                                           "They are inside the ExecutableFiles variable. Extract the command to run an experiment from the following message and "
-                                           "verify if it is a valid command taking into account the existing files in the project.\n"
-                                           'Message: ' + myMessage + '\n'
-                                                                     "Your answer follows two options:\n"
-                                                                     "- Reply 'ParametersToUse' if this message does not contain a valid command.\n"
-                                                                     "- If this message contains a valid command, your answer should only contain the command to execute the experiment.",
-                                "contentShort": None,
-                                }
-
-        messagesToChat.append(message1confirmation)
-        messagesToChat = convert_json_to_string(messagesToChat)
-
-        client = OpenAI()
-        completion = client.chat.completions.create(
-            # model="gpt-4",
-            # model="gpt-3.5-turbo",
-            ##model="gpt-4-turbo",
-            model="gpt-4o",
-            messages=
-            messagesToChat,
-
-        )
-
-        messageText = completion.choices[0].message.content
-        print(messageText)
-
-        if messageText == "ParametersToUse":
-            message2 = {"role": "system",
-                        "jsonObject": False,
-                        "contentShort": None,
-                        "content": "Please provide a valid command.",
-                        "stage": "ParametersToUse"}
-        else:
-            message2 = {"role": "system",
-                        "jsonObject": False,
-                        "contentShort": None,
-                        "content": messageText,
-                        "stage": "FindConfigurations"}
-
-        messagesToUser.append(message2)
+        appendMessage(messagesToUser, contentShort='Messages are missing', stage="Start")
         return makeResponse(messagesToUser, 201, True)
-    else:
-        ####CONfirmaçao
-        message1confirmation = {"role": "system",
-                                "jsonObject": False,
-                                "content": 'Check if this message contains a new location for the project: "' + myMessage +
-                                           '"\nIf yes, provide the folder name. If no, respond with "NO". '
-                                           '\nPlease answer in the required format, with a one-word response.',
-                                "contentShort": None}
-        confirmationMessage = []
-        confirmationMessage.append(message1confirmation)
-        confirmationMessage = convert_json_to_string(confirmationMessage)
+    try:
 
+        message1 = {"role": "system",
+                    "jsonObject": False,
+                    "contentShort": None,
+                    "content": "I will interact with you, and in each iteration, I will inform you of the stage name. "
+                               "In the previous phase (ProjectLocation), the user selected the project location, which is the name of a folder.\n"
+                               "The stage of this iteration is: ParametersToUse.\n"
+                               "Consider the following message and determine if the system has provided a command to run an experiment, "
+                               "or if it indicates a desire to change the information from the ProjectLocation stage.\n"
+                               "Here are your options:\n"
+                               "- Reply 'ParametersToUse' if the system has provided a command to run an experiment.\n"
+                               "- Reply 'ProjectLocation' if the system wants to change the information from the ProjectLocation stage.\n"
+                               "Message: " + myMessage}
+        messagesToUser.append(message1)
+        messagesToChat.append(message1)
+        messagesToChat = convert_json_to_string(messagesToChat)
+        # TODO descomentar
         client = OpenAI()
         completion = client.chat.completions.create(
             # model="gpt-4",
@@ -242,134 +183,194 @@ def parameters_to_use_confirmation(projectUuid):
             # model="gpt-4-turbo",
             model="gpt-4o",
             messages=
-            confirmationMessage,
+            messagesToChat,
 
         )
 
-        messageText = completion.choices[0].message.content
-        print(messageText)
-        if messageText == "NO":
-            message2 = {"role": "system",
-                        "jsonObject": False,
-                        "contentShort": None,
-                        "content": "Please provide the new location of the project.",
-                        "stage": "ProjectLocation"}
-        else:
-            directoryPath = 'projects/' + messageText
-            if os.path.isdir(directoryPath):
-                print("Folder exists.")
-                message2 = {"role": "system",
-                            "jsonObject": False,
-                            "contentShort": messageText,
-                            "content": messageText,
-                            "stage": "ParametersToUse"}
+        firstMessageText = completion.choices[0].message.content
+        # messageText = "NOT UPDATED"
+        # messageText = '{"PL": "Python", "PLVersion": "Python 3.10",  "Dependencies": ["numpy", "matplotlib", "scikit-learn"],  "DependenciesVersion": ["numpy==1.21.5", "matplotlib==3.5.1", "scikit-learn==1.2.0"]}'
+
+        print(firstMessageText)
+
+        if firstMessageText == "ParametersToUse":
+            message1confirmation = {"role": "system",
+                                    "jsonObject": False,
+                                    "content": "The stage of this iteration is: ParametersToUse\n"
+                                               "Consider the following message and the available files on the project that you provided in a previous message. "
+                                               "They are inside the ExecutableFiles variable. Extract the command to run an experiment from the following message and "
+                                               "check that it is a valid command, taking into account the files in the project and the language syntax.\n"
+                                               'Message: ' + myMessage + '\n'
+                                                                         "Your answer follows two options:\n"
+                                                                         "- Reply 'ParametersToUse' if this message does not contain a valid command.\n"
+                                                                         "- If this message contains a valid command, your answer should only contain the command to execute the experiment.",
+                                    "contentShort": None,
+                                    }
+
+            messagesToChat.append(message1confirmation)
+            messagesToChat = convert_json_to_string(messagesToChat)
+
+            client = OpenAI()
+            completion = client.chat.completions.create(
+                # model="gpt-4",
+                # model="gpt-3.5-turbo",
+                ##model="gpt-4-turbo",
+                model="gpt-4o",
+                messages=
+                messagesToChat,
+
+            )
+
+            messageText = completion.choices[0].message.content
+            print(messageText)
+
+            if messageText == "ParametersToUse":
+                appendMessage(messagesToUser, contentShort="Please provide a valid command.", stage="ParametersToUse")
             else:
-                print("Folder does not exist.")
-                message2 = {"role": "system",
-                            "jsonObject": False,
-                            "contentShort": None,
-                            "stage": "ProjectLocation",
-                            "content": "Folder does not exist."}
-
-        messagesToUser.append(message2)
-
-    # TODO comentar
-    # message2 = {"role": "system",
-    #             "jsonObject": False,
-    #             "contentShort": None,
-    #             "content": myMessage,
-    #             "stage": "FindConfigurations"}
-    #
-    # messagesToUser.append(message2)
-
-    return makeResponse(messagesToUser, 201, True)
-
-
-@app.route('/project/<projectUuid>/infer-files-to-run', methods=['POST'])
-@cross_origin()
-def infer_files_to_run(projectUuid):
-    directoryPath = 'projects/' + projectUuid + "/files/"
-    requestData = json.loads(request.data)
-
-    if "filenames" in requestData:
-        filenames = requestData["filenames"]
-        # filenames= ['main.py', 'main2.py', 'main3.py', 'new\\main.py', 'new\\main2.py', 'new\\main3.py', 'new\\newnew\\main2.py', 'new\\newnew\\main3.py']
-    else:
-        return makeResponse({'message': 'Filenames are missing'}, 404, True)
-
-    # filenames = ['main.py']
-    all_files_lines = {}
-
-    for filename in filenames:
-        if os.path.isfile(directoryPath + filename):
-            lines = read_first_50_lines(directoryPath + filename)
-            all_files_lines[filename] = lines
+                appendMessage(messagesToUser, content=messageText,
+                              contentShort="I will use this command '" + messageText + "' to execute the experiment.",
+                              stage="FindConfigurations")
+            return makeResponse(messagesToUser, 201, True)
         else:
-            print(f"File not found: {filename}")
+            ####CONfirmaçao
+            message1confirmation = {"role": "system",
+                                    "jsonObject": False,
+                                    "content": 'Check if this message contains a new location for the project: "' + myMessage +
+                                               '"\nIf yes, provide the folder name. If no, respond with "NO". '
+                                               '\nPlease answer in the required format, with a one-word response.',
+                                    "contentShort": None}
+            confirmationMessage = [message1confirmation]
+            confirmationMessage = convert_json_to_string(confirmationMessage)
 
-    # Convert the content to JSON format
-    filesContent = json.dumps(all_files_lines, indent=4)
+            client = OpenAI()
+            completion = client.chat.completions.create(
+                # model="gpt-4",
+                # model="gpt-3.5-turbo",
+                # model="gpt-4-turbo",
+                model="gpt-4o",
+                messages=
+                confirmationMessage,
 
-    messagesToUser = []
-    # TODO descomentar
+            )
 
-    message1 = {"role": "system",
-                "jsonObject": False,
-                "contentShort": None,
-                "content": 'Objective: Identify the main execution files within a project.'
-                           '\nDescription: The main execution files are responsible for initiating the project and typically include other modules or files. While these main files include other files, the reverse is not true—other files do not include the main files. Note that a project may have more than one main execution file.'
-                           '\nAction: Please provide a list of potential main execution files based on the structure of the project.'
-                }
+            messageText = completion.choices[0].message.content
+            print(messageText)
+            if messageText == "NO":
+                appendMessage(messagesToUser, contentShort="Please provide the new location of the project.",
+                              stage="ProjectLocation")
+            else:
+                directoryPath = 'projects/' + messageText
+                if os.path.isdir(directoryPath):
+                    print("Folder exists.")
+                    appendMessage(messagesToUser, content=messageText,
+                                  contentShort="The location of the project has been changed to " + messageText,
+                                  stage="ParametersToUse")
+                else:
+                    print("Folder does not exist.")
+                    appendMessage(messagesToUser, contentShort="Folder does not exist.", stage="ProjectLocation")
 
-    messagesToUser.append(message1)
-    messagesToChat = copy(message1)
-    messagesToChat["content"] = messagesToChat["content"] + str(filesContent)
+        # TODO comentar
+        # message2 = {"role": "system",
+        #             "jsonObject": False,
+        #             "contentShort": None,
+        #             "content": myMessage,
+        #             "stage": "FindConfigurations"}
+        #
+        # messagesToUser.append(message2)
 
-    client = OpenAI()
-    completion = client.chat.completions.create(
-        # model="gpt-3.5-turbo",
-        # model="gpt-4-turbo",
-        model="gpt-4o",
-        messages=[
-            messagesToChat,
-        ]
-    )
-    messageText = completion.choices[0].message.content
-    messageText = messageText.replace("```", "")
-    messageText = messageText.replace("json", "")
+        return makeResponse(messagesToUser, 201, True)
+    except Exception as error:
+        print(str(error))
+        appendMessage(messagesToUser, content="Some error occurred", contentShort="Some error occurred", stage="Start")
+        return makeResponse(messagesToUser, 201, True)
 
-    # TODO comentar
-    # messageText = '{"PL": "Python", "PLVersion": "Python 3.10",  ' \
-    #               '"Dependencies": ["numpy", "pandas", "matplotlib", "scipy", "shap," "tqdm"], ' \
-    #               '"DependenciesVersion": ["numpy==1.21.2", "pandas==1.3.3", "matplotlib==3.4.3", ' \
-    #               '"scipy==1.7.1", "shap==0.40.0," "tqdm==4.62.2"]}'
-    print(messageText)
-    try:
-        message2 = {"role": "assistant",
-                    "content": json.loads(messageText),
-                    "contentShort": json.loads(messageText),
-                    "jsonObject": True}
-    except Exception as e:
-        message2 = {"role": "assistant",
-                    "content": messageText,
-                    "contentShort": messageText,
-                    "jsonObject": False}
-    messagesToUser.append(message2)
 
-    return makeResponse(messagesToUser, 201, True)
+# @app.route('/project/<projectUuid>/infer-files-to-run', methods=['POST'])
+# @cross_origin()
+# def infer_files_to_run(projectUuid):
+#     directoryPath = 'projects/' + projectUuid + "/files/"
+#     requestData = json.loads(request.data)
+#     messagesToUser = []
+#
+#     if "filenames" in requestData:
+#         filenames = requestData["filenames"]
+#         # filenames= ['main.py', 'main2.py', 'main3.py', 'new\\main.py', 'new\\main2.py', 'new\\main3.py', 'new\\newnew\\main2.py', 'new\\newnew\\main3.py']
+#     else:
+#         appendMessage(messagesToUser, contentShort='Filenames are missing', stage="Start")
+#         return makeResponse(messagesToUser, 201, True)
+#
+#     # filenames = ['main.py']
+#     all_files_lines = {}
+#
+#     for filename in filenames:
+#         if os.path.isfile(directoryPath + filename):
+#             lines = read_first_50_lines(directoryPath + filename)
+#             all_files_lines[filename] = lines
+#         else:
+#             print(f"File not found: {filename}")
+#
+#     # Convert the content to JSON format
+#     filesContent = json.dumps(all_files_lines, indent=4)
+#
+#     # TODO descomentar
+#
+#     message1 = {"role": "system",
+#                 "jsonObject": False,
+#                 "contentShort": None,
+#                 "content": 'Objective: Identify the main execution files within a project.'
+#                            '\nDescription: The main execution files are responsible for initiating the project and typically include other modules or files. '
+#                            'While these main files include other files, the reverse is not true—other files do not include the main files. Note that a project may have more than one main execution file.'
+#                            '\nAction: Please provide a list of potential main execution files based on the structure of the project.'
+#                 }
+#
+#     messagesToUser.append(message1)
+#     messagesToChat = copy(message1)
+#     messagesToChat["content"] = messagesToChat["content"] + str(filesContent)
+#
+#     client = OpenAI()
+#     completion = client.chat.completions.create(
+#         # model="gpt-3.5-turbo",
+#         # model="gpt-4-turbo",
+#         model="gpt-4o",
+#         messages=[
+#             messagesToChat,
+#         ]
+#     )
+#     messageText = completion.choices[0].message.content
+#     messageText = messageText.replace("```", "")
+#     messageText = messageText.replace("json", "")
+#
+#     # TODO comentar
+#     # messageText = '{"PL": "Python", "PLVersion": "Python 3.10",  ' \
+#     #               '"Dependencies": ["numpy", "pandas", "matplotlib", "scipy", "shap," "tqdm"], ' \
+#     #               '"DependenciesVersion": ["numpy==1.21.2", "pandas==1.3.3", "matplotlib==3.4.3", ' \
+#     #               '"scipy==1.7.1", "shap==0.40.0," "tqdm==4.62.2"]}'
+#     print(messageText)
+#     try:
+#         appendMessage(messagesToUser, content=json.loads(messageText), jsonObject=True, stage="BuildDockerFile")
+#     except Exception as e:
+#         message2 = {"role": "assistant",
+#                     "content": messageText,
+#                     "contentShort": messageText,
+#                     "jsonObject": False}
+#     messagesToUser.append(message2)
+#
+#     return makeResponse(messagesToUser, 201, True)
 
 
 @app.route('/project/<projectUuid>/find-configurations', methods=['POST'])
 @cross_origin()
-def read_first_50_lines_project(projectUuid):
+def find_configurations(projectUuid):
     directoryPath = 'projects/' + projectUuid + "/files/"
     requestData = json.loads(request.data)
+    messagesToUser = []
 
     if "filenames" in requestData:
         filenames = requestData["filenames"]
         # filenames= ['main.py', 'main2.py', 'main3.py', 'new\\main.py', 'new\\main2.py', 'new\\main3.py', 'new\\newnew\\main2.py', 'new\\newnew\\main3.py']
     else:
-        return makeResponse({'message': 'Filenames are missing'}, 404, True)
+        appendMessage(messagesToUser, contentShort='filenames are missing', stage="Start")
+        return makeResponse(messagesToUser, 201, True)
 
     # filenames = ['main.py']
     all_files_lines = {}
@@ -384,55 +385,60 @@ def read_first_50_lines_project(projectUuid):
     # Convert the content to JSON format
     filesContent = json.dumps(all_files_lines, indent=4)
 
-    messagesToUser = []
-    message1 = {"role": "system",
-                "jsonObject": False,
-                "contentShort": None,
-                "content": "The current stage of this interaction is: FindConfigurations"
-                           '\nGiven the JSON containing the file name and the first 50 lines, please determine the following:'
-                           '\nThe programming language of the file. The version of that language. Any dependencies and their versions.'
-                           '\nProvide your response in the following format:'
-                           '{ "PL": [programming language], "PLVersion": [programming language version],"Dependencies": [dependencies], "DependenciesVersion": [version of dependencies] }'
-                           '\nEnsure the dependency names are correct. If the provided name is incorrect, adjust it. For example, in Python, to install the sklearn dependency, the correct command is pip install scikit-learn.'
-                           '\nMake sure to list the most recent supported version of the programming language, and format the result in JSON.'
-                           '\nExample response:'
-                           '\n{ "PL": ["Python"], "PLVersion": "Python 3.8", "Dependencies": ["pandas"], "DependenciesVersion": ["pandas==2.2.0"]}'
-                }
+    numberInteractions = 3
+    chatMessage = ""
 
-    messagesToUser.append(message1)
-    messagesToChat = copy(message1)
-    messagesToChat["content"] = messagesToChat["content"] + str(filesContent)
-
-    # TODO descomentar
-    client = OpenAI()
-    completion = client.chat.completions.create(
-        # model="gpt-3.5-turbo",
-        # model="gpt-4-turbo",
-        model="gpt-4o",
-        messages=[
-            messagesToChat,
-        ]
-    )
-    messageText = completion.choices[0].message.content
-    messageText = messageText.replace("```", "")
-    messageText = messageText.replace("json", "")
-
-    # TODO comentar
-    # messageText = '{"PL": "Python",  "PLVersion": "Python 3.10", "Dependencies": ["numpy", "matplotlib", "scikit-learn"],  "DependenciesVersion": ["numpy==1.21.5", "matplotlib==3.5.1", "scikit-learn==1.2.0"]}'
-
-    print(messageText)
     try:
-        message2 = {"role": "assistant",
-                    "content": json.loads(messageText),
-                    "contentShort": None,
-                    "jsonObject": True}
-    except Exception as e:
-        message2 = {"role": "assistant",
-                    "content": messageText,
-                    "contentShort": None,
-                    "jsonObject": False}
-    messagesToUser.append(message2)
+        while numberInteractions > 0:
+            message1 = {"role": "system",
+                        "jsonObject": False,
+                        "contentShort": None,
+                        "content": chatMessage + "The current stage of this interaction is: FindConfigurations"
+                                                 '\nGiven the JSON containing the file name and the first 50 lines, please determine the following:'
+                                                 '\nThe programming language of the file. The version of that language. Any dependencies and their versions.'
+                                                 '\nProvide your response in the following format:'
+                                                 '{ "PL": [all the programming languages used], "PLVersion": [all the programming language version],"Dependencies": [dependencies], "DependenciesVersion": [version of dependencies] }'
+                                                 '\nEnsure the dependency names are correct. If the provided name is incorrect, adjust it. For example, in Python, to install the sklearn dependency, the correct command is pip install scikit-learn.'
+                                                 '\nMake sure to list the most recent supported version of the programming language, and format the result in JSON.'
+                                                 '\nExample response:'
+                                                 '\n{ "PL": ["Python"], "PLVersion": "Python 3.8", "Dependencies": ["pandas"], "DependenciesVersion": ["pandas==2.2.0"]}'
+                        }
 
+            messagesToUser.append(message1)
+            messagesToChat = copy(message1)
+            messagesToChat["content"] = messagesToChat["content"] + str(filesContent)
+
+            # TODO descomentar
+            client = OpenAI()
+            completion = client.chat.completions.create(
+                # model="gpt-3.5-turbo",
+                # model="gpt-4-turbo",
+                model="gpt-4o",
+                messages=[
+                    messagesToChat,
+                ]
+            )
+            messageText = completion.choices[0].message.content
+            messageText = messageText.replace("```", "")
+            messageText = messageText.replace("json", "")
+
+            # TODO comentar
+            # messageText = '{"PL": "Python",  "PLVersion": "Python 3.10", "Dependencies": ["tqdm", "pandas", "shap","numpy", "matplotlib", "scikit-learn"],  "DependenciesVersion": ["shap==0.41.0", "numpy==1.23.4", "pandas==1.5.2", "scipy==1.9.3", "matplotlib==3.6.2", "tqdm==4.64.1"]}'
+
+            print(messageText)
+            try:
+                appendMessage(messagesToUser, content=json.loads(messageText), jsonObject=True, stage="BuildDockerFile")
+                return makeResponse(messagesToUser, 201, True)
+            except Exception as e:
+                numberInteractions -= 1
+                print("numberInteractions" + str(numberInteractions))
+                chatMessage = "The previous result is incorrect. Please consider the following information.\n"
+
+    except Exception as error:
+        appendMessage(messagesToUser, content=str(error), contentShort=str(error), stage="Start")
+        return makeResponse(messagesToUser, 201, True)
+
+    appendMessage(messagesToUser, content="Some error occurred", contentShort="Some error occurred", stage="Start")
     return makeResponse(messagesToUser, 201, True)
 
 
@@ -441,15 +447,16 @@ def read_first_50_lines_project(projectUuid):
 def find_configurations_change(projectUuid):
     directoryPath = 'projects/' + projectUuid + "/files/"
     requestData = json.loads(request.data)
+    messagesToUser = []
 
     if "messages" in requestData:
         messagesToChat = requestData["messages"]
         length = len(messagesToChat)
         myMessage = messagesToChat[length - 1]["content"]
     else:
-        return makeResponse({'message': 'Messages are missing'}, 404, True)
+        appendMessage(messagesToUser, contentShort='Messages are missing', stage="Start")
+        return makeResponse(messagesToUser, 201, True)
 
-    messagesToUser = []
     message1 = {"role": "system",
                 "jsonObject": False,
                 "contentShort": None,
@@ -491,35 +498,14 @@ def find_configurations_change(projectUuid):
         messageText = messageText.replace("```", "")
         messageText = messageText.replace("json", "")
         try:
-            message2 = {"role": "assistant",
-                        "content": json.loads(messageText),
-                        "contentShort": None,
-                        "jsonObject": True}
+            appendMessage(messagesToUser, content=json.loads(messageText),jsonObject=True, stage="WaitChatInteraction")
         except Exception as e:
-            message2 = {"role": "assistant",
-                        "content": messageText,
-                        "contentShort": None,
-                        "jsonObject": False}
-    messagesToUser.append(message2)
-    return makeResponse(messagesToUser, 201, True)
-
+            appendMessage(messagesToUser, content=messageText,  stage="WaitChatInteraction")
     # TODO comentar
     # messageText = '{"PL": "Python", "PLVersion": "Python 3.10",  "Dependencies": ["numpy", "matplotlib", "scikit-learn"],  "DependenciesVersion": ["numpy==1.21.5", "matplotlib==3.5.1", "scikit-learn==1.2.0"]}'
-
-    print(messageText)
-    try:
-        message2 = {"role": "assistant",
-                    "content": json.loads(messageText),
-                    "contentShort": None,
-                    "jsonObject": True}
-    except Exception as e:
-        message2 = {"role": "assistant",
-                    "content": messageText,
-                    "contentShort": None,
-                    "jsonObject": False}
-    messagesToUser.append(message2)
-
     return makeResponse(messagesToUser, 201, True)
+
+
 
 
 @app.route("/project/<projectUuid>/build-docker-file-chat", methods=['POST'])
@@ -528,25 +514,28 @@ def buildDockerFileChat(projectUuid):
     projectPath = 'projects/' + projectUuid + "/"
 
     requestData = json.loads(request.data)
+    messagesToUser = []
 
     if "messages" in requestData:
         messagesToChat = requestData["messages"]
         # messages= ['projects/newproject\\main.py', 'projects/newproject\\main2.py', 'projects/newproject\\main3.py', 'projects/newproject\\new\\main.py', 'projects/newproject\\new\\main2.py', 'projects/newproject\\new\\main3.py', 'projects/newproject\\new\\newnew\\main2.py', 'projects/newproject\\new\\newnew\\main3.py']
     else:
-        return makeResponse({'message': 'Messages are missing'}, 404, True)
+        appendMessage(messagesToUser, contentShort='Messages are missing', stage="Start")
+        return makeResponse(messagesToUser, 201, True)
 
-    messagesToUser = []
     message1 = {"role": "system",
                 "jsonObject": False,
                 "contentShort": None,
                 "content": "The stage of this interaction is: BuildDockerFile. "
+                            "Check if you find this sentence in the conversation history. `I tried to build the Docker image, but an error occurred` "
+                            "If so, you have to take the previous docker file into account so that you don't provide the same dockerfile because the previous one had an error."
                            'Please use the information I have provided, such as the dependencies, their versions (DependenciesVersion), programming languages (PL), and programming language versions (PLVersion), to build a Dockerfile. '
                            'All the files I want to use are located in the files folder. Inside the container, I want all the files to remain in the files folder as well. '
                            'Therefore, the following two commands should be used: '
                            '"WORKDIR /files" and "COPY files/ ."'
                            '\nDo not use any additional COPY commands. '
                            'In previous messages, I provided the names of the configuration files (configurationFiles) present in the project. '
-                           'You may use them if relevant, but it’s not necessary to include COPY or ADD commands for these files, as they have already been copied. '
+                           'You may use them if relevant, but it’s not necessary to include COPY or ADD commands for these files, because they are inside the "./files" folder and have already been copied. '
                            'Please do not infer the names of any files not explicitly provided. '
                            'I only need the Dockerfile required to build the Docker image, so do not include the `CMD` or `ENTRYPOINT` commands in this Dockerfile. '
                            'Provide only the created Dockerfile, as I will use your response directly—no additional text or explanation is needed.'}
@@ -561,8 +550,8 @@ def buildDockerFileChat(projectUuid):
     completion = client.chat.completions.create(
         # model="gpt-4",
         # model="gpt-3.5-turbo",
-        # model="gpt-4-turbo",
-        model="gpt-4o",
+        model="gpt-4-turbo",
+        # model="gpt-4o",
         messages=
         messagesToChat,
 
@@ -582,8 +571,10 @@ def buildDockerFileChat(projectUuid):
                                 'Do not execute commands for non-existent files. '
                                 'All project files can be found in the `configurationFiles` field from previous messages. '
                                 'Do not include any `COPY` commands other than "COPY files/ .". '
+                                'Remove all other commands that copy information.'
                                 'Do not add any `WORKDIR` commands other than "WORKDIR /files". '
-                                'Additionally, avoid using "CMD", "AND", or "ENTRYPOINT" commands. '
+                                'Remove all other commands that use the `WORKDIR` command. '
+                                'Remove all other commands that use "CMD", "AND", or "ENTRYPOINT" commands. '
                                 'Make the necessary changes and provide only the updated Dockerfile. '
                                 'Here is the Dockerfile:' + messageText
                      }
@@ -595,8 +586,8 @@ def buildDockerFileChat(projectUuid):
     completion = client.chat.completions.create(
         # model="gpt-4",
         # model="gpt-3.5-turbo",
-        # model="gpt-4-turbo",
-        model="gpt-4o",
+        model="gpt-4-turbo",
+        # model="gpt-4o",
         messages=
         messagesToChat,
 
@@ -605,14 +596,12 @@ def buildDockerFileChat(projectUuid):
     messageText = completion.choices[0].message.content
 
     # TODO comentar
-    #     messageText = """# Use the official Python image from the Docker Hub
-    # FROM python:3.10-slim
-    # # Create a directory for the app
+    #     messageText = """FROM python:3.10
+    #
     # WORKDIR /files
-    # # Copy all files into the current directory (/usr/src/app) in the image
     # COPY files/ .
-    # # Install any dependencies via pip
-    # RUN pip install numpy==1.21.5 matplotlib==3.5.1 scikit-learn==1.2.0"""
+    #
+    # RUN pip install shap==0.41.0 numpy==1.23.4 pandas==1.5.2 scipy==1.9.3 matplotlib==3.6.2 tqdm==4.64.1"""
 
     write_file(projectPath + "Dockerfile", messageText)
 
@@ -636,6 +625,7 @@ def chat_interation(projectUuid):
     projectPath = 'projects/' + projectUuid + "/"
 
     requestData = json.loads(request.data)
+    messagesToUser = []
 
     if "messages" in requestData:
         messagesToChat = requestData["messages"]
@@ -643,49 +633,96 @@ def chat_interation(projectUuid):
         myMessage = messagesToChat[length - 1]["content"]
         # messages= ['projects/newproject\\main.py', 'projects/newproject\\main2.py', 'projects/newproject\\main3.py', 'projects/newproject\\new\\main.py', 'projects/newproject\\new\\main2.py', 'projects/newproject\\new\\main3.py', 'projects/newproject\\new\\newnew\\main2.py', 'projects/newproject\\new\\newnew\\main3.py']
     else:
-        return makeResponse({'message': 'Messages are missing'}, 404, True)
+        appendMessage(messagesToUser, contentShort='Messages are missing', stage="Start")
+        return makeResponse(messagesToUser, 201, True)
 
-    messagesToUser = []
+    numberInteractions = 3
+    chatMessage = ""
 
-    # TODO descomentar
-    message1 = {"role": "system",
-                "jsonObject": False,
-                "contentShort": None,
-                "content": "Evaluate the content of the following message to determine if it is positive, requires changes, or is negative: \n"
-                           'Message: ' + myMessage +
-                           "\nConsider the following instructions:"
-                           '\nIf the message content is positive, reply with "NEXT".'
-                           '\nIf the message content is negative but requires no changes, reply with "WaitChatInteraction". '
-                           '\nIf changes are needed, respond according to the message type, choosing from the following options: '
-                           '\nReply with "FindConfigurationsInteraction" if the message relates to the configuration of the computing environment (e.g., dependency versions or missing programming languages).'
-                           '\nReply with "ProjectLocation" if the message involves changing the location of the project .'
-                           '\nReply with "ParametersToUse" if the message concerns the command used to run a computational experiment.'
-                           "\n\nPlease respond in the specified format. The answer should be exactly one word."
-                }
+    try:
+        while numberInteractions > 0:
+            # TODO descomentar
+            message1 = {"role": "system",
+                        "jsonObject": False,
+                        "contentShort": None,
+                        "content": chatMessage + "Please evaluate the following message content: "
+                                                 "If the message propose possible changes, reply with 'CHANGE' "
+                                                 "If the message is positive or indicates agreement, respond with 'NEXT' "
+                                                 "If the message is negative and indicates disagreement, but does not propose possible changes, respond with 'WaitChatInteraction' "
+                                                 "\nPlease respond in the specified format. The answer should be exactly one word."
+                                                 "\nMessage: `" + myMessage + "`"
+                        }
+            messagesToUser.append(message1)
+            messagesToChat.append(message1)
 
-    messagesToUser.append(message1)
-    messagesToChat.append(message1)
+            messagesToChat = convert_json_to_string(messagesToChat)
 
-    messagesToChat = convert_json_to_string(messagesToChat)
+            client = OpenAI()
+            completion = client.chat.completions.create(
+                # model="gpt-3.5-turbo",
+                # model="gpt-4-turbo",
+                model="gpt-4o",
+                messages=
+                messagesToChat,
 
-    client = OpenAI()
-    completion = client.chat.completions.create(
-        # model="gpt-3.5-turbo",
-        # model="gpt-4-turbo",
-        model="gpt-4o",
-        messages=
-        messagesToChat,
+            )
+            messageText = completion.choices[0].message.content
+            print(messageText)
 
-    )
-    messageText = completion.choices[0].message.content
-    print(messageText)
+            # TODO aqui dá erro quando respondo apenas no
+            palavras = messageText.split()
+            if len(palavras) == 1:
+                if messageText == "CHANGE":
+                    message1 = {"role": "system",
+                                "jsonObject": False,
+                                "contentShort": None,
+                                "content": chatMessage + 'Please evaluate the following message. '
+                                                         '\nReply with "FindConfigurationsInteraction" if the message relates to the configuration of the computing environment (e.g., dependency versions or missing programming languages).'
+                                                         '\nReply with "ProjectLocation" if the message involves changing the location of the project .'
+                                                         '\nReply with "ParametersToUse" if the message concerns the command used to run a computational experiment.'
+                                                         "\n\nPlease respond in the specified format. The answer should be exactly one word."
+                                                         '\nMessage: "' + myMessage + '"'
+                                }
 
-    message2 = {"role": "assistant",
-                "content": messageText,
-                "contentShort": None,
-                "jsonObject": False,
-                "stage": messageText}
-    messagesToUser.append(message2)
+                    messagesToUser.append(message1)
+                    messagesToChat.append(message1)
+
+                    messagesToChat = convert_json_to_string(messagesToChat)
+
+                    client = OpenAI()
+                    completion = client.chat.completions.create(
+                        # model="gpt-3.5-turbo",
+                        # model="gpt-4-turbo",
+                        model="gpt-4o",
+                        messages=
+                        messagesToChat,
+
+                    )
+                    messageText = completion.choices[0].message.content
+                    print(messageText)
+
+                    words = messageText.split()
+                    if len(words) == 1:
+                        appendMessage(messagesToUser, content=messageText, stage=messageText)
+                        return makeResponse(messagesToUser, 201, True)
+                    else:
+                        chatMessage = "The previous result is incorrect. Please consider the following information.\n"
+                        numberInteractions -= 1
+                        print("numberInteractions" + str(numberInteractions))
+                else:
+                    appendMessage(messagesToUser, content=messageText, stage=messageText)
+                    return makeResponse(messagesToUser, 201, True)
+            else:
+                chatMessage = "The previous result is incorrect. Please consider the following information.\n"
+                numberInteractions -= 1
+                print("numberInteractions" + str(numberInteractions))
+                # appendMessage(messagesToUser, content=str(e), contentShort=str(e), stage="Start")
+
+    except Exception as error:
+        appendMessage(messagesToUser, content=str(error), contentShort=str(error), stage="Start")
+        return makeResponse(messagesToUser, 201, True)
+
+    appendMessage(messagesToUser, content="Some error occurred", contentShort="Some error occurred", stage="Start")
     return makeResponse(messagesToUser, 201, True)
 
 
@@ -694,105 +731,79 @@ def chat_interation(projectUuid):
 def buildDockerImageChat(projectUuid):
     projectPath = 'projects/' + projectUuid + "/"
     requestData = json.loads(request.data)
+    messagesToUser = []
 
     if "messages" in requestData:
         messagesToChat = requestData["messages"]
     else:
-        return makeResponse({'message': 'Messages are missing'}, 404, True)
+        appendMessage(messagesToUser, contentShort='Messages are missing', stage="Start")
+        return makeResponse(messagesToUser, 201, True)
 
-    number_of_attempts = 3
-    messagesToUser = []
-    errorMessage = ''
+    try:
+        dockerClientResult = startDockerClient()
+        dockerClient, port = dockerClientResult["dockerClient"], dockerClientResult["port"]
+        number = datetime.now().strftime("%Y%m%d%H%M%S")
 
-    while number_of_attempts > 0:
+        # TODO descomentar
+        dockerImageBuilt = dockerClient.images.build(path=projectPath, tag=projectUuid + ":" + number, rm=True)
+        dockerImageBuiltFiltered = [s for s in dockerImageBuilt[0].tags if projectUuid in s]
+        dockerTagslength = len(dockerImageBuiltFiltered) - 1
+
+        messageText = dockerImageBuiltFiltered[dockerTagslength]
+
+        # TODO comentar
+        # messageText = "e25:20240917151400"
+        # raise Exception("gcc: error: -E or -x required when input is from standard input")
+
         try:
-            dockerClientResult = startDockerClient()
-            dockerClient, port = dockerClientResult["dockerClient"], dockerClientResult["port"]
-            number = datetime.now().strftime("%Y%m%d%H%M%S")
-
-            # TODO descomentar
-            dockerImageBuilt = dockerClient.images.build(path=projectPath, tag=projectUuid + ":" + number, rm=True)
-            dockerImageBuiltFiltered = [s for s in dockerImageBuilt[0].tags if projectUuid in s]
-            dockerTagslength = len(dockerImageBuiltFiltered) - 1
-
-            messageText = dockerImageBuiltFiltered[dockerTagslength]
-
-            # TODO comentar
-            # messageText = "e25:20240912161423"
-
-            try:
-                message1 = {"role": "assistant",
-                            "content": json.loads(messageText),
-                            "contentShort": None,
-                            "jsonObject": True}
-            except Exception as e:
-                message1 = {"role": "assistant",
-                            "content": messageText,
-                            "contentShort": None,
-                            "jsonObject": False}
-
-            messagesToUser.append(message1)
-
-            return makeResponse(messagesToUser, 201, True)
+            appendMessage(messagesToUser, content=json.loads(messageText), jsonObject=True, stage="RunContainer")
         except Exception as e:
-            print(str(e))
-            number_of_attempts -= 1
-            dockerfile_content = read_file(projectPath + "Dockerfile")
-            message11 = {"role": "system",
-                         "jsonObject": False,
-                         "contentShort": None,
-                         "content": 'The stage of this iteration is: BuildDockerImage '
-                                    '\nI have this Dockerfile:' + dockerfile_content +
-                                    '\nI tried to build the Docker image, but an error occurred:' + str(e) +
-                                    '\nIs the error due to the Dockerfile? If so, just reply "YES".'
-                                    'If the problem is not with the Dockerfile, just reply "NO".'
-                         }
+            appendMessage(messagesToUser, content=messageText, stage="RunContainer")
 
-            messagesToChat = []
-            messagesToChat.append(message11)
+        return makeResponse(messagesToUser, 201, True)
+    except Exception as e:
+        print(str(e))
+        dockerfile_content = read_file(projectPath + "Dockerfile")
+        message11 = {"role": "system",
+                     "jsonObject": False,
+                     "contentShort": None,
+                     "content": 'The stage of this iteration is: BuildDockerImage '
+                                '\nI have this Dockerfile:' + dockerfile_content +
+                                '\nI tried to build the Docker image, but an error occurred:' + str(e) +
+                                '\nIs the error due to the Dockerfile? If so, just reply "YES".'
+                                'If the problem is not with the Dockerfile, just reply "NO".'
+                     }
 
-            client = OpenAI()
-            completion = client.chat.completions.create(
-                # model="gpt-3.5-turbo",
-                # model="gpt-4-turbo",
-                model="gpt-4o",
-                messages=messagesToChat
+        messagesToChat = []
+        messagesToChat.append(message11)
+
+        client = OpenAI()
+        completion = client.chat.completions.create(
+            # model="gpt-3.5-turbo",
+            # model="gpt-4-turbo",
+            model="gpt-4o",
+            messages=messagesToChat
+        )
+        messageText = completion.choices[0].message.content
+        if messageText == "YES":
+            appendMessage(messagesToUser,
+                          content='\nI have this Dockerfile:' + dockerfile_content +
+                                  '\nI tried to build the Docker image, but an error occurred:' + str(e),
+                          contentShort='An error occurred during the environment build. I propose to try to build a new environment.',
+                          stage="FindConfigurations")
+        else:
+            errorMessage = (
+                    "An error occurred during the environment build. \n"
+                    "Error: " + str(e) + "\n"
+                                         "What might have caused this unexpected result? \n"
+                                         "For example: I want to change the execution parameters.\n"
+                                         "For example: I want to change the project location.\n"
+                                         "For example: I want to change the computing environment used (programming languages, dependencies).\n"
             )
-            messageText = completion.choices[0].message.content
-            if messageText == "YES":
-                message21 = {"role": "system",
-                             "jsonObject": False,
-                             "contentShort": None,
-                             "content": 'Provide only the updated Dockerfile as the result because '
-                                        'I will use your response as my Dockerfile. Do not include any additional text or explanation.'
-                             }
+            appendMessage(messagesToUser, content=errorMessage,
+                          stage="WaitChatInteraction")
 
-                messagesToChat.append(message21)
-
-                client = OpenAI()
-                completion = client.chat.completions.create(
-                    # model="gpt-3.5-turbo",
-                    # model="gpt-4-turbo",
-                    model="gpt-4o",
-                    messages=messagesToChat
-                )
-                messageText = completion.choices[0].message.content
-                messageText = messageText.replace("```", "")
-                messageText = messageText.replace("Dockerfile", "")
-                messageText = messageText.replace("dockerfile", "")
-                write_file(projectPath + "Dockerfile", messageText)
-
-            else:
-                errorMessage = 'An error occurred during the environment build. ' + str(e)
-    # errorMessage = 'An error occurred during the build of the environment. ' + "str(e)"
-    message2 = {"role": "assistant",
-                "content": errorMessage,
-                "contentShort": errorMessage,
-                "jsonObject": False,
-                "stage": "ProjectLocation"}
-    messagesToUser.append(message2)
-
-    return makeResponse(messagesToUser, 201, True)
+        return makeResponse(messagesToUser, 201, True)
 
 
 @app.route("/project/<projectUuid>/run-container-chat", methods=['POST'])
@@ -801,19 +812,21 @@ def runDockerContainerChat(projectUuid):
     projectPath = 'projects/' + projectUuid + "/"
 
     requestData = json.loads(request.data)
+    messagesToUser = []
 
     if "commandToRun" in requestData:
         commandToRun = requestData["commandToRun"]
     else:
-        return makeResponse({"message": "The commandToRun is required"}, 404, True)
+        appendMessage(messagesToUser, contentShort="The commandToRun is required", stage="BuildDockerFile")
+        return makeResponse(messagesToUser, 201, True)
 
     if "dockerImageId" in requestData:
         dockerImageId = requestData["dockerImageId"]
     else:
-        return makeResponse({"message": "The command is required"}, 404, True)
+        appendMessage(messagesToUser, contentShort="The dockerImageId is required", stage="BuildDockerFile")
+        return makeResponse(messagesToUser, 201, True)
 
     number_of_attempts = 3
-    messagesToUser = []
 
     while number_of_attempts > 0:
         try:
@@ -939,6 +952,7 @@ def researchArtifactChat(projectUuid):
     zipFilePath = f"{projectPath}.zip"
 
     requestData = json.loads(request.data)
+    messagesToUser = []
     #
     # dockerImageID = "20240820192103"
     # commandToRun = ["python ./main2.py"]
@@ -947,13 +961,15 @@ def researchArtifactChat(projectUuid):
     if "commandToRun" in requestData:
         commandToRun = requestData["commandToRun"]
     else:
-        return makeResponse({"message": "The commandToRun is required"}, 404, True)
+        appendMessage(messagesToUser, contentShort="The commandToRun is required", stage="ParametersToUse")
+        return makeResponse(messagesToUser, 201, True)
 
     # Fetch dockerImageId from requestData
     if "dockerImageId" in requestData:
         dockerImageID = requestData["dockerImageId"]
     else:
-        return makeResponse({"message": "The dockerImageId is required"}, 404, True)
+        appendMessage(messagesToUser, contentShort="The dockerImageId is required", stage="BuildDockerFile")
+        return makeResponse(messagesToUser, 201, True)
 
     commandToRun1 = []
     commandToRun1.append(commandToRun)

@@ -180,53 +180,27 @@ export class HomeComponent implements OnInit {
 
     findProjectFiles() {
         this.backend.findProjectFiles(this.projectUuid).subscribe((response: any) => {
-            console.log(response);
-            console.log(response[1]["content"]);
-
-            //let content = JSON.parse(response[1]["content"])
-            console.log(response[1]["content"]["ExecutableFiles"]);
-            //console.log(content)
-            //console.log(content["content"])
-
-
             this.messages.push(...response)
+            let responseLength = response.length
 
-            //this.executableFiles = Object.values(response[1]["content"]['ExecutableFiles'])
-            // Extract the necessary properties from the response for clarity
-            const {ExecutableFiles, ConfigurationFiles} = response[1]["content"];
+            if (response[responseLength - 1].stage == "ParametersToUse") {
+                console.log(response[responseLength - 1]["content"]);
+                const {ExecutableFiles, ConfigurationFiles} = response[responseLength - 1]["content"];
+                this.executableFiles = ExecutableFiles;
+                this.configurationFiles = ConfigurationFiles;
 
-            // Assign the extracted values to class properties
-            this.executableFiles = ExecutableFiles;
-            this.configurationFiles = ConfigurationFiles;
-
-
-            // Check if executable files exist and if there is more than one
-            if (this.executableFiles?.length >= 1) {
-                //this.changeStage(this.stages.FileToRun)
-                //this.changeStage(this.stages.FindConfigurations)
-                //this.stageAfterChat = this.stages.ParametersToUse
-                this.changeStage(this.stages.ParametersToUse)
-
-            } else if (this.executableFiles?.length == 1) {
-
-                this.messageToAsk = "The file that you intent to run is " + this.executableFiles[0] + ". Can you confirm that this information is correct? Reply saying that you confirm or say the name of the file to run."
-                //this.stageAfterChat = this.stages.ResearchArtifact
-                this.changeStage(this.stages.WaitChatInteraction)
-            } else {
-                this.messages.push({
-                    role: "assistant",
-                    content: "There are no files to execute. ",
-                    contentShort: "There are no files to execute",
-                    jsonObject: false
-                });
-                this.changeStage(this.stages.ProjectLocation)
+                // Log the configuration and executable files for debugging
+                console.log('Configuration Files:', this.configurationFiles);
+                console.log('Executable Files:', this.executableFiles);
             }
 
-            // Log the configuration and executable files for debugging
-            console.log('Configuration Files:', this.configurationFiles);
-            console.log('Executable Files:', this.executableFiles);
+            if (this.executableFiles?.length == 1) {
 
-
+                //this.messageToAsk = "The file that you intent to run is " + this.executableFiles[0] + ". Can you confirm that this information is correct? Reply saying that you confirm or say the name of the file to run."
+                //this.stageAfterChat = this.stages.ResearchArtifact
+                //this.changeStage(this.stages.WaitChatInteraction)
+            }
+            this.changeStage(response[responseLength - 1].stage)
         });
     }
 
@@ -248,47 +222,18 @@ export class HomeComponent implements OnInit {
 
     parametersToUseConfirmation() {
         this.backend.parametersToUseConfirmation(this.projectUuid, this.messages).subscribe((response: any) => {
-            switch (response[1].stage) {
-                case "ParametersToUse":
-                    if (response[1].contentShort) {
-                        this.messages.push({
-                            role: "assistant",
-                            content: "The location of the project has been changed to" + response[1].content,
-                            contentShort: "The location of the project has been changed to " + response[1].content,
-                            jsonObject: false
-                        });
-                        this.projectUuid = response[1].content
-                    } else {
-                        this.messages.push({
-                            role: "assistant",
-                            content: response[1].content,
-                            contentShort: response[1].content,
-                            jsonObject: false
-                        });
+                this.messages.push(...response)
+                let responseLength = response.length
+                if (response[responseLength - 1].stage) {
+                    if (response[responseLength - 1].stage == "ParametersToUse") {
+                        this.projectUuid = response[responseLength - 1].content
+                    } else if (response[responseLength - 1].stage == "FindConfigurations") {
+                        this.commandToRun = response[responseLength - 1].content
                     }
-                    this.changeStage(this.stages.ParametersToUse)
-                    break;
-
-                case "ProjectLocation":
-                    this.messages.push({
-                        role: "assistant",
-                        content: response[1].content,
-                        contentShort: response[1].content,
-                        jsonObject: false
-                    });
-                    this.changeStage(this.stages.ProjectLocation)
-                    break;
-
-                case "FindConfigurations":
-                    this.commandToRun = response[1].content;
-                    console.log("this.commandToRun " + this.commandToRun)
-                    this.changeStage(this.stages.FindConfigurations)
-                    break;
-
-                default:
-                    console.log('Unknown stage');
+                    this.changeStage(response[responseLength - 1].stage)
+                }
             }
-        })
+        )
     }
 
 
@@ -308,11 +253,9 @@ export class HomeComponent implements OnInit {
             let responseLength = response.length
             this.configurations = response[responseLength - 1].content
 
-            this.changeStage(this.stages.BuildDockerFile)
-
-
-            //this.changeStage(this.stages.BuildDockerFile)
-
+            if (response[responseLength - 1].stage) {
+                this.changeStage(response[responseLength - 1].stage)
+            }
         });
     }
 
@@ -334,15 +277,12 @@ export class HomeComponent implements OnInit {
             this.messages.push(...response)
             let responseLength = response.length
 
-            if (response[responseLength - 1].stage) {
-                this.changeStage(response[responseLength - 1].stage)
-            } else {
-                this.configurations = response[responseLength - 1].content
+            if (response[responseLength - 1].stage == "WaitChatInteraction") {
                 this.messageToAsk = "I used these settings. Are they correct, or would you like to change anything? \n" +
                     JSON.stringify(this.configurations)
-                this.changeStage(this.stages.WaitChatInteraction)
                 this.stageAfterChat = this.stages.BuildDockerFile
             }
+            this.changeStage(response[responseLength - 1].stage)
 
         });
     }
@@ -371,13 +311,16 @@ export class HomeComponent implements OnInit {
         this.backend.BuildDockerImage(this.projectUuid, this.messages).subscribe((response: any) => {
             console.log(response);
             this.messages.push(...response)
-            if (!response[0].stage) {
-                this.dockerImageID = response[0]["content"];
+            let responseLength = response.length
+
+            if (response[responseLength - 1].stage == "RunContainer") {
+                this.dockerImageID = response[responseLength - 1]["content"];
                 console.log(this.dockerImageID)
-                this.changeStage(this.stages.RunContainer)
-            } else {
-                this.changeStage(response[0].stage)
+            } else if (response[responseLength - 1].stage == "WaitChatInteraction") {
+                this.messageToAsk = undefined
+                this.stageAfterChat = this.stages.FindConfigurations
             }
+            this.changeStage(response[responseLength - 1].stage)
         });
     }
 
@@ -428,12 +371,14 @@ export class HomeComponent implements OnInit {
     waitChatInteraction(messageToAsk: any) {
         console.log("aqui")
 
-        this.messages.push({
-            role: "assistant",
-            content: messageToAsk,
-            contentShort: messageToAsk,
-            jsonObject: false
-        });
+        if(messageToAsk!=undefined) {
+            this.messages.push({
+                role: "assistant",
+                content: messageToAsk,
+                contentShort: messageToAsk,
+                jsonObject: false
+            });
+        }
     }
 
     chatInteraction() {
@@ -447,10 +392,12 @@ export class HomeComponent implements OnInit {
             } else if (response[responseLength - 1].stage != this.stages.WaitChatInteraction) {
                 this.changeStage(response[responseLength - 1].stage)
             } else {
-                this.messageToAsk = "What might have caused this unexpected result, and what solution would you propose?\n"
+                this.messageToAsk = "What might have caused this unexpected result? \n" +
+                    'For example: I want to change the execution parameters.\n' +
+                    'For example: I want to change the project location.\n'+
+                    'For example: I want to change the computing environment used (programming languages, dependencies).\n'
                 this.changeStage(this.stages.WaitChatInteraction)
             }
-
         });
     }
 
@@ -470,12 +417,18 @@ export class HomeComponent implements OnInit {
         if (this.fileToUpload) {
             const formData = new FormData();
             formData.append('file', this.fileToUpload);
-            this.backend.uploadProject( formData).subscribe((response: any) => {
+            this.backend.uploadProject(formData).subscribe((response: any) => {
                 console.log("response");
                 console.log(response);
-                this.messages.push(...response)
+                let responseLength = response.length
+                if (response[responseLength - 1].stage == "FindProjectFiles") {
+                    this.projectUuid = response[responseLength - 1].content
 
-                this.changeStage(this.stages.Completed)
+                    this.changeStage(response[responseLength - 1].stage)
+                } else if (response[responseLength - 1].stage) {
+                    this.changeStage(response[responseLength - 1].stage)
+                    this.messages.push(...response)
+                }
             });
         }
     }

@@ -73,23 +73,9 @@ def find_files(directory):
             # Remove the directory prefix from the full path
             reduced_path = os.path.relpath(full_path, directory)
 
-            files.append(reduced_path)
+            files.append(f"./{reduced_path}")
 
     return files
-    # files = []
-    # base_dir = os.path.basename(directory.rstrip(os.sep))  # Get the base directory name
-    #
-    # for root, dirs, filenames in os.walk(directory):
-    #     for filename in filenames:
-    #         full_path = os.path.join(root, filename)
-    #
-    #         # Compute the relative path and prepend the base directory
-    #         rel_path = os.path.relpath(full_path, directory)
-    #         reduced_path = os.path.join(base_dir, rel_path)
-    #
-    #         files.append(reduced_path)
-    #
-    # return files
 
 
 def read_first_50_lines(file_path):

@@ -20,6 +20,17 @@ def makeResponse(response=None, status=200, isJson=False):
                           mimetype=mimetype)
 
 
+def appendMessage(messages, content=None, contentShort=None, stage=None, role="assistant", jsonObject=False):
+    message1 = {"role": role,
+                "jsonObject": jsonObject,
+                "contentShort": contentShort,
+                "content": content}
+
+    if stage is not None:
+        message1["stage"] = stage
+    messages.append(message1)
+
+
 def fileIsAnImage(file):
     if file.endswith('.bmp') or file.endswith('.gif') or file.endswith(
             '.jpeg') or file.endswith('.jpg') or file.endswith('.png') or file.endswith('.svg'):
@@ -35,7 +46,7 @@ def startDockerClient():
         client = docker.from_env()
     except Exception as e:
         print(str(e))
-        raise Exception(str(e))
+        raise Exception("Docker is not running")
 
     port = sock.getsockname()[1]
     print("Selected Port:" + str(port))
