@@ -153,7 +153,7 @@ export class HomeComponent implements OnInit {
                 this.chatInteraction()
                 break;
             case Stage.FindConfigurationsInteraction:
-                this.findConfigurationsFunc()
+                this.findConfigurationsFunc(this.userMessage)
                 break;
             case Stage.Completed:
                 this.changeStage(this.stages.ResearchArtifact)
@@ -209,9 +209,11 @@ export class HomeComponent implements OnInit {
         this.messages.push({
             role: "assistant",
             content: "Feel free to update any previous information. For example: I want to change the project location to exp26.\n"
-                + "Now, tell me how to execute the experiment. For example: python ./myExampleFile.py",
+                + "Now, tell me how to run the experiment. Note that I'm going to run all the commands sequentially. " +
+                "\nFor example: python ./myfile.py && cd folder && python ./myfile2.py && cd .. && python ./myfile3.py",
             contentShort: "Feel free to update any previous information. For example: I want to change the project location to exp26.\n"
-                + "Now, tell me how to execute the experiment. For example: python ./myExampleFile.py",
+                + "Now, tell me how to run the experiment. Note that I'm going to run all the commands sequentially. " +
+                "\nFor example: python ./myfile.py && cd folder && python ./myfile2.py && cd .. && python ./myfile3.py",
             jsonObject: false
         });
 
@@ -271,19 +273,32 @@ export class HomeComponent implements OnInit {
 
     }
 
-    findConfigurationsFunc() {
-        this.backend.findConfigurationsFunc(this.projectUuid, this.messages).subscribe((response: any) => {
+    findConfigurationsFunc(userMessage: any) {
+
+        let myMessage = "Here are the configuration used: " +
+            JSON.stringify(this.configurations) +
+            "The question is: Are they correct, or would you like to change anything? \n" +
+            "The user action is: " + userMessage;
+
+        this.backend.findConfigurationsFunc(this.projectUuid, this.messages, myMessage).subscribe((response: any) => {
             console.log(response);
             this.messages.push(...response)
             let responseLength = response.length
-
-            if (response[responseLength - 1].stage == "WaitChatInteraction") {
-                this.messageToAsk = "I used these settings. Are they correct, or would you like to change anything? \n" +
-                    JSON.stringify(this.configurations)
-                this.stageAfterChat = this.stages.BuildDockerFile
+            if (response[responseLength - 1].stage == "NEXT") {
+                this.changeStage(this.stageAfterChat)
+            } else {
+                if (response[responseLength - 1].stage == "WaitChatInteraction")
+                    if (response[responseLength - 1].jsonObject == false) {
+                        this.messageToAsk = "I used these settings. Are they correct, or would you like to change anything? \n" +
+                            JSON.stringify(this.configurations)
+                        this.stageAfterChat = this.stages.BuildDockerFile
+                    } else {
+                        this.configurations = response[responseLength - 1].content
+                        this.messageToAsk = "I used these settings. Are they correct, or would you like to change anything? \n" +
+                            JSON.stringify(this.configurations)
+                    }
             }
             this.changeStage(response[responseLength - 1].stage)
-
         });
     }
 
@@ -371,7 +386,7 @@ export class HomeComponent implements OnInit {
     waitChatInteraction(messageToAsk: any) {
         console.log("aqui")
 
-        if(messageToAsk!=undefined) {
+        if (messageToAsk != undefined) {
             this.messages.push({
                 role: "assistant",
                 content: messageToAsk,
@@ -394,7 +409,7 @@ export class HomeComponent implements OnInit {
             } else {
                 this.messageToAsk = "What might have caused this unexpected result? \n" +
                     'For example: I want to change the execution parameters.\n' +
-                    'For example: I want to change the project location.\n'+
+                    'For example: I want to change the project location.\n' +
                     'For example: I want to change the computing environment used (programming languages, dependencies).\n'
                 this.changeStage(this.stages.WaitChatInteraction)
             }

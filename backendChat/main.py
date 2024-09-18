@@ -203,7 +203,7 @@ def parameters_to_use_confirmation(projectUuid):
                                                'Message: ' + myMessage + '\n'
                                                                          "Your answer follows two options:\n"
                                                                          "- Reply 'ParametersToUse' if this message does not contain a valid command.\n"
-                                                                         "- If this message contains a valid command, your answer should only contain the command to execute the experiment.",
+                                                                         "- If this message contains a valid command to be run inside a container in TTY mode, your reply should only include the command to be used in Unix-like systems.",
                                     "contentShort": None,
                                     }
 
@@ -214,8 +214,8 @@ def parameters_to_use_confirmation(projectUuid):
             completion = client.chat.completions.create(
                 # model="gpt-4",
                 # model="gpt-3.5-turbo",
-                ##model="gpt-4-turbo",
-                model="gpt-4o",
+                model="gpt-4-turbo",
+                #model="gpt-4o",
                 messages=
                 messagesToChat,
 
@@ -228,7 +228,8 @@ def parameters_to_use_confirmation(projectUuid):
                 appendMessage(messagesToUser, contentShort="Please provide a valid command.", stage="ParametersToUse")
             else:
                 appendMessage(messagesToUser, content=messageText,
-                              contentShort="I will use this command '" + messageText + "' to execute the experiment.",
+                              contentShort="I will use this command to execute the experiment.\n '"
+                                           "Command: '"+ messageText + "'",
                               stage="FindConfigurations")
             return makeResponse(messagesToUser, 201, True)
         else:
@@ -405,8 +406,9 @@ def find_configurations(projectUuid):
                         }
 
             messagesToUser.append(message1)
-            messagesToChat = copy(message1)
-            messagesToChat["content"] = messagesToChat["content"] + str(filesContent)
+            myMessage = copy(message1)
+            myMessage["content"] = myMessage["content"] + str(filesContent)
+            messagesToChat = [myMessage]
 
             # TODO descomentar
             client = OpenAI()
@@ -414,9 +416,9 @@ def find_configurations(projectUuid):
                 # model="gpt-3.5-turbo",
                 # model="gpt-4-turbo",
                 model="gpt-4o",
-                messages=[
+                messages=
                     messagesToChat,
-                ]
+
             )
             messageText = completion.choices[0].message.content
             messageText = messageText.replace("```", "")
@@ -448,11 +450,10 @@ def find_configurations_change(projectUuid):
     directoryPath = 'projects/' + projectUuid + "/files/"
     requestData = json.loads(request.data)
     messagesToUser = []
+    messagesToChat = []
 
-    if "messages" in requestData:
-        messagesToChat = requestData["messages"]
-        length = len(messagesToChat)
-        myMessage = messagesToChat[length - 1]["content"]
+    if "myMessage" in requestData:
+        myMessage = requestData["myMessage"]
     else:
         appendMessage(messagesToUser, contentShort='Messages are missing', stage="Start")
         return makeResponse(messagesToUser, 201, True)
@@ -461,14 +462,15 @@ def find_configurations_change(projectUuid):
                 "jsonObject": False,
                 "contentShort": None,
                 "content": "The current stage of this interaction is: FindConfigurationsInteraction "
-                           '\nCheck if the content of the following message is positive or if the user wants to make changes:'
+                           "\nCheck if the content of the user's action in the following message is positive or if the user wants to make changes."
                            "\nMessage: " + myMessage +
                            '\nConsider the following three options: '
                            '\nReply with "BuildDockerFile" if the content is positive.'
                            '\nReply with "WaitChatInteraction" if the content is negative, but no changes are proposed.'
                            '\nIf the user wants to make changes, implement the proposed changes and provide your response in the following format: '
                            '{ "PL": [programming language], "PLVersion": [programming language version], "Dependencies": [dependencies], "DependenciesVersion": [version of dependencies] }'
-                           '\nIf the user wants to make changes, ensure the response is in the specified JSON format. If no changes are requested, the response should be a single word.'
+                           '\nIf the user wants to make changes, ensure the response is in the specified JSON format. '
+                           'If no changes are requested, the response should be a single word.'
                 }
 
     messagesToUser.append(message1)
@@ -489,21 +491,61 @@ def find_configurations_change(projectUuid):
     print(messageText)
 
     if messageText == "BuildDockerFile" or messageText == "WaitChatInteraction":
-        message2 = {"role": "assistant",
-                    "content": messageText,
-                    "contentShort": None,
-                    "jsonObject": False,
-                    "stage": messageText}
+        appendMessage(messagesToUser, content=messageText, stage=messageText)
     else:
         messageText = messageText.replace("```", "")
         messageText = messageText.replace("json", "")
         try:
             appendMessage(messagesToUser, content=json.loads(messageText),jsonObject=True, stage="WaitChatInteraction")
+            return makeResponse(messagesToUser, 201, True)
         except Exception as e:
-            appendMessage(messagesToUser, content=messageText,  stage="WaitChatInteraction")
-    # TODO comentar
-    # messageText = '{"PL": "Python", "PLVersion": "Python 3.10",  "Dependencies": ["numpy", "matplotlib", "scikit-learn"],  "DependenciesVersion": ["numpy==1.21.5", "matplotlib==3.5.1", "scikit-learn==1.2.0"]}'
-    return makeResponse(messagesToUser, 201, True)
+            numberInteractions = 3
+            chatMessage = ""
+            while numberInteractions > 0:
+                message1 = {"role": "system",
+                            "jsonObject": False,
+                            "contentShort": None,
+                            "content": chatMessage +
+                                       "\nI'll give you a message, and based on the settings used and the actions taken by the user, make the necessary changes."
+                                       "\nMessage: " + myMessage +
+                                       '\nImplement the proposed changes and provide your response in the following format: '
+                                       '{ "PL": [programming language], "PLVersion": [programming language version], "Dependencies": [dependencies], "DependenciesVersion": [version of dependencies] }'
+                                       '\nEnsure the response is in the specified JSON format. '
+                            }
+                messagesToChat.append(message1)
+
+
+                # TODO descomentar
+                client = OpenAI()
+                completion = client.chat.completions.create(
+                    # model="gpt-3.5-turbo",
+                    # model="gpt-4-turbo",
+                    model="gpt-4o",
+                    messages=
+                        messagesToChat,
+
+                )
+                messageText = completion.choices[0].message.content
+                messageText = messageText.replace("```", "")
+                messageText = messageText.replace("json", "")
+
+                # TODO comentar
+                # messageText = '{"PL": "Python",  "PLVersion": "Python 3.10", "Dependencies": ["tqdm", "pandas", "shap","numpy", "matplotlib", "scikit-learn"],  "DependenciesVersion": ["shap==0.41.0", "numpy==1.23.4", "pandas==1.5.2", "scipy==1.9.3", "matplotlib==3.6.2", "tqdm==4.64.1"]}'
+
+                print(messageText)
+                try:
+                    appendMessage(messagesToUser, content=json.loads(messageText), jsonObject=True,
+                                  stage="BuildDockerFile")
+                    return makeResponse(messagesToUser, 201, True)
+                except Exception as e:
+                    numberInteractions -= 1
+                    print("numberInteractions" + str(numberInteractions))
+                    chatMessage = "The previous result is incorrect. Please consider the following information.\n"
+
+        appendMessage(messagesToUser, content="Some error occurred", contentShort="Some error occurred", stage="FindConfigurations")
+        # TODO comentar
+        # messageText = '{"PL": "Python", "PLVersion": "Python 3.10",  "Dependencies": ["numpy", "matplotlib", "scikit-learn"],  "DependenciesVersion": ["numpy==1.21.5", "matplotlib==3.5.1", "scikit-learn==1.2.0"]}'
+        return makeResponse(messagesToUser, 201, True)
 
 
 
@@ -543,7 +585,7 @@ def buildDockerFileChat(projectUuid):
     messagesToUser.append(message1)
     messagesToChat.append(message1)
     messagesToChat = convert_json_to_string(messagesToChat)
-    messageText = ''
+    #messageText = ''
 
     # TODO descomentar
     client = OpenAI()
@@ -800,8 +842,7 @@ def buildDockerImageChat(projectUuid):
                                          "For example: I want to change the project location.\n"
                                          "For example: I want to change the computing environment used (programming languages, dependencies).\n"
             )
-            appendMessage(messagesToUser, content=errorMessage,
-                          stage="WaitChatInteraction")
+            appendMessage(messagesToUser, contentShort=errorMessage, stage="WaitChatInteraction")
 
         return makeResponse(messagesToUser, 201, True)
 
@@ -842,14 +883,30 @@ def runDockerContainerChat(projectUuid):
             container = dockerClient.containers.run(
                 image=projectImage,
                 name=projectUuid + "_" + number,
-                command=commandToRun,
                 volumes=[volume_path + ':/files'],
-                detach=True
+                detach=True,
+                command="/bin/sh",
+                tty=True
             )
+            # stdin=True: Allows you to pass input to the container via standard input.
+            # You often use both together when running fully interactive sessions in containers. For example:
+            # container.exec_run('/bin/bash', stdin=True, tty=True)
 
-            waitToConclude(container)
-            containerLogs = container.logs().decode("utf-8")
+            #commandToRun= "python ./myfile.py && cd pasta && python ./myfile2.py && cd .. &&  python ./myfile3.py"
+            exec_first = container.exec_run('/bin/sh -c "' + commandToRun + '"')
+
+            containerLogs= "Command Output:" + exec_first.output.decode('utf-8') +"\n\n\n"
+            exit_code = f"Exit Code: {exec_first.exit_code}\n"
+            containerLogs += exit_code
+
             print(containerLogs)
+
+            container.stop()
+            container.remove()
+
+            # waitToConclude(container)
+            # containerLogs = container.logs().decode("utf-8")
+            # print(containerLogs)
 
             # # Compare snapshots to identify changes
             # added_files = {}
@@ -872,14 +929,10 @@ def runDockerContainerChat(projectUuid):
             # Prepare the message to be sent back to the user
             messagesToUser = [
                 {"role": "assistant",
-                 "jsonObject": False,
-                 "contentShort": 'The logs of the execution are in the next message.',
-                 "content": 'The logs of the execution are in the next message.'},
-
-                {"role": "assistant",
                  "content": containerLogs,
                  "contentShort": containerLogs,
                  "jsonObject": False}
+
             ]
 
             # changes = container.diff()
@@ -1038,3 +1091,39 @@ if __name__ == '__main__':
     # Não é necesario ter export no dockerfile, o container tem que ser corrido desta maneira
     # dockerClient.containers.run(image="web:2",  ports={4200:4200}, command="npm run start", name = "ola" + "_" + "4200", detach = True)
     #
+
+    # # Initialize the Docker client
+    # client = docker.from_env()
+    #
+    # # Pull the image (optional if already pulled)
+    #
+    # # Create and start a container (detach=True to keep it running)
+    # now = datetime.now()
+    # number = now.strftime("%Y%m%d%H%M%S")
+    # projectUuid="e255"
+    # projectPath = 'projects/' + projectUuid + "/"
+    #
+    # dockerImageBuilt = client.images.build(path=projectPath, tag=projectUuid + ":" + number, rm=True)
+    # dockerImageBuiltFiltered = [s for s in dockerImageBuilt[0].tags if projectUuid in s]
+    # dockerTagslength = len(dockerImageBuiltFiltered) - 1
+    #
+    # messageText = dockerImageBuiltFiltered[dockerTagslength]
+    #
+    # container = client.containers.run(messageText,name= projectUuid + "_" + number, command="/bin/sh", detach=True, tty=True)
+    #
+    # # Run the first command
+    # exec_first = container.exec_run('/bin/sh -c "python ./myfile.py && cd pasta && python ./myfile2.py && cd .. &&  python ./myfile3.py"')
+    # print(exec_first.output.decode('utf-8'))
+    #
+    # # Get the output
+    # output = exec_first.output.decode('utf-8')
+    # print("Command Output:")
+    # print(output)
+    #
+    # # Get the exit code
+    # exit_code = exec_first.exit_code
+    # print(f"Exit Code: {exit_code}")
+    #
+    # # Stop and remove the container after commands
+    # container.stop()
+    # #container.remove()
