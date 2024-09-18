@@ -711,7 +711,6 @@ def chat_interation(projectUuid):
             messageText = completion.choices[0].message.content
             print(messageText)
 
-            # TODO aqui dá erro quando respondo apenas no
             palavras = messageText.split()
             if len(palavras) == 1:
                 if messageText == "CHANGE":

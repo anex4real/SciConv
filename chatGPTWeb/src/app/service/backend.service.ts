@@ -105,9 +105,10 @@ export class BackendService {
         });
     }
 
-    findConfigurationsFunc(projectUuid: string, messages: Message[]) {
+    findConfigurationsFunc(projectUuid: string, messages: Message[], myMessage: any) {
         return this.http.post(`${this.baseUrl}/project/${projectUuid}/find-configurations-change`, {
-            messages: messages
+            messages: messages,
+            myMessage: myMessage
         });
 
     }
