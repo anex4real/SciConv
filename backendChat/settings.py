@@ -44,6 +44,7 @@ def startDockerClient():
     sock.bind(('', 0))
     try:
         client = docker.from_env()
+        client = docker.DockerClient(base_url='unix://var/run/docker.sock')
     except Exception as e:
         print(str(e))
         raise Exception("Docker is not running")

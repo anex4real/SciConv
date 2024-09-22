@@ -22,6 +22,7 @@ def upload_file():
     UPLOAD_FOLDER = 'projects'
     os.makedirs(UPLOAD_FOLDER, exist_ok=True)
     messagesToUser = []
+    messagesToChat = []
 
     if 'file' not in request.files:
         print("File is missing")
@@ -64,7 +65,35 @@ def upload_file():
             os.remove(temp_path)  # Remove the zip file after extraction
             os.rename(projectLocationRoot, projectLocationFiles)
 
-            appendMessage(messagesToUser, content=projectUuid, stage="FindProjectFiles")
+            message1 = {"role": "system",
+                        "jsonObject": False,
+                        "contentShort": None,
+                        "content": "I need to validate the variable 'projectUuid' for use in this function. "
+                                   "If 'projectUuid' is a valid Docker tag name, respond with 'YES.' "
+                                   "If it's not valid, return an updated, valid version of 'projectUuid.' "
+                                   "Current value: projectUuid = " + projectUuid + ".\n"
+                                                                                   "The function to execute is: dockerClient.images.build(path=projectPath, tag=projectUuid) and do not support - and capital letters. "
+                                                                                   "Your response should be exactly one word, either 'YES' or the updated 'projectUuid' value."}
+            messagesToChat.append(message1)
+            messagesToChat = convert_json_to_string(messagesToChat)
+            # TODO descomentar
+            client = OpenAI()
+            completion = client.chat.completions.create(
+                # model="gpt-4-turbo",
+                model="gpt-4o",
+                messages=
+                messagesToChat,
+
+            )
+
+            firstMessageText = completion.choices[0].message.content
+            if firstMessageText == "Yes":
+                appendMessage(messagesToUser, content=projectUuid, stage="FindProjectFiles")
+            else:
+                newprojectLocation = os.path.join(UPLOAD_FOLDER, firstMessageText)
+                os.rename(projectLocation, newprojectLocation)
+                appendMessage(messagesToUser, content=firstMessageText, stage="FindProjectFiles")
+
             return makeResponse(messagesToUser, 201, True)
         else:
             print("Only zip files are allowed")
@@ -106,7 +135,6 @@ def find_files_project(projectUuid):
             client = OpenAI()
 
             completion = client.chat.completions.create(
-                # model="gpt-3.5-turbo",
                 # model="gpt-4-turbo",
                 model="gpt-4o",
                 messages=
@@ -178,8 +206,6 @@ def parameters_to_use_confirmation(projectUuid):
         # TODO descomentar
         client = OpenAI()
         completion = client.chat.completions.create(
-            # model="gpt-4",
-            # model="gpt-3.5-turbo",
             # model="gpt-4-turbo",
             model="gpt-4o",
             messages=
@@ -188,7 +214,6 @@ def parameters_to_use_confirmation(projectUuid):
         )
 
         firstMessageText = completion.choices[0].message.content
-        # messageText = "NOT UPDATED"
         # messageText = '{"PL": "Python", "PLVersion": "Python 3.10",  "Dependencies": ["numpy", "matplotlib", "scikit-learn"],  "DependenciesVersion": ["numpy==1.21.5", "matplotlib==3.5.1", "scikit-learn==1.2.0"]}'
 
         print(firstMessageText)
@@ -212,10 +237,8 @@ def parameters_to_use_confirmation(projectUuid):
 
             client = OpenAI()
             completion = client.chat.completions.create(
-                # model="gpt-4",
-                # model="gpt-3.5-turbo",
                 model="gpt-4-turbo",
-                #model="gpt-4o",
+                # model="gpt-4o",
                 messages=
                 messagesToChat,
 
@@ -228,8 +251,8 @@ def parameters_to_use_confirmation(projectUuid):
                 appendMessage(messagesToUser, contentShort="Please provide a valid command.", stage="ParametersToUse")
             else:
                 appendMessage(messagesToUser, content=messageText,
-                              contentShort="I will use this command to execute the experiment.\n '"
-                                           "Command: '"+ messageText + "'",
+                              contentShort="I will use this command to execute the experiment.\n "
+                                           "Command: " + messageText,
                               stage="FindConfigurations")
             return makeResponse(messagesToUser, 201, True)
         else:
@@ -245,8 +268,6 @@ def parameters_to_use_confirmation(projectUuid):
 
             client = OpenAI()
             completion = client.chat.completions.create(
-                # model="gpt-4",
-                # model="gpt-3.5-turbo",
                 # model="gpt-4-turbo",
                 model="gpt-4o",
                 messages=
@@ -413,7 +434,6 @@ def find_configurations(projectUuid):
             # TODO descomentar
             client = OpenAI()
             completion = client.chat.completions.create(
-                # model="gpt-3.5-turbo",
                 # model="gpt-4-turbo",
                 model="gpt-4o",
                 messages=
@@ -480,7 +500,6 @@ def find_configurations_change(projectUuid):
     # TODO descomentar
     client = OpenAI()
     completion = client.chat.completions.create(
-        # model="gpt-3.5-turbo",
         # model="gpt-4-turbo",
         model="gpt-4o",
         messages=
@@ -496,7 +515,7 @@ def find_configurations_change(projectUuid):
         messageText = messageText.replace("```", "")
         messageText = messageText.replace("json", "")
         try:
-            appendMessage(messagesToUser, content=json.loads(messageText),jsonObject=True, stage="WaitChatInteraction")
+            appendMessage(messagesToUser, content=json.loads(messageText), jsonObject=True, stage="WaitChatInteraction")
             return makeResponse(messagesToUser, 201, True)
         except Exception as e:
             numberInteractions = 3
@@ -514,11 +533,9 @@ def find_configurations_change(projectUuid):
                             }
                 messagesToChat.append(message1)
 
-
                 # TODO descomentar
                 client = OpenAI()
                 completion = client.chat.completions.create(
-                    # model="gpt-3.5-turbo",
                     # model="gpt-4-turbo",
                     model="gpt-4o",
                     messages=
@@ -542,7 +559,8 @@ def find_configurations_change(projectUuid):
                     print("numberInteractions" + str(numberInteractions))
                     chatMessage = "The previous result is incorrect. Please consider the following information.\n"
 
-        appendMessage(messagesToUser, content="Some error occurred", contentShort="Some error occurred", stage="FindConfigurations")
+        appendMessage(messagesToUser, content="Some error occurred", contentShort="Some error occurred",
+                      stage="FindConfigurations")
         # TODO comentar
         # messageText = '{"PL": "Python", "PLVersion": "Python 3.10",  "Dependencies": ["numpy", "matplotlib", "scikit-learn"],  "DependenciesVersion": ["numpy==1.21.5", "matplotlib==3.5.1", "scikit-learn==1.2.0"]}'
         return makeResponse(messagesToUser, 201, True)
@@ -569,8 +587,8 @@ def buildDockerFileChat(projectUuid):
                 "jsonObject": False,
                 "contentShort": None,
                 "content": "The stage of this interaction is: BuildDockerFile. "
-                            "Check if you find this sentence in the conversation history. `I tried to build the Docker image, but an error occurred` "
-                            "If so, you have to take the previous docker file into account so that you don't provide the same dockerfile because the previous one had an error."
+                           "Check if you find this sentence in the conversation history. I tried to build the Docker image, but an error occurred "
+                           "If so, you have to take the previous docker file into account so that you don't provide the same dockerfile because the previous one had an error."
                            'Please use the information I have provided, such as the dependencies, their versions (DependenciesVersion), programming languages (PL), and programming language versions (PLVersion), to build a Dockerfile. '
                            'All the files I want to use are located in the files folder. Inside the container, I want all the files to remain in the files folder as well. '
                            'Therefore, the following two commands should be used: '
@@ -579,7 +597,7 @@ def buildDockerFileChat(projectUuid):
                            'In previous messages, I provided the names of the configuration files (configurationFiles) present in the project. '
                            'You may use them if relevant, but it’s not necessary to include COPY or ADD commands for these files, because they are inside the "./files" folder and have already been copied. '
                            'Please do not infer the names of any files not explicitly provided. '
-                           'I only need the Dockerfile required to build the Docker image, so do not include the `CMD` or `ENTRYPOINT` commands in this Dockerfile. '
+                           'I only need the Dockerfile required to build the Docker image, so do not include the CMD or ENTRYPOINT commands in this Dockerfile. '
                            'Provide only the created Dockerfile, as I will use your response directly—no additional text or explanation is needed.'}
 
     messagesToUser.append(message1)
@@ -590,8 +608,6 @@ def buildDockerFileChat(projectUuid):
     # TODO descomentar
     client = OpenAI()
     completion = client.chat.completions.create(
-        # model="gpt-4",
-        # model="gpt-3.5-turbo",
         model="gpt-4-turbo",
         # model="gpt-4o",
         messages=
@@ -626,8 +642,6 @@ def buildDockerFileChat(projectUuid):
     # TODO descomentar
     client = OpenAI()
     completion = client.chat.completions.create(
-        # model="gpt-4",
-        # model="gpt-3.5-turbo",
         model="gpt-4-turbo",
         # model="gpt-4o",
         messages=
@@ -646,7 +660,7 @@ def buildDockerFileChat(projectUuid):
     # RUN pip install shap==0.41.0 numpy==1.23.4 pandas==1.5.2 scipy==1.9.3 matplotlib==3.6.2 tqdm==4.64.1"""
 
     write_file(projectPath + "Dockerfile", messageText)
-
+#TODO alterar
     try:
         message2 = {"role": "assistant",
                     "content": json.loads(messageText),
@@ -692,7 +706,7 @@ def chat_interation(projectUuid):
                                                  "If the message is positive or indicates agreement, respond with 'NEXT' "
                                                  "If the message is negative and indicates disagreement, but does not propose possible changes, respond with 'WaitChatInteraction' "
                                                  "\nPlease respond in the specified format. The answer should be exactly one word."
-                                                 "\nMessage: `" + myMessage + "`"
+                                                 "\nMessage: " + myMessage + ""
                         }
             messagesToUser.append(message1)
             messagesToChat.append(message1)
@@ -701,7 +715,6 @@ def chat_interation(projectUuid):
 
             client = OpenAI()
             completion = client.chat.completions.create(
-                # model="gpt-3.5-turbo",
                 # model="gpt-4-turbo",
                 model="gpt-4o",
                 messages=
@@ -732,7 +745,6 @@ def chat_interation(projectUuid):
 
                     client = OpenAI()
                     completion = client.chat.completions.create(
-                        # model="gpt-3.5-turbo",
                         # model="gpt-4-turbo",
                         model="gpt-4o",
                         messages=
@@ -784,8 +796,19 @@ def buildDockerImageChat(projectUuid):
         dockerClientResult = startDockerClient()
         dockerClient, port = dockerClientResult["dockerClient"], dockerClientResult["port"]
         number = datetime.now().strftime("%Y%m%d%H%M%S")
-
-        # TODO descomentar
+        # TODO comentar
+        # try:
+        #     # Build the image and stream the logs in real-time
+        #     dockerImageBuilt = dockerClient.images.build(path=projectPath, tag=projectUuid + ":" + number, rm=True,
+        #                                                  stream=True)
+        #     # Loop through the logs and print them in real-time
+        #     for chunk in dockerImageBuilt:
+        #         if 'stream' in chunk:
+        #             print(chunk['stream'].strip())  # Print the log messages in real-time
+        #         else:
+        #             print(chunk)  # Catch other potential messages (like errors)
+        # except Exception as e:
+        #     raise Exception(str(e))
         dockerImageBuilt = dockerClient.images.build(path=projectPath, tag=projectUuid + ":" + number, rm=True)
         dockerImageBuiltFiltered = [s for s in dockerImageBuilt[0].tags if projectUuid in s]
         dockerTagslength = len(dockerImageBuiltFiltered) - 1
@@ -820,7 +843,6 @@ def buildDockerImageChat(projectUuid):
 
         client = OpenAI()
         completion = client.chat.completions.create(
-            # model="gpt-3.5-turbo",
             # model="gpt-4-turbo",
             model="gpt-4o",
             messages=messagesToChat
@@ -891,10 +913,10 @@ def runDockerContainerChat(projectUuid):
             # You often use both together when running fully interactive sessions in containers. For example:
             # container.exec_run('/bin/bash', stdin=True, tty=True)
 
-            #commandToRun= "python ./myfile.py && cd pasta && python ./myfile2.py && cd .. &&  python ./myfile3.py"
+            # commandToRun= "python ./myfile.py && cd pasta && python ./myfile2.py && cd .. &&  python ./myfile3.py"
             exec_first = container.exec_run('/bin/sh -c "' + commandToRun + '"')
 
-            containerLogs= "Command Output:" + exec_first.output.decode('utf-8') +"\n\n\n"
+            containerLogs = "Command Output:" + exec_first.output.decode('utf-8') + "\n\n\n"
             exit_code = f"Exit Code: {exec_first.exit_code}\n"
             containerLogs += exit_code
 
@@ -978,7 +1000,6 @@ def runDockerContainerChat(projectUuid):
 
             client = OpenAI()
             completion = client.chat.completions.create(
-                # model="gpt-3.5-turbo",
                 # model="gpt-4-turbo",
                 model="gpt-4o",
                 messages=messagesToChat
@@ -1091,7 +1112,7 @@ if __name__ == '__main__':
     # dockerClient.containers.run(image="web:2",  ports={4200:4200}, command="npm run start", name = "ola" + "_" + "4200", detach = True)
     #
 
-    # # Initialize the Docker client
+    # Initialize the Docker client
     # client = docker.from_env()
     #
     # # Pull the image (optional if already pulled)
@@ -1099,7 +1120,7 @@ if __name__ == '__main__':
     # # Create and start a container (detach=True to keep it running)
     # now = datetime.now()
     # number = now.strftime("%Y%m%d%H%M%S")
-    # projectUuid="e255"
+    # projectUuid="iubfc-main"
     # projectPath = 'projects/' + projectUuid + "/"
     #
     # dockerImageBuilt = client.images.build(path=projectPath, tag=projectUuid + ":" + number, rm=True)
@@ -1111,7 +1132,7 @@ if __name__ == '__main__':
     # container = client.containers.run(messageText,name= projectUuid + "_" + number, command="/bin/sh", detach=True, tty=True)
     #
     # # Run the first command
-    # exec_first = container.exec_run('/bin/sh -c "python ./myfile.py && cd pasta && python ./myfile2.py && cd .. &&  python ./myfile3.py"')
+    # exec_first = container.exec_run('/bin/sh -c "make && ./iubfc 13 0.5 dataID.txt dataEdge.txt 10000 dataOut.txt"')
     # print(exec_first.output.decode('utf-8'))
     #
     # # Get the output
