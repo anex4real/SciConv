@@ -4,6 +4,7 @@ import time
 import flask
 import socket
 import docker
+from openai import base_url
 
 
 def makeResponse(response=None, status=200, isJson=False):
@@ -20,7 +21,7 @@ def makeResponse(response=None, status=200, isJson=False):
                           mimetype=mimetype)
 
 
-def appendMessage(messages, content=None, contentShort=None, stage=None, role="assistant", jsonObject=False):
+def appendMessage(messages, content=None, contentShort=None, stage=None, role="assistant", jsonObject=False, projectUuid= None):
     message1 = {"role": role,
                 "jsonObject": jsonObject,
                 "contentShort": contentShort,
@@ -28,6 +29,10 @@ def appendMessage(messages, content=None, contentShort=None, stage=None, role="a
 
     if stage is not None:
         message1["stage"] = stage
+
+    if projectUuid is not None:
+        message1["projectUuid"] = projectUuid
+
     messages.append(message1)
 
 
@@ -44,7 +49,8 @@ def startDockerClient():
     sock.bind(('', 0))
     try:
         client = docker.from_env()
-        client = docker.DockerClient(base_url='unix://var/run/docker.sock')
+        #client = docker.DockerClient(base_url='unix://var/run/docker.sock')
+        client= docker.DockerClient(base_url='unix:///home/lazaro/.docker/desktop/docker.sock')
     except Exception as e:
         print(str(e))
         raise Exception("Docker is not running")

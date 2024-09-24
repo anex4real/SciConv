@@ -106,13 +106,41 @@ def upload_file():
         return makeResponse(messagesToUser, 201, True)
 
 
-@app.route("/project/<projectUuid>/find_files", methods=['GET'])
+@app.route("/project/find_files", methods=['POST'])
 @cross_origin()
-def find_files_project(projectUuid):
-    directoryPath = 'projects/' + projectUuid + "/files"
+def find_files_project():
+    requestData = json.loads(request.data)
+
+    if "possibleProjectUuid" in requestData:
+        possibleProjectUuid = requestData["possibleProjectUuid"]
+
+    askmessage = {"role": "system",
+                  "jsonObject": False,
+                  "contentShort": None,
+                  "content": "Review the following message to determine whether the name of a folder containing the project's main files might be specified:"
+                             'Message:' + possibleProjectUuid + "\n"
+                                                                'If it does, please provide the folder name. If it does not, respond with "NO"\n'
+                                                                'Please answer in the required format, with a one-word response.'}
+
+    # TODO descomentar
+    client = OpenAI()
+
+    completion = client.chat.completions.create(
+        model="gpt-4-turbo",
+        #model="gpt-4o",
+        messages=
+        [askmessage]
+    )
+    projectUuid = completion.choices[0].message.content
     messagesToUser = []
     messagesToChat = []
 
+    if projectUuid == "NO":
+        appendMessage(messagesToUser, contentShort="Please enter a valid location", jsonObject=False,
+                      stage="Start")
+        return makeResponse(messagesToUser, 201, True)
+
+    directoryPath = 'projects/' + projectUuid + "/files"
     all_files = find_files(directoryPath)
     numberInteractions = 3
     chatMessage = ""
@@ -152,8 +180,8 @@ def find_files_project(projectUuid):
                 userMessage = json.loads(messageText)
                 if len(userMessage["ExecutableFiles"]) > 0:
                     appendMessage(messagesToUser, content=userMessage,
-                                  contentShort="The requirements for running the experiment '" + projectUuid + "' were met",
-                                  jsonObject=False, stage="ParametersToUse")
+                                  contentShort="We've found your project.\n The project is in folder " + projectUuid + "\n",
+                                  jsonObject=False, stage="ParametersToUse", projectUuid=projectUuid)
                 else:
                     appendMessage(messagesToUser, contentShort="There are no files to execute. ", jsonObject=False,
                                   stage="Start")
@@ -162,7 +190,9 @@ def find_files_project(projectUuid):
             except Exception as e:
                 numberInteractions -= 1
                 print("numberInteractions" + str(numberInteractions))
-                chatMessage = "The previous result is incorrect. Please consider the following information.\n"
+                print("Error:" + str(e))
+                chatMessage = ("The previous result is incorrect. I got this error:" + str(e) +
+                               "\nPlease consider the following information.\n")
 
     except Exception as error:
         appendMessage(messagesToUser, content=str(error), contentShort=str(error), stage="Start")
@@ -394,6 +424,13 @@ def find_configurations(projectUuid):
         appendMessage(messagesToUser, contentShort='filenames are missing', stage="Start")
         return makeResponse(messagesToUser, 201, True)
 
+    if "commandToRun" in requestData:
+        commandToRun = requestData["commandToRun"]
+        # commandToUse = "make && ./iubfc 13 0.5 ./Data/IMDBID.txt ./Data/IMDBEdge.txt 10000 ./Data/dataOut.txt"
+    else:
+        appendMessage(messagesToUser, contentShort="The commandToRun is required", stage="BuildDockerFile")
+        return makeResponse(messagesToUser, 201, True)
+
     # filenames = ['main.py']
     all_files_lines = {}
 
@@ -416,7 +453,7 @@ def find_configurations(projectUuid):
                         "jsonObject": False,
                         "contentShort": None,
                         "content": chatMessage + "The current stage of this interaction is: FindConfigurations"
-                                                 '\nGiven the JSON containing the file name and the first 50 lines, please determine the following:'
+                                                 '\nGiven the JSON containing the file name, the first 50 lines of each file and the command that will be used to execute this project , please determine the following:'
                                                  '\nThe programming language of the file. The version of that language. Any dependencies and their versions.'
                                                  '\nProvide your response in the following format:'
                                                  '{ "PL": [all the programming languages used], "PLVersion": [all the programming language version],"Dependencies": [dependencies], "DependenciesVersion": [version of dependencies] }'
@@ -424,11 +461,13 @@ def find_configurations(projectUuid):
                                                  '\nMake sure to list the most recent supported version of the programming language, and format the result in JSON.'
                                                  '\nExample response:'
                                                  '\n{ "PL": ["Python"], "PLVersion": "Python 3.8", "Dependencies": ["pandas"], "DependenciesVersion": ["pandas==2.2.0"]}'
+                                                 '\nCommand To Use: ' + commandToRun
+
                         }
 
             messagesToUser.append(message1)
             myMessage = copy(message1)
-            myMessage["content"] = myMessage["content"] + str(filesContent)
+            myMessage["content"] = myMessage["content"] + '\nThe first 50 lines of each file: ' + str(filesContent)
             messagesToChat = [myMessage]
 
             # TODO descomentar
@@ -437,7 +476,7 @@ def find_configurations(projectUuid):
                 # model="gpt-4-turbo",
                 model="gpt-4o",
                 messages=
-                    messagesToChat,
+                messagesToChat,
 
             )
             messageText = completion.choices[0].message.content
@@ -539,7 +578,7 @@ def find_configurations_change(projectUuid):
                     # model="gpt-4-turbo",
                     model="gpt-4o",
                     messages=
-                        messagesToChat,
+                    messagesToChat,
 
                 )
                 messageText = completion.choices[0].message.content
@@ -564,8 +603,6 @@ def find_configurations_change(projectUuid):
         # TODO comentar
         # messageText = '{"PL": "Python", "PLVersion": "Python 3.10",  "Dependencies": ["numpy", "matplotlib", "scikit-learn"],  "DependenciesVersion": ["numpy==1.21.5", "matplotlib==3.5.1", "scikit-learn==1.2.0"]}'
         return makeResponse(messagesToUser, 201, True)
-
-
 
 
 @app.route("/project/<projectUuid>/build-docker-file-chat", methods=['POST'])
@@ -603,7 +640,7 @@ def buildDockerFileChat(projectUuid):
     messagesToUser.append(message1)
     messagesToChat.append(message1)
     messagesToChat = convert_json_to_string(messagesToChat)
-    #messageText = ''
+    # messageText = ''
 
     # TODO descomentar
     client = OpenAI()
@@ -660,7 +697,7 @@ def buildDockerFileChat(projectUuid):
     # RUN pip install shap==0.41.0 numpy==1.23.4 pandas==1.5.2 scipy==1.9.3 matplotlib==3.6.2 tqdm==4.64.1"""
 
     write_file(projectPath + "Dockerfile", messageText)
-#TODO alterar
+    # TODO alterar
     try:
         message2 = {"role": "assistant",
                     "content": json.loads(messageText),
@@ -899,12 +936,16 @@ def runDockerContainerChat(projectUuid):
             now = datetime.now()
             number = now.strftime("%Y%m%d%H%M%S")
 
-            volume_path = './' + dockerImageId.replace(":", "_")
+            current_path = os.getcwd()
+            directoryPath = '/projects/' + projectUuid + "/files"
 
+            volume_path = os.path.abspath(current_path + directoryPath)
+
+            # Run the container
             container = dockerClient.containers.run(
                 image=projectImage,
                 name=projectUuid + "_" + number,
-                volumes=[volume_path + ':/files'],
+                volumes={volume_path: {'bind': '/files', 'mode': 'rw'}},  # Linux absolute path and bind
                 detach=True,
                 command="/bin/sh",
                 tty=True
@@ -923,7 +964,7 @@ def runDockerContainerChat(projectUuid):
             print(containerLogs)
 
             container.stop()
-            container.remove()
+            # container.remove()
 
             # waitToConclude(container)
             # containerLogs = container.logs().decode("utf-8")
@@ -1104,6 +1145,21 @@ def researchArtifactChat(projectUuid):
 
 
 if __name__ == '__main__':
+    # Initialize the Docker client
+    # client = docker.from_env()
+    #
+    # # Get all running containers
+    # containers = client.containers.list()
+    #
+    # # Print details of each container
+    # for container in containers:
+    #     print(f"Container ID: {container.id}")
+    #     print(f"Image: {container.image.tags}")
+    #     print(f"Name: {container.name}")
+    #     print(f"Status: {container.status}")
+    #     print(f"Ports: {container.attrs['NetworkSettings']['Ports']}")
+    #     print("-" * 40)
+
     # TODO é necssario escrever FLASK_RUN_PORT=8080 nas variaveis de ambiente da execução para a porta a executar ser a correta
     app.run(host='0.0.0.0', port=8080)
 
@@ -1112,38 +1168,43 @@ if __name__ == '__main__':
     # dockerClient.containers.run(image="web:2",  ports={4200:4200}, command="npm run start", name = "ola" + "_" + "4200", detach = True)
     #
 
-    # Initialize the Docker client
-    # client = docker.from_env()
-    #
-    # # Pull the image (optional if already pulled)
-    #
-    # # Create and start a container (detach=True to keep it running)
-    # now = datetime.now()
-    # number = now.strftime("%Y%m%d%H%M%S")
-    # projectUuid="iubfc-main"
+    # dockerClientResult = startDockerClient()
+    # dockerClient, port = dockerClientResult["dockerClient"], dockerClientResult["port"]
+    # number = datetime.now().strftime("%Y%m%d%H%M%S")
+    # projectUuid = "iubfc_main"
     # projectPath = 'projects/' + projectUuid + "/"
     #
-    # dockerImageBuilt = client.images.build(path=projectPath, tag=projectUuid + ":" + number, rm=True)
+    # dockerImageBuilt = dockerClient.images.build(path=projectPath, tag=projectUuid + ":" + number, rm=True)
     # dockerImageBuiltFiltered = [s for s in dockerImageBuilt[0].tags if projectUuid in s]
     # dockerTagslength = len(dockerImageBuiltFiltered) - 1
     #
-    # messageText = dockerImageBuiltFiltered[dockerTagslength]
+    # projectImage = dockerImageBuiltFiltered[dockerTagslength]
     #
-    # container = client.containers.run(messageText,name= projectUuid + "_" + number, command="/bin/sh", detach=True, tty=True)
+    # # projectImage ="iubfc_main:20240922185634"
     #
-    # # Run the first command
-    # exec_first = container.exec_run('/bin/sh -c "make && ./iubfc 13 0.5 dataID.txt dataEdge.txt 10000 dataOut.txt"')
-    # print(exec_first.output.decode('utf-8'))
+    # # Use an absolute path for the volume
+    # # Replace '/home/youruser' with the appropriate path where your project is stored on Linux
+    # current_path = os.getcwd()
+    # directoryPath = '/projects/' + projectUuid + "/files"
     #
-    # # Get the output
-    # output = exec_first.output.decode('utf-8')
-    # print("Command Output:")
-    # print(output)
+    # volume_path = os.path.abspath(current_path + directoryPath)
     #
-    # # Get the exit code
-    # exit_code = exec_first.exit_code
-    # print(f"Exit Code: {exit_code}")
+    # # Run the container
+    # container = dockerClient.containers.run(
+    #     image=projectImage,
+    #     name=projectUuid + "_" + number,
+    #     volumes={volume_path: {'bind': '/files', 'mode': 'rw'}},  # Linux absolute path and bind
+    #     detach=True,
+    #     command="/bin/sh",
+    #     tty=True
+    # )
+    # commandToRun = "make && ./iubfc 13 0.5 ./Data/IMDBID.txt ./Data/IMDBEdge.txt 10000 ./Data/dataOut.txt"
+    # exec_first = container.exec_run('/bin/sh -c "' + commandToRun + '"')
     #
-    # # Stop and remove the container after commands
+    # containerLogs = "Command Output:" + exec_first.output.decode('utf-8') + "\n\n\n"
+    # exit_code = f"Exit Code: {exec_first.exit_code}\n"
+    # containerLogs += exit_code
+    #
+    # print(containerLogs)
+    #
     # container.stop()
-    # #container.remove()

@@ -44,12 +44,15 @@ export class BackendService {
 
 
     findProjectFiles(projectUuid: any): Observable<any> {
-        return this.http.get(`${this.baseUrl}/project/${projectUuid}/find_files`);
+        return this.http.post(`${this.baseUrl}/project/find_files`,{
+            possibleProjectUuid: projectUuid,
+            });
     }
 
-    findConfigurations(projectUuid: string, filenames: string[]) {
+    findConfigurations(projectUuid: string, filenames: string[], commandToRun:any) {
         return this.http.post(`${this.baseUrl}/project/${projectUuid}/find-configurations`, {
-            filenames: filenames
+            filenames: filenames,
+            commandToRun: commandToRun
         });
     }
 

@@ -38,7 +38,7 @@ export class HomeComponent implements OnInit {
     stageSubject = new BehaviorSubject<Stage>(Stage.Start); // Default to Initial stage
     currentStage$ = this.stageSubject.asObservable(); // Observable to track the current stage
     role: string = 'system'; // You can make this dynamic as needed
-    projectUuid: string = 'e25';
+    projectUuid: string = 'iubfc_main';
     stageAfterChat: any
     stageCurrentChat: any
 
@@ -48,7 +48,8 @@ export class HomeComponent implements OnInit {
     executableFiles: any
     configurationFiles: object = {}
     dockerImageID: any;
-    commandToRun: string = "python ./myfile.py";
+    #commandToRun: string = "python ./myfile.py";
+    commandToRun: string = "make && ./iubfc 13 0.5 ./Data/IMDBID.txt ./Data/IMDBEdge.txt 10000 ./Data/dataOut.txt"
 
     logs: any;
     added_files: any;
@@ -69,6 +70,21 @@ export class HomeComponent implements OnInit {
             console.log(`Stage changed to ${newStage}`);
             this.performActionBasedOnStage(newStage);
         });
+    }
+
+    // Mapeia o estado de visibilidade para cada mensagem (por ID ou algum identificador único)
+    examplesVisibility: { [key: string]: boolean } = {};
+
+    toggleExamples(message: any): void {
+        // Inverte o estado de visibilidade para a mensagem específica
+        const messageId = message.id || message.contentShort;
+        this.examplesVisibility[messageId] = !this.examplesVisibility[messageId];
+    }
+
+    isExamplesVisible(message: any): boolean {
+        // Retorna true se a mensagem tiver exemplos visíveis
+        const messageId = message.id || message.contentShort;
+        return !!this.examplesVisibility[messageId];
     }
 
     // Method to change the stage
@@ -139,7 +155,7 @@ export class HomeComponent implements OnInit {
             role: this.role,
             contentShort: this.userMessage,
             content: this.userMessage,
-            jsonObject: false
+            jsonObject: false,
         });
         switch (this.stageSubject.value) {
             case Stage.ProjectLocation:
@@ -167,9 +183,12 @@ export class HomeComponent implements OnInit {
     projectLocation() {
         this.messages.push({
             role: "assistant",
-            content: "Please provide the root folder of the project. This root folder should be in lowercase.",
-            contentShort: "Please provide the root folder of the project. This root folder should be in lowercase.",
-            jsonObject: false
+            content: "Please provide the location of the project.",
+            contentShort: "Please provide the location of the project.",
+            jsonObject: false,
+            examples: "This refers to the root folder or directory where the main files of your project are stored. Having the root folder clearly specified helps in organizing files, ensuring that all paths are correctly referenced, and simplifies collaboration with others.\n" +
+                "\nExamples: \nYou can provide a sentence e.g. 'The root folder of the project is located at example_folder_name'\n" +
+                "You can only provide the folder name, e.g., 'example_folder_name'"
         });
 
         //TODO remover
@@ -192,6 +211,8 @@ export class HomeComponent implements OnInit {
                 // Log the configuration and executable files for debugging
                 console.log('Configuration Files:', this.configurationFiles);
                 console.log('Executable Files:', this.executableFiles);
+                if (response[responseLength - 1].projectUuid)
+                    this.projectUuid = response[responseLength - 1].projectUuid
             }
 
             if (this.executableFiles?.length == 1) {
@@ -209,12 +230,13 @@ export class HomeComponent implements OnInit {
         this.messages.push({
             role: "assistant",
             content: "Feel free to update any previous information. For example: I want to change the project location to exp26.\n"
-                + "Now, tell me how to run the experiment. Note that I'm going to run all the commands sequentially. " +
+                + "Enter the commands needed to run the experiment Note that I'm going to run all the commands sequentially. " +
                 "\nFor example: python ./myfile.py && cd folder && python ./myfile2.py && cd .. && python ./myfile3.py",
-            contentShort: "Feel free to update any previous information. For example: I want to change the project location to exp26.\n"
-                + "Now, tell me how to run the experiment. Note that I'm going to run all the commands sequentially. " +
-                "\nFor example: python ./myfile.py && cd folder && python ./myfile2.py && cd .. && python ./myfile3.py",
-            jsonObject: false
+            contentShort: "Please enter the commands needed to run the experiment. Note that I'm going to run all the commands sequentially. ",
+            jsonObject: false,
+            examples: "Keep in mind that I will be running all the commands one after the other, so it’s important to ensure they are in the correct order. \n" +
+                "\nExamples: \nYou can provide a single command e.g. python ./main.py\n" +
+                "You can provide a sequence of commands, e.g., python ./myfile.py && cd folder && python ./myfile2.py "
         });
 
         //TODO remover
@@ -238,7 +260,6 @@ export class HomeComponent implements OnInit {
         )
     }
 
-
     findConfigurations() {
         this.messages.push({
             role: "assistant",
@@ -248,7 +269,7 @@ export class HomeComponent implements OnInit {
         });
 
 
-        this.backend.findConfigurations(this.projectUuid, this.executableFiles).subscribe((response: any) => {
+        this.backend.findConfigurations(this.projectUuid, this.executableFiles, this.commandToRun).subscribe((response: any) => {
             console.log(response);
             this.messages.push(...response)
 
