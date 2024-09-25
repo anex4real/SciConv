@@ -1,6 +1,13 @@
 # Use an official Python runtime as a parent image
 FROM python:3.10
 
+# Install Docker client (optional, if needed)
+RUN apt-get update && apt-get install -y docker.io && rm -rf /var/lib/apt/lists/*
+
+# Create a user and add to the docker group
+RUN groupadd -g 1001 docker && \
+    useradd -m -u 1001 -g docker youruser
+
 # Set the working directory to /files
 WORKDIR /files
 
@@ -8,8 +15,19 @@ WORKDIR /files
 COPY . .
 
 # Install any needed packages specified in requirements.txt
-RUN pip install flask==2.3.2 flask-cors==3.0.10 beautifulsoup4==4.11.1 docker==5.0.3 openai
+RUN pip install --no-cache-dir -r requirements.txt
+
+# Expose port 8080 for the application
 EXPOSE 8080
 
+# Set the OpenAI API key as an environment variable
+# NOTE: It is not recommended to hardcode sensitive keys in the Dockerfile
+# Consider passing this in at runtime instead for security.
 ENV OPENAI_API_KEY=sk-proj-qepUh5gGMRDgmqTRIVNpT3BlbkFJpOAXTCkCnvYtUTFvEKJk
-CMD ["python",  "main.py"]
+
+# Switch to the new user
+USER youruser
+
+# Command to run your application
+CMD ["python", "main.py"]
+
