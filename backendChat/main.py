@@ -14,6 +14,18 @@ app = Flask(__name__)
 cors = CORS(app, resources={r"/api/*": {"origins": "*"}})
 
 
+@app.route("/", methods=['get'])
+@cross_origin()
+def home():
+    messagesToUser = [
+        {"role": "assistant",
+         "contentShort": f"HOME PAGE",
+         "content": f"HOME PAGE",
+         "jsonObject": False}
+    ]
+    return makeResponse(messagesToUser, 201, True)
+
+
 @app.route("/project/upload-project", methods=['POST'])
 @cross_origin()
 def upload_file():
