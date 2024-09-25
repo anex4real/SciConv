@@ -154,7 +154,8 @@ def convert_json_to_string(input_list):
 def saveDockerImage(myProjectFolder, dockerImageName, dockerTagId):
     try:
         #client = docker.from_env()
-        client = docker.DockerClient(base_url='unix:///home/lazaro/.docker/desktop/docker.sock')
+        client = docker.DockerClient(base_url='unix://var/run/docker.sock')
+        #client = docker.DockerClient(base_url='unix:///home/lazaro/.docker/desktop/docker.sock')
         image = client.images.get(dockerTagId)
     except Exception as e:
         print(str(e))
