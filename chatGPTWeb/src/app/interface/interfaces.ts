@@ -38,6 +38,8 @@ export interface Message {
     content: any;
     contentShort: any;
     stage?:any
+    examples?: any,
+    projectUuid?: any
 }
 
 export interface ProjectConfiguration {

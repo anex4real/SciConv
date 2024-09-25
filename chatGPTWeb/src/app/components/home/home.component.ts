@@ -38,7 +38,6 @@ export class HomeComponent implements OnInit {
     stageSubject = new BehaviorSubject<Stage>(Stage.Start); // Default to Initial stage
     currentStage$ = this.stageSubject.asObservable(); // Observable to track the current stage
     role: string = 'system'; // You can make this dynamic as needed
-    projectUuid: string = 'iubfc_main';
     stageAfterChat: any
     stageCurrentChat: any
 
@@ -48,14 +47,20 @@ export class HomeComponent implements OnInit {
     executableFiles: any
     configurationFiles: object = {}
     dockerImageID: any;
-    #commandToRun: string = "python ./myfile.py";
-    commandToRun: string = "make && ./iubfc 13 0.5 ./Data/IMDBID.txt ./Data/IMDBEdge.txt 10000 ./Data/dataOut.txt"
+    //todo remover conteudo
+    //projectUuid: string = 'adsketch_main';
+    projectUuid: string = "iubfc_main"
+    //commandToRun = "python yahoo_demo.py\n"
+    //commandToRun: string = "python ./myfile.py";
+    commandToRun: string = "make"
+    //commandToRun: string = "make && ./iubfc 13 0.5 ./Data/IMDBID.txt ./Data/IMDBEdge.txt 10000 ./Data/dataOut.txt"
 
     logs: any;
     added_files: any;
     removed_files: any;
     modified_files: any;
     messageToAsk: any;
+    examplesToAsk: any = undefined
     showInfo: boolean = false
 
 
@@ -191,7 +196,7 @@ export class HomeComponent implements OnInit {
                 "You can only provide the folder name, e.g., 'example_folder_name'"
         });
 
-        //TODO remover
+
         this.userMessage = this.projectUuid
         //this.sendMessage()
 
@@ -204,15 +209,15 @@ export class HomeComponent implements OnInit {
 
             if (response[responseLength - 1].stage == "ParametersToUse") {
                 console.log(response[responseLength - 1]["content"]);
-                const {ExecutableFiles, ConfigurationFiles} = response[responseLength - 1]["content"];
+                const {ExecutableFiles, ConfigurationFiles, ProjectUuid} = response[responseLength - 1]["content"];
                 this.executableFiles = ExecutableFiles;
                 this.configurationFiles = ConfigurationFiles;
+                this.projectUuid = ProjectUuid
 
                 // Log the configuration and executable files for debugging
                 console.log('Configuration Files:', this.configurationFiles);
                 console.log('Executable Files:', this.executableFiles);
-                if (response[responseLength - 1].projectUuid)
-                    this.projectUuid = response[responseLength - 1].projectUuid
+
             }
 
             if (this.executableFiles?.length == 1) {
@@ -232,10 +237,10 @@ export class HomeComponent implements OnInit {
             content: "Feel free to update any previous information. For example: I want to change the project location to exp26.\n"
                 + "Enter the commands needed to run the experiment Note that I'm going to run all the commands sequentially. " +
                 "\nFor example: python ./myfile.py && cd folder && python ./myfile2.py && cd .. && python ./myfile3.py",
-            contentShort: "Please enter the commands needed to run the experiment. Note that I'm going to run all the commands sequentially. ",
+            contentShort: "Please provide the commands required to run the experiment, keeping in mind that I will execute them sequentially.",
             jsonObject: false,
-            examples: "Keep in mind that I will be running all the commands one after the other, so it’s important to ensure they are in the correct order. \n" +
-                "\nExamples: \nYou can provide a single command e.g. python ./main.py\n" +
+            examples: "Make sure they are in the correct order to avoid any errors.\n" +
+                "\nExamples: \nYou can provide a single command e.g., python ./main.py\n" +
                 "You can provide a sequence of commands, e.g., python ./myfile.py && cd folder && python ./myfile2.py "
         });
 
@@ -264,7 +269,7 @@ export class HomeComponent implements OnInit {
         this.messages.push({
             role: "assistant",
             content: "",
-            contentShort: "I will now infer all the necessary information to build the environment, which will take some time.",
+            contentShort: "I will now infer all the necessary information to build the environment, which can take some time.",
             jsonObject: false
         });
 
@@ -289,7 +294,13 @@ export class HomeComponent implements OnInit {
                 JSON.stringify(this.configurations),
             contentShort: "I used these settings. Are they correct, or would you like to change anything? \n" +
                 JSON.stringify(this.configurations),
-            jsonObject: false
+            jsonObject: false,
+            examples: "Change the version of the programming version to 3.8.\n" +
+                "Change the version of the pandas dependency to 2.2.2.\n"
+                + "Remove the dependency pandas.\n"
+                + "Remove the programming language c++.\n"
+                + "Add the programming language c++.\n"
+                + "Add the dependency pandas.\n"
         });
 
     }
@@ -305,19 +316,17 @@ export class HomeComponent implements OnInit {
             console.log(response);
             this.messages.push(...response)
             let responseLength = response.length
-            if (response[responseLength - 1].stage == "NEXT") {
-                this.changeStage(this.stageAfterChat)
-            } else {
-                if (response[responseLength - 1].stage == "WaitChatInteraction")
-                    if (response[responseLength - 1].jsonObject == false) {
-                        this.messageToAsk = "I used these settings. Are they correct, or would you like to change anything? \n" +
-                            JSON.stringify(this.configurations)
-                        this.stageAfterChat = this.stages.BuildDockerFile
-                    } else {
-                        this.configurations = response[responseLength - 1].content
-                        this.messageToAsk = "I used these settings. Are they correct, or would you like to change anything? \n" +
-                            JSON.stringify(this.configurations)
-                    }
+            if (response[responseLength - 1].stage == "WaitChatInteraction") {
+                if (response[responseLength - 1].jsonObject == true) {
+                    this.configurations = response[responseLength - 1].content
+                }
+                this.examplesToAsk = "I want to change the execution parameters.\n " +
+                    "I want to change the project location.\n" +
+                    "I want to change the computing environment used (programming languages, dependencies).\n"
+
+                this.messageToAsk = "I used these settings. Are they correct, or would you like to change anything? \n" +
+                    JSON.stringify(this.configurations)
+                this.stageAfterChat = this.stages.BuildDockerFile
             }
             this.changeStage(response[responseLength - 1].stage)
         });
@@ -327,13 +336,16 @@ export class HomeComponent implements OnInit {
         this.backend.BuildDockerFile(this.projectUuid, this.messages).subscribe((response: any) => {
             console.log(response);
             this.messages.push(...response)
-            this.changeStage(this.stages.BuildDockerImage)
+            let responseLength = response.length
 
-            //TODO mudar
+            if (response[responseLength - 1].stage) {
+                this.changeStage(response[responseLength - 1].stage)
+            }
+
+            //this.changeStage(this.stages.BuildDockerImage)
             //this.changeStage(this.stages.RunContainer)
             //this.changeStage(this.stages.Completed)
             //this.changeStage(this.stages.ResearchArtifact)
-
         });
     }
 
@@ -341,7 +353,7 @@ export class HomeComponent implements OnInit {
         this.messages.push({
             role: "assistant",
             content: "",
-            contentShort: "I will now build the environment to run the experiment, which will take some time.",
+            contentShort: "I will now build the environment to run the experiment, which can take some time.",
             jsonObject: false
         });
         this.backend.BuildDockerImage(this.projectUuid, this.messages).subscribe((response: any) => {
@@ -379,10 +391,12 @@ export class HomeComponent implements OnInit {
                 this.removed_files = removed_files
                 this.modified_files = modified_files
 
-                this.messageToAsk = "Can you confirm whether the result of the execution is correct? Please respond by either confirming or identifying what might have caused this unexpected result and proposing a solution.\n"
+                this.messageToAsk = "Can you confirm whether the result of the execution is correct? " +
+                    "\nPlease respond by either confirming or identifying what might have caused this unexpected result and proposing a solution.\n"
                 this.stageAfterChat = this.stages.ResearchArtifact
                 this.changeStage(this.stages.WaitChatInteraction)
             } else {
+                this.messageToAsk = undefined
                 this.changeStage(response[responseLength - 1].stage)
             }
         });
@@ -408,37 +422,59 @@ export class HomeComponent implements OnInit {
         console.log("aqui")
 
         if (messageToAsk != undefined) {
-            this.messages.push({
-                role: "assistant",
-                content: messageToAsk,
-                contentShort: messageToAsk,
-                jsonObject: false
-            });
+            let message
+
+            if (this.examplesToAsk != undefined) {
+
+                message = {
+                    role: "assistant",
+                    content: messageToAsk,
+                    contentShort: messageToAsk,
+                    jsonObject: false,
+                    examples: this.examplesToAsk
+                }
+                this.examplesToAsk = undefined;
+            } else {
+                message = {
+                    role: "assistant",
+                    content: messageToAsk,
+                    contentShort: messageToAsk,
+                    jsonObject: false
+                }
+            }
+
+            this.messages.push(message);
         }
     }
 
     chatInteraction() {
-        this.backend.ChatInteraction(this.projectUuid, this.messages).subscribe((response: any) => {
+        if (this.stageAfterChat == undefined) {
+            console.error("forcei mudança")
+            this.stageAfterChat = this.stages.FindConfigurationsInteraction
+        }
+        this.backend.ChatInteraction(this.projectUuid, this.messages, this.stageAfterChat).subscribe((response: any) => {
             console.log(response);
 
             this.messages.push(...response)
             let responseLength = response.length
-            if (response[responseLength - 1].stage == "NEXT") {
-                this.changeStage(this.stageAfterChat)
-            } else if (response[responseLength - 1].stage != this.stages.WaitChatInteraction) {
-                this.changeStage(response[responseLength - 1].stage)
-            } else {
-                this.messageToAsk = "What might have caused this unexpected result? \n" +
-                    'For example: I want to change the execution parameters.\n' +
-                    'For example: I want to change the project location.\n' +
-                    'For example: I want to change the computing environment used (programming languages, dependencies).\n'
-                this.changeStage(this.stages.WaitChatInteraction)
+
+            if (response[responseLength - 1].stage == this.stages.WaitChatInteraction) {
+                this.messageToAsk = "What might have caused this unexpected result? \n"
+                this.examplesToAsk = "I want to change the execution parameters.\n " +
+                    "I want to change the project location.\n" +
+                    "I want to change the computing environment used (programming languages, dependencies).\n"
             }
+
+            this.changeStage(response[responseLength - 1].stage)
+
         });
     }
 
 
-    onFileChange(event: any) {
+    onFileChange(event
+                     :
+                     any
+    ) {
         const file = event.target.files[0];
         if (file && (file.type === 'application/x-zip-compressed' || file.type === 'application/zip')) {
             this.fileToUpload = file;
