@@ -89,9 +89,10 @@ export class BackendService {
         });
     }
 
-    ChatInteraction(projectUuid: string, messages: Message[]) {
+    ChatInteraction(projectUuid: string, messages: Message[], nextStep:any) {
         return this.http.post(`${this.baseUrl}/project/${projectUuid}/chat-interation`, {
-            messages: messages
+            messages: messages,
+            nextStep: nextStep
         });
 
     }
