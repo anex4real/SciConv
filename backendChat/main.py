@@ -215,8 +215,11 @@ def find_files_project():
                                   contentShort="We've found your project.\n The project is in folder " + projectUuid + "\n",
                                   stage="ParametersToUse")
                 else:
-                    appendMessage(messagesToUser, contentShort="There are no files to execute. ",
-                                  stage="Start")
+                    userMessage["ProjectUuid"] = projectUuid
+                    appendMessage(messagesToUser, content=userMessage,
+                                  contentShort="We've found your project.\n The project is in folder " + projectUuid +
+                                               "\n \n Verify because there are no files to execute.",
+                                  stage="ParametersToUse")
                 return makeResponse(messagesToUser, 201, True)
 
             except Exception as e:
@@ -262,8 +265,9 @@ def parameters_to_use_confirmation(projectUuid):
                     "validate whether it is a correct command, taking into account the files in the project and the syntax of the language being used.\n"
                     "Message: " + myMessage +
                     "\nYour response should follow one of two options:\n"
-                    "- Reply 'ParametersToUse' if this message does not contain a valid command.\n"
-                    "- If this message contains a valid command that can be run inside a container in TTY mode, your reply should include only the command to be used in Unix-like systems."
+                    "- If this message contains a valid command that can be run inside a container in TTY mode, reply with the command to be used in Unix systems.\n"
+                    "- If it does not contain a valid command, reply with 'ParametersToUse'.\n"
+
             ),
 
             "contentShort": None
@@ -356,6 +360,8 @@ def find_configurations(projectUuid):
                                                   "\nThe programming language of the files."
                                                   "\nThe version of these languages."
                                                   "\nAny dependencies needed to execute the command and their versions."
+                                                  "\nI am providing the first 50 lines of each file. Some of the imported dependencies may not be utilized within these lines, but please return all the imported and referenced dependencies present in the files."
+                                                  "\nIt is necessary to verify if the version of all the dependencies is compatible with other dependencies and the programming language."
                                                   '\nProvide your response in the following format:'
                                                   '{ "PL": [all the programming languages used], "PLVersion": [all the programming language version],"Dependencies": [dependencies], "DependenciesVersion": [version of dependencies] }'
                                                   '\nEnsure the dependency names are correct. If the provided name is incorrect, adjust it. For example, in Python, to install the sklearn dependency, the correct command is pip install scikit-learn.'
@@ -363,7 +369,7 @@ def find_configurations(projectUuid):
                                                   "\nOnly put values that you can infer, don't put generic values"
                                                   '\nCommand To Use: ' + commandToRun +
                                    '\nExample response:'
-                                   '\n{ "PL": ["Python"], "PLVersion": "Python 3.8", "Dependencies": ["pandas"], "DependenciesVersion": ["pandas==2.2.0"]}'
+                                   '\n{ "PL": ["Python"], "PLVersion": "Python 3.8", "Dependencies": ["pandas", "tqdm"], "DependenciesVersion": ["pandas==2.2.0", "tqdm==4.62.0]}'
                                    '\nPlease respond in the specified format. The answer should be exactly in json format.'
 
                         }
@@ -913,7 +919,7 @@ def runDockerContainerChat(projectUuid):
             print(containerLogs)
 
             container.stop()
-            # container.remove()
+            container.remove()
 
             # waitToConclude(container)
             # containerLogs = container.logs().decode("utf-8")

@@ -422,3 +422,146 @@ def read_file(location):
 #     messagesToUser.append(message2)
 #
 #     return makeResponse(messagesToUser, 201, True)
+
+
+#
+#
+# @app.route('/project/<projectUuid>/find-configurations', methods=['POST'])
+# @cross_origin()
+# def find_configurations(projectUuid):
+#     directoryPath = 'projects/' + projectUuid + "/files/"
+#     requestData = json.loads(request.data)
+#     messagesToUser = []
+#     messagesToChat = []
+#
+#     if "filenames" not in requestData:
+#         appendMessage(messagesToUser, contentShort='filenames are missing', stage="Start")
+#         return makeResponse(messagesToUser, 201, True)
+#
+#     filenames = requestData["filenames"]
+#     # filenames= ['main.py', 'main2.py', 'main3.py', 'new\\main.py', 'new\\main2.py', 'new\\main3.py', 'new\\newnew\\main2.py', 'new\\newnew\\main3.py']
+#
+#     commandToRun = return_commands_to_use(requestData, messagesToUser)
+#
+#     # filenames = ['main.py']
+#     all_files_lines = {}
+#
+#     try:
+#         for filename in filenames:
+#             if os.path.isfile(directoryPath + filename):
+#                 lines = read_first_50_lines(directoryPath + filename)
+#                 all_files_lines[filename] = lines
+#             else:
+#                 print(f"File not found: {filename}")
+#     except Exception as error:
+#         appendMessage(messagesToUser, contentShort=str(error), stage="Start")
+#         return makeResponse(messagesToUser, 201, True)
+#
+#     # Convert the content to JSON format
+#     filesContent = json.dumps(all_files_lines, indent=4)
+#
+#     numberInteractions = 3
+#     chat_message = ""
+#
+#     try:
+#         while numberInteractions >= 0:
+#             message1 = {"role": "system",
+#                         "jsonObject": False,
+#                         "contentShort": None,
+#                         "content": chat_message + "The current stage of this interaction is: FindConfigurations"
+#                                                   "\nGiven the JSON containing the name of the files, the first 50 lines of each file and the command used to execute this project, determine the following:"
+#                                                   "\nThe programming language of the files."
+#                                                   "\nThe version of these languages."
+#                                                   "\nAny dependencies needed to execute the command and their versions."
+#                                                   "\nI am providing the first 50 lines of each file. Some of the imported dependencies may not be utilized within these lines, but please return all the imported and referenced dependencies present in the files."
+#                                                   '\nProvide your response in the following format:'
+#                                                   '{ "PL": [all the programming languages used], "PLVersion": [all the programming language version],"Dependencies": [dependencies], "DependenciesVersion": [version of dependencies] }'
+#                                                   '\nEnsure the dependency names are correct. If the provided name is incorrect, adjust it. For example, in Python, to install the sklearn dependency, the correct command is pip install scikit-learn.'
+#                                                   '\nMake sure to list the most recent supported version of the programming language, and format the result in JSON.'
+#                                                   "\nOnly put values that you can infer, don't put generic values"
+#                                                   '\nCommand To Use: ' + commandToRun +
+#                                    '\nExample response:'
+#                                    '\n{ "PL": ["Python"], "PLVersion": "Python 3.8", "Dependencies": ["pandas", "tqdm"], "DependenciesVersion": ["pandas==2.2.0", "tqdm==4.62.0"]}'
+#                                    '\nPlease respond in the specified format. The answer should be exactly in json format.'
+#
+#                         }
+#
+#             messagesToUser.append(message1)
+#             myMessage = copy(message1)
+#             myMessage["content"] = myMessage["content"] + '\nThe first 50 lines of each file: ' + str(filesContent)
+#             messagesToChat.append(myMessage)
+#
+#             # TODO descomentar
+#             client = OpenAI()
+#             completion = client.chat.completions.create(
+#                 model="gpt-4-turbo",
+#                 # #model="gpt-4o",
+#                 # model="chatgpt-4o-latest",
+#                 messages=
+#                 messagesToChat,
+#
+#             )
+#             messageText = completion.choices[0].message.content
+#             messageText = messageText.replace("```", "")
+#             messageText = messageText.replace("json", "")
+#
+#             # TODO comentar
+#             # messageText = '{"PL": "Python",  "PLVersion": "Python 3.10", "Dependencies": ["tqdm", "pandas", "shap","numpy", "matplotlib", "scikit-learn"],  "DependenciesVersion": ["shap==0.41.0", "numpy==1.23.4", "pandas==1.5.2", "scipy==1.9.3", "matplotlib==3.6.2", "tqdm==4.64.1"]}'
+#
+#             print(messageText)
+#             try:
+#                 appendMessage(messagesToUser, content=json.loads(messageText), jsonObject=True, stage="BuildDockerFile")
+#                 return makeResponse(messagesToUser, 201, True)
+#             except Exception as e:
+#                 numberInteractions -= 1
+#                 print("numberInteractions" + str(numberInteractions))
+#                 print("Error:" + str(e))
+#                 messagesToChat = []
+#
+#                 message1 = {"role": "system",
+#                             "jsonObject": False,
+#                             "contentShort": None,
+#                             "content": chat_message +
+#                                        "\nExtract from the following message a JSON in the required format."
+#                                        "\nMessage: " + messageText +
+#                                        '\nRequired JSON format: '
+#                                        '{ "PL": [programming language], "PLVersion": [programming language version], "Dependencies": [dependencies], "DependenciesVersion": [version of dependencies] }'
+#                                        '\nEnsure the response is in the specified JSON format. '
+#                             }
+#                 messagesToChat.append(message1)
+#
+#                 # TODO descomentar
+#                 client = OpenAI()
+#                 completion = client.chat.completions.create(
+#                     model="gpt-4-turbo",
+#                     # model="gpt-4o",
+#                     # model="chatgpt-4o-latest",
+#                     messages=
+#                     messagesToChat,
+#
+#                 )
+#                 messageText = completion.choices[0].message.content
+#                 messageText = messageText.replace("```", "")
+#                 messageText = messageText.replace("json", "")
+#
+#                 # TODO comentar
+#                 # messageText = '{"PL": "Python",  "PLVersion": "Python 3.10", "Dependencies": ["tqdm", "pandas", "shap","numpy", "matplotlib", "scikit-learn"],  "DependenciesVersion": ["shap==0.41.0", "numpy==1.23.4", "pandas==1.5.2", "scipy==1.9.3", "matplotlib==3.6.2", "tqdm==4.64.1"]}'
+#
+#                 print(messageText)
+#                 try:
+#                     appendMessage(messagesToUser, content=json.loads(messageText), jsonObject=True,
+#                                   stage="BuildDockerFile")
+#                     return makeResponse(messagesToUser, 201, True)
+#                 except Exception as e:
+#                     print("numberInteractions" + str(numberInteractions))
+#                     chat_message = "The previous result is incorrect. I encountered this error: " + str(e) + \
+#                                    "\nPlease consider the following information.\n"
+#
+#     except Exception as error:
+#         appendMessage(messagesToUser, content="I got this error:" + str(error),
+#                       contentShort="I got this error:" + str(error), stage="Start")
+#         return makeResponse(messagesToUser, 201, True)
+#
+#     appendMessage(messagesToUser, content="Some error occurred", contentShort="Some error occurred", stage="Start")
+#     return makeResponse(messagesToUser, 201, True)
+#
