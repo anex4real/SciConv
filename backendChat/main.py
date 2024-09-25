@@ -1138,7 +1138,7 @@ if __name__ == '__main__':
     dockerClientResult = startDockerClient()
     dockerClient, port = dockerClientResult["dockerClient"], dockerClientResult["port"]
     number = datetime.now().strftime("%Y%m%d%H%M%S")
-    projectUuid = "iubfc_main"
+    projectUuid = "adsketch_main"
     projectPath = 'projects/' + projectUuid + "/"
 
     dockerImageBuilt = dockerClient.images.build(path=projectPath, tag=projectUuid + ":" + number, rm=True)
@@ -1166,7 +1166,7 @@ if __name__ == '__main__':
         tty=True
     )
     #commandToRun = "make && ./iubfc 13 0.5 ./Data/IMDBID.txt ./Data/IMDBEdge.txt 10000 ./Data/dataOut.txt"
-    commandToRun = "make"
+    commandToRun = "python yahoo_demo.py"
 
     exec_first = container.exec_run('/bin/sh -c "' + commandToRun + '"')
 
