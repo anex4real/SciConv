@@ -4,8 +4,8 @@ FROM python:3.10
 # Install Docker client (optional, if needed)
 RUN apt-get update && apt-get install -y docker.io && rm -rf /var/lib/apt/lists/*
 
-# Create a user and add to the docker group
-RUN groupadd -g 1001 docker && \
+# Create a user and add to the docker group if it doesn't exist
+RUN getent group docker || groupadd -g 1001 docker && \
     useradd -m -u 1001 -g docker youruser
 
 # Set the working directory to /files
@@ -30,4 +30,3 @@ USER youruser
 
 # Command to run your application
 CMD ["python", "main.py"]
-
