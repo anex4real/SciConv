@@ -100,19 +100,32 @@ def fileIsAnImage(file):
 
 
 def startDockerClient():
+    # Seleciona uma porta disponível
     sock = socket.socket()
     sock.bind(('', 0))
+
     try:
-        # TODO arranjar
-        #client = docker.from_env()
-        client = docker.DockerClient(base_url='unix://var/run/docker.sock')
-        #client = docker.DockerClient(base_url='unix:///home/lazaro/.docker/desktop/docker.sock')
-    except Exception as e:
-        print(str(e))
+        # Verifica se o socket Docker existe
+        if os.path.exists('/var/run/docker.sock'):
+            client = docker.DockerClient(base_url='unix://var/run/docker.sock')
+        elif os.path.exists('/home/lazaro/.docker/desktop/docker.sock'):
+            client = docker.DockerClient(base_url='unix:///home/lazaro/.docker/desktop/docker.sock')
+        else:
+            # Usa from_env() se nenhum socket específico for encontrado
+            print("Socket padrão não encontrado, tentando docker.from_env()")
+            client = docker.from_env()
+
+        # Testa a conexão
+        client.ping()
+        print("Conexão com Docker estabelecida com sucesso!")
+
+    except docker.errors.DockerException as e:
+        print(f"Erro ao conectar ao Docker: {str(e)}")
         raise Exception("Docker is not running")
 
+    # Seleciona a porta e retorna o cliente Docker e a porta
     port = sock.getsockname()[1]
-    print("Selected Port:" + str(port))
+    print("Selected Port: " + str(port))
     return {"dockerClient": client, "port": port}
 
 
@@ -153,20 +166,41 @@ def convert_json_to_string(input_list):
 
 def saveDockerImage(myProjectFolder, dockerImageName, dockerTagId):
     try:
-        #client = docker.from_env()
-        client = docker.DockerClient(base_url='unix://var/run/docker.sock')
-        #client = docker.DockerClient(base_url='unix:///home/lazaro/.docker/desktop/docker.sock')
+        # Check if the Docker socket exists
+        if os.path.exists('/var/run/docker.sock'):
+            client = docker.DockerClient(base_url='unix://var/run/docker.sock')
+        elif os.path.exists('/home/lazaro/.docker/desktop/docker.sock'):
+            client = docker.DockerClient(base_url='unix:///home/lazaro/.docker/desktop/docker.sock')
+        else:
+            # Fallback to from_env() if no specific socket is found
+            print("Default socket not found, trying docker.from_env()")
+            client = docker.from_env()
+
+        # Check if the image exists by its ID or Tag
         image = client.images.get(dockerTagId)
-    except Exception as e:
-        print(str(e))
+        print(f"Image {dockerTagId} found successfully.")
+
+    except docker.errors.ImageNotFound:
+        raise Exception(f"Image with Tag/ID {dockerTagId} not found.")
+    except docker.errors.DockerException as e:
+        print(f"Error connecting to Docker: {str(e)}")
         raise Exception("Docker is not running")
+    except Exception as e:
+        print(f"Unexpected error: {str(e)}")
+        raise Exception("An unexpected error occurred.")
 
-    # f = open(myProjectFolder + '/' + dockerImageName + '.tar.gz', 'wb')
-    f = open(myProjectFolder + '/' + dockerImageName + '.tar', 'wb')
+    # Save the Docker image as a .tar file
+    output_file = os.path.join(myProjectFolder, dockerImageName + '.tar')
 
-    for chunk in image.save(named=True):
-        f.write(chunk)
-    f.close()
+    try:
+        with open(output_file, 'wb') as f:
+            for chunk in image.save(named=True):
+                f.write(chunk)
+        print(f"Image {dockerTagId} saved successfully to {output_file}")
+
+    except Exception as e:
+        print(f"Error saving the image: {str(e)}")
+        raise Exception("Error saving the Docker image.")
 
 
 def write_file(location, content):
