@@ -1130,7 +1130,8 @@ if __name__ == '__main__':
 
         if HOST_VOLUME_PATH == "":
             raise Exception("HOST_VOLUME_PATH is None")
-        print(f"The HOST_VOLUME_PATH is '{HOST_VOLUME_PATH}' exists.")
+        print(f"The HOST_VOLUME_PATH is '{HOST_VOLUME_PATH}'.")
+        dockerClientResult = startDockerClient()
 
         app.run(host='0.0.0.0', port=8080)
     except Exception as e:
