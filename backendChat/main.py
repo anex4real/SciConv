@@ -1059,7 +1059,7 @@ def researchArtifactChat(projectUuid):
 
     # TODO descomentar linha1
     ##todo precisa de um try
-    saveDockerImage(projectPath, projectUuid, dockerImageID)
+    #saveDockerImage(projectPath, projectUuid, dockerImageID)
     # zip.write(projectPath + "/" + projectUuid + ".tar.gz", "./" + projectUuid + ".tar.gz")
 
     # Check if the zip file already exists
@@ -1128,52 +1128,52 @@ if __name__ == '__main__':
     #     print("-" * 40)
 
     # TODO é necssario escrever FLASK_RUN_PORT=8080 nas variaveis de ambiente da execução para a porta a executar ser a correta
-    #app.run(host='0.0.0.0', port=8080)
+    app.run(host='0.0.0.0', port=8080)
 
     # TODO Correr experiencias com interface grafica
     # Não é necesario ter export no dockerfile, o container tem que ser corrido desta maneira
     # dockerClient.containers.run(image="web:2",  ports={4200:4200}, command="npm run start", name = "ola" + "_" + "4200", detach = True)
     #
 
-    dockerClientResult = startDockerClient()
-    dockerClient, port = dockerClientResult["dockerClient"], dockerClientResult["port"]
-    number = datetime.now().strftime("%Y%m%d%H%M%S")
-    projectUuid = "adsketch_main"
-    projectPath = 'projects/' + projectUuid + "/"
-
-    dockerImageBuilt = dockerClient.images.build(path=projectPath, tag=projectUuid + ":" + number, rm=True)
-    dockerImageBuiltFiltered = [s for s in dockerImageBuilt[0].tags if projectUuid in s]
-    dockerTagslength = len(dockerImageBuiltFiltered) - 1
-
-    projectImage = dockerImageBuiltFiltered[dockerTagslength]
-
-    # projectImage ="iubfc_main:20240922185634"
-
-    # Use an absolute path for the volume
-    # Replace '/home/youruser' with the appropriate path where your project is stored on Linux
-    current_path = os.getcwd()
-    directoryPath = '/projects/' + projectUuid + "/files"
-
-    volume_path = os.path.abspath(current_path + directoryPath)
-
-    # Run the container
-    container = dockerClient.containers.run(
-        image=projectImage,
-        name=projectUuid + "_" + number,
-        volumes={volume_path: {'bind': '/files', 'mode': 'rw'}},  # Linux absolute path and bind
-        detach=True,
-        command="/bin/sh",
-        tty=True
-    )
-    #commandToRun = "make && ./iubfc 13 0.5 ./Data/IMDBID.txt ./Data/IMDBEdge.txt 10000 ./Data/dataOut.txt"
-    commandToRun = "python yahoo_demo.py"
-
-    exec_first = container.exec_run('/bin/sh -c "' + commandToRun + '"')
-
-    containerLogs = "Command Output:" + exec_first.output.decode('utf-8') + "\n\n\n"
-    exit_code = f"Exit Code: {exec_first.exit_code}\n"
-    containerLogs += exit_code
-
-    print(containerLogs)
-
-    # container.stop()
+    # dockerClientResult = startDockerClient()
+    # dockerClient, port = dockerClientResult["dockerClient"], dockerClientResult["port"]
+    # number = datetime.now().strftime("%Y%m%d%H%M%S")
+    # projectUuid = "adsketch_main"
+    # projectPath = 'projects/' + projectUuid + "/"
+    #
+    # dockerImageBuilt = dockerClient.images.build(path=projectPath, tag=projectUuid + ":" + number, rm=True)
+    # dockerImageBuiltFiltered = [s for s in dockerImageBuilt[0].tags if projectUuid in s]
+    # dockerTagslength = len(dockerImageBuiltFiltered) - 1
+    #
+    # projectImage = dockerImageBuiltFiltered[dockerTagslength]
+    #
+    # # projectImage ="iubfc_main:20240922185634"
+    #
+    # # Use an absolute path for the volume
+    # # Replace '/home/youruser' with the appropriate path where your project is stored on Linux
+    # current_path = os.getcwd()
+    # directoryPath = '/projects/' + projectUuid + "/files"
+    #
+    # volume_path = os.path.abspath(current_path + directoryPath)
+    #
+    # # Run the container
+    # container = dockerClient.containers.run(
+    #     image=projectImage,
+    #     name=projectUuid + "_" + number,
+    #     volumes={volume_path: {'bind': '/files', 'mode': 'rw'}},  # Linux absolute path and bind
+    #     detach=True,
+    #     command="/bin/sh",
+    #     tty=True
+    # )
+    # #commandToRun = "make && ./iubfc 13 0.5 ./Data/IMDBID.txt ./Data/IMDBEdge.txt 10000 ./Data/dataOut.txt"
+    # commandToRun = "python yahoo_demo.py"
+    #
+    # exec_first = container.exec_run('/bin/sh -c "' + commandToRun + '"')
+    #
+    # containerLogs = "Command Output:" + exec_first.output.decode('utf-8') + "\n\n\n"
+    # exit_code = f"Exit Code: {exec_first.exit_code}\n"
+    # containerLogs += exit_code
+    #
+    # print(containerLogs)
+    #
+    # # container.stop()
