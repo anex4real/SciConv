@@ -134,6 +134,7 @@ def upload_file():
 def find_files_project():
     requestData = json.loads(request.data)
 
+
     if "possibleProjectUuid" in requestData:
         possibleProjectUuid = requestData["possibleProjectUuid"]
 
@@ -164,6 +165,13 @@ def find_files_project():
     if projectUuid == "NO":
         appendMessage(messagesToUser, contentShort="Please enter a valid location", stage="Start")
         return makeResponse(messagesToUser, 201, True)
+
+    projectPath = 'projects/' + projectUuid + "/"
+    if not os.path.exists(projectPath):
+        print(f"Project '{projectPath}' does not exist.")
+        appendMessage(messagesToUser, contentShort=f"Project '{projectUuid}' does not exist.\n Please enter a valid location", stage="Start")
+        return makeResponse(messagesToUser, 201, True)
+
 
     directoryPath = f"/projects/{projectUuid}/files"
 
@@ -228,6 +236,7 @@ def find_files_project():
                                   contentShort="We've found your project.\n The project is in folder " + projectUuid + "\n",
                                   stage="ParametersToUse")
                 else:
+
                     userMessage["ProjectUuid"] = projectUuid
                     appendMessage(messagesToUser, content=userMessage,
                                   contentShort="We've found your project.\n The project is in folder " + projectUuid +
