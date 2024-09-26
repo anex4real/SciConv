@@ -109,9 +109,9 @@ def startDockerClient():
             print("Using Docker socket from Docker Desktop: /home/lazaro/.docker/desktop/docker.sock")
             client = docker.DockerClient(base_url='unix:///home/lazaro/.docker/desktop/docker.sock')
         # Check if the default Docker socket exists
-        elif os.path.exists('/home/ubuntu/my_docker.sock'):
+        elif os.path.exists('/var/run/docker.sock'):
             print("Using default Docker socket: /var/run/docker.sock")
-            client = docker.DockerClient(base_url='unix:///home/ubuntu/my_docker.sock')
+            client = docker.DockerClient(base_url='unix:///var/run/docker.sock')
         # Check for the Docker socket used by Docker Desktop
         else:
             # If no specific socket is found, fall back to using environment variables
