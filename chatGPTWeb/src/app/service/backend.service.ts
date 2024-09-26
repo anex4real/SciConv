@@ -40,7 +40,12 @@ export class BackendService {
             }
         }*/
 
+    private password = 'lazaro2024'; // Replace with your desired password
 
+    // Method to validate the password
+    validatePassword(inputPassword: string): boolean {
+        return inputPassword === this.password;
+    }
 
 
     findProjectFiles(projectUuid: any): Observable<any> {
