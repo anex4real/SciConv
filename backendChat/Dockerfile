@@ -16,6 +16,7 @@ EXPOSE 8080
 
 # Define environment variable for the Docker host
 #ENV DOCKER_HOST=unix:///var/run/docker.sock
+#ENV HOST_VOLUME_PATH=/home/lazaro/Github/SciConv/backendChat/projects
 
 # Set the OpenAI API key as an environment variable
 # NOTE: It is not recommended to hardcode sensitive keys in the Dockerfile

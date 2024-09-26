@@ -1124,18 +1124,13 @@ def researchArtifactChat(projectUuid):
 
     # return send_from_directory(projectPath, f"{projectUuid}.zip", as_attachment=True, mimetype="application/zip")
 
-
 if __name__ == '__main__':
     try:
         HOST_VOLUME_PATH = os.environ.get("HOST_VOLUME_PATH")
 
         if HOST_VOLUME_PATH == "":
             raise Exception("HOST_VOLUME_PATH is None")
-        else:
-            if os.path.exists(HOST_VOLUME_PATH):
-                print(f"The folder (HOST_VOLUME_PATH) '{HOST_VOLUME_PATH}' exists.")
-            else:
-                raise Exception(f"The folder (HOST_VOLUME_PATH) '{HOST_VOLUME_PATH}' does not exist.")
+        print(f"The HOST_VOLUME_PATH is '{HOST_VOLUME_PATH}' exists.")
 
         app.run(host='0.0.0.0', port=8080)
     except Exception as e:
@@ -1158,8 +1153,8 @@ if __name__ == '__main__':
 
     # TODO é necssario escrever FLASK_RUN_PORT=8080 nas variaveis de ambiente da execução para a porta a executar ser a correta
 
-    # Get current working directory
-    # Get current working directory
+    #Get current working directory
+    #Get current working directory
     # project_uuid = "ads_main"
     # current_path = os.getcwd()
     # directory_path = os.path.join('projects', project_uuid, 'files')  # Improved path handling
@@ -1178,7 +1173,7 @@ if __name__ == '__main__':
     # volume_path3=os.path.join(directory_path2, "asasasasasaas")
     #
     #
-    # print("Volume path:", volume_path)  # Debug output to verify the path
+    # # print("Volume path:", volume_path)  # Debug output to verify the path
     #
     # if not os.path.exists(volume_path3):
     #     os.makedirs(volume_path3)
@@ -1197,9 +1192,10 @@ if __name__ == '__main__':
     # # Start Docker client
     # dockerClientResult = startDockerClient()
     # dockerClient, port = dockerClientResult["dockerClient"], dockerClientResult["port"]
-
+    #
     # try:
     #     container_volume_path = f"/projects/{project_uuid}/files"
+    #     HOST_VOLUME_PATH="/home/lazaro/Github/SciConv/backendChat/projects"
     #     volumes = {HOST_VOLUME_PATH: {'bind': container_volume_path, 'mode': 'rw'}}
     #
     #     # Run the container
@@ -1215,6 +1211,7 @@ if __name__ == '__main__':
     #     print(f"Failed to start container: {api_error}")
     # except Exception as e:
     #     print(f"An error occurred while starting the container: {e}")
+    # app.run(host='0.0.0.0', port=8080)
 
     # TODO Correr experiencias com interface grafica
     # Não é necesario ter export no dockerfile, o container tem que ser corrido desta maneira
