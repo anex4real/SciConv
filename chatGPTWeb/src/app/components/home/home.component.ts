@@ -33,6 +33,8 @@ enum Stage {
 export class HomeComponent implements OnInit {
     protected readonly Array = Array;
     private fileToUpload: File | null = null;
+    password: string = '';
+    isAuthenticated: boolean = false;
 
     stages = Stage; // Expose the enum to the template
     stageSubject = new BehaviorSubject<Stage>(Stage.Start); // Default to Initial stage
@@ -62,6 +64,7 @@ export class HomeComponent implements OnInit {
     messageToAsk: any;
     examplesToAsk: any = undefined
     showInfo: boolean = false
+    errorMessage: any;
 
 
     constructor(private sanitizer: DomSanitizer,
@@ -504,4 +507,13 @@ export class HomeComponent implements OnInit {
             });
         }
     }
+
+    onSubmitpass() {
+            if (this.backend.validatePassword(this.password)) {
+                this.isAuthenticated = true;
+                this.errorMessage = '';
+            } else {
+                this.errorMessage = 'Invalid password. Please try again.';
+            }
+        }
 }

@@ -1,6 +1,13 @@
-<div>
+<div *ngIf="!isAuthenticated" class="login-container">
+    <h2>Password </h2>
+    <form (ngSubmit)="onSubmitpass()">
+        <input type="password" id="password" [(ngModel)]="password" name="password" required>
+        <button type="submit">Submit</button>
+        <div *ngIf="errorMessage" style="color: red;">{{ errorMessage }}</div>
+    </form>
+</div>
 
-
+<div *ngIf="isAuthenticated">
     <!--<div class="chat-container" *ngIf="start">-->
     <div *ngIf="messages.length > 0" class="chat-window">
         <div *ngFor="let message of messages">

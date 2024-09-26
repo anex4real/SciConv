@@ -38,6 +38,14 @@
     border-radius: 5px; /* Optional: Rounds the corners */
 
 }
+/* Center the form on the page */
+.login-container {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    height: 100vh; /* Full height of the view */
+    background-color: #f0f0f0;
+}
 
 .role-message {
     margin-bottom: 10px;
