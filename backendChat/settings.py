@@ -174,10 +174,12 @@ def convert_json_to_string(input_list):
 def saveDockerImage(myProjectFolder, dockerImageName, dockerTagId):
     try:
         # Check if the Docker socket exists
-        if os.path.exists('/var/run/docker.sock'):
-            client = docker.DockerClient(base_url='unix://var/run/docker.sock')
-        elif os.path.exists('/home/lazaro/.docker/desktop/docker.sock'):
+
+        if os.path.exists('/home/lazaro/.docker/desktop/docker.sock'):
             client = docker.DockerClient(base_url='unix:///home/lazaro/.docker/desktop/docker.sock')
+        elif os.path.exists('/home/ubuntu/my_docker.sock'):
+            print("Using default Docker socket: /home/ubuntu/my_docker.sock")
+            client = docker.DockerClient(base_url='unix:///home/ubuntu/my_docker.sock')
         else:
             # Fallback to from_env() if no specific socket is found
             print("Default socket not found, trying docker.from_env()")
