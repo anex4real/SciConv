@@ -1,6 +1,8 @@
 import shutil
 import zipfile
 from copy import copy
+from logging import exception
+
 from openai import OpenAI
 from datetime import datetime
 from flask import Flask, request
@@ -9,6 +11,9 @@ from packageExperiment.linux import writeLinuxFile
 from packageExperiment.windows import writeWindowsFIle
 from settings import *
 import tempfile
+import argparse
+
+HOST_VOLUME_PATH = ""
 
 app = Flask(__name__)
 cors = CORS(app, resources={r"/api/*": {"origins": "*"}})
@@ -29,8 +34,15 @@ def home():
 @app.route("/project/upload-project", methods=['POST'])
 @cross_origin()
 def upload_file():
+    current_dir = os.path.abspath(".")
+    print(current_dir)
     UPLOAD_FOLDER = 'projects'
-    os.makedirs(UPLOAD_FOLDER, exist_ok=True)
+    if not os.path.exists(UPLOAD_FOLDER):
+        os.makedirs(UPLOAD_FOLDER)
+        print(f"Folder '{UPLOAD_FOLDER}' created.")
+    else:
+        print(f"Folder '{UPLOAD_FOLDER}' already exists.")
+
     messagesToUser = []
     messagesToChat = []
 
@@ -153,7 +165,8 @@ def find_files_project():
         appendMessage(messagesToUser, contentShort="Please enter a valid location", stage="Start")
         return makeResponse(messagesToUser, 201, True)
 
-    directoryPath = 'projects/' + projectUuid + "/files"
+    directoryPath = f"/projects/{projectUuid}/files"
+
     all_files = find_files(directoryPath)
     number_interactions = 3
     chat_message = ""
@@ -316,7 +329,7 @@ def return_commands_to_use(requestData, messagesToUser):
 @app.route('/project/<projectUuid>/find-configurations', methods=['POST'])
 @cross_origin()
 def find_configurations(projectUuid):
-    directoryPath = 'projects/' + projectUuid + "/files/"
+    directoryPath = f"/projects/{projectUuid}/files"
     requestData = json.loads(request.data)
     messagesToUser = []
     messagesToChat = []
@@ -457,7 +470,7 @@ def find_configurations(projectUuid):
 @app.route('/project/<projectUuid>/find-configurations-change', methods=['POST'])
 @cross_origin()
 def find_configurations_change(projectUuid):
-    directoryPath = 'projects/' + projectUuid + "/files/"
+    directoryPath = f"/projects/{projectUuid}/files"
     requestData = json.loads(request.data)
     messagesToUser = []
     messagesToChat = []
@@ -868,6 +881,7 @@ def buildDockerImageChat(projectUuid):
 @cross_origin()
 def runDockerContainerChat(projectUuid):
     projectPath = 'projects/' + projectUuid + "/"
+    directoryPath = f"/projects/{projectUuid}/files"
 
     requestData = json.loads(request.data)
     messagesToUser = []
@@ -891,20 +905,20 @@ def runDockerContainerChat(projectUuid):
             now = datetime.now()
             number = now.strftime("%Y%m%d%H%M%S")
 
-            current_path = os.getcwd()
-            directoryPath = '/projects/' + projectUuid + "/files"
-
-            volume_path = os.path.abspath(current_path + directoryPath)
+            container_volume_path = f"/projects/{projectUuid}/files"
+            volumes = {HOST_VOLUME_PATH: {'bind': container_volume_path, 'mode': 'rw'}}
 
             # Run the container
             container = dockerClient.containers.run(
                 image=projectImage,
                 name=projectUuid + "_" + number,
-                volumes={volume_path: {'bind': '/files', 'mode': 'rw'}},  # Linux absolute path and bind
+                volumes=volumes,
                 detach=True,
                 command="/bin/sh",
                 tty=True
             )
+            print(f"Container {container.name} started with ID {container.id}")
+
             # stdin=True: Allows you to pass input to the container via standard input.
             # You often use both together when running fully interactive sessions in containers. For example:
             # container.exec_run('/bin/bash', stdin=True, tty=True)
@@ -1059,7 +1073,7 @@ def researchArtifactChat(projectUuid):
 
     # TODO descomentar linha1
     ##todo precisa de um try
-    #saveDockerImage(projectPath, projectUuid, dockerImageID)
+    # saveDockerImage(projectPath, projectUuid, dockerImageID)
     # zip.write(projectPath + "/" + projectUuid + ".tar.gz", "./" + projectUuid + ".tar.gz")
 
     # Check if the zip file already exists
@@ -1112,6 +1126,21 @@ def researchArtifactChat(projectUuid):
 
 
 if __name__ == '__main__':
+    try:
+        HOST_VOLUME_PATH = os.environ.get("HOST_VOLUME_PATH")
+
+        if HOST_VOLUME_PATH == "":
+            raise Exception("HOST_VOLUME_PATH is None")
+        else:
+            if os.path.exists(HOST_VOLUME_PATH):
+                print(f"The folder (HOST_VOLUME_PATH) '{HOST_VOLUME_PATH}' exists.")
+            else:
+                raise Exception(f"The folder (HOST_VOLUME_PATH) '{HOST_VOLUME_PATH}' does not exist.")
+
+        app.run(host='0.0.0.0', port=8080)
+    except Exception as e:
+        print(str(e))
+
     # Initialize the Docker client
     # client = docker.from_env()
     #
@@ -1128,7 +1157,64 @@ if __name__ == '__main__':
     #     print("-" * 40)
 
     # TODO é necssario escrever FLASK_RUN_PORT=8080 nas variaveis de ambiente da execução para a porta a executar ser a correta
-    app.run(host='0.0.0.0', port=8080)
+
+    # Get current working directory
+    # Get current working directory
+    # project_uuid = "ads_main"
+    # current_path = os.getcwd()
+    # directory_path = os.path.join('projects', project_uuid, 'files')  # Improved path handling
+    # directory_path2 = os.path.join('projects', project_uuid)  # Improved path handling
+    #
+    #
+    #
+    # current_dir = os.path.abspath(".")
+    # print(current_dir)
+    # UPLOAD_FOLDER = 'projects'
+    #
+    #
+    # # Get the absolute path for the volume
+    # volume_path = os.path.abspath(os.path.join(current_path, directory_path))
+    # volume_path2 = os.path.abspath(os.path.join(current_path, directory_path))
+    # volume_path3=os.path.join(directory_path2, "asasasasasaas")
+    #
+    #
+    # print("Volume path:", volume_path)  # Debug output to verify the path
+    #
+    # if not os.path.exists(volume_path3):
+    #     os.makedirs(volume_path3)
+    #     print(f"Folder '{volume_path3}' created.")
+    # else:
+    #     print(f"Folder '{volume_path3}' already exists.")
+    #
+    # # Check if the volume path exists
+    # if not os.path.exists(volume_path):
+    #     print(f"Error: Volume path does not exist: {volume_path}")
+    #
+    # # Get current timestamp for unique container name
+    # number = datetime.now().strftime("%Y%m%d%H%M%S")
+    # project_image = "ads_main:20240926180050"  # Ensure this image exists
+    #
+    # # Start Docker client
+    # dockerClientResult = startDockerClient()
+    # dockerClient, port = dockerClientResult["dockerClient"], dockerClientResult["port"]
+
+    # try:
+    #     container_volume_path = f"/projects/{project_uuid}/files"
+    #     volumes = {HOST_VOLUME_PATH: {'bind': container_volume_path, 'mode': 'rw'}}
+    #
+    #     # Run the container
+    #     container = dockerClient.containers.run(
+    #         image=project_image,
+    #         volumes=volumes,  # Mounting the volume
+    #         detach=True,  # Run container in detached mode
+    #         tty=True  # Allocate a pseudo-TTY
+    #     )
+    #     print(f"Container {container.name} started with ID {container.id}")
+    #
+    # except docker.errors.APIError as api_error:
+    #     print(f"Failed to start container: {api_error}")
+    # except Exception as e:
+    #     print(f"An error occurred while starting the container: {e}")
 
     # TODO Correr experiencias com interface grafica
     # Não é necesario ter export no dockerfile, o container tem que ser corrido desta maneira

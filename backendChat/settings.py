@@ -113,9 +113,9 @@ def startDockerClient():
             print("Using default Docker socket: /home/ubuntu/my_docker.sock")
             client = docker.DockerClient(base_url='unix:///home/ubuntu/my_docker.sock')
         # Check for the Docker socket used by Docker Desktop
-        # elif os.path.exists('/var/run/docker.sock'):
-        #     print("Using default Docker socket: /var/run/docker.sock")
-        #     client = docker.DockerClient(base_url='unix:///var/run/docker.sock')
+        elif os.path.exists('/var/run/docker.sock'):
+             print("Using default Docker socket: /var/run/docker.sock")
+             client = docker.DockerClient(base_url='unix:///var/run/docker.sock')
         # # Check for the Docker socket used by Docker Desktop
         else:
             # If no specific socket is found, fall back to using environment variables
@@ -180,6 +180,9 @@ def saveDockerImage(myProjectFolder, dockerImageName, dockerTagId):
         elif os.path.exists('/home/ubuntu/my_docker.sock'):
             print("Using default Docker socket: /home/ubuntu/my_docker.sock")
             client = docker.DockerClient(base_url='unix:///home/ubuntu/my_docker.sock')
+        elif os.path.exists('/var/run/docker.sock'):
+             print("Using default Docker socket: /var/run/docker.sock")
+             client = docker.DockerClient(base_url='unix:///var/run/docker.sock')
         else:
             # Fallback to from_env() if no specific socket is found
             print("Default socket not found, trying docker.from_env()")

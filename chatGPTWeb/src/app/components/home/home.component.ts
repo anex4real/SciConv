@@ -48,9 +48,9 @@ export class HomeComponent implements OnInit {
     configurationFiles: object = {}
     dockerImageID: any;
     //todo remover conteudo
-    projectUuid: string = 'adsketch_main';
+    projectUuid: string = 'ads_main';
     //projectUuid: string = "iubfc_main"
-    commandToRun = "python yahoo_demo.py\n"
+    commandToRun = "python ./yahoo_demo.py\n"
     //commandToRun: string = "python ./myfile.py";
     //commandToRun: string = "make"
     //commandToRun: string = "make && ./iubfc 13 0.5 ./Data/IMDBID.txt ./Data/IMDBEdge.txt 10000 ./Data/dataOut.txt"
