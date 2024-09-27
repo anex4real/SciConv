@@ -76,7 +76,7 @@
     </div>
 
     <div class="chat-input" *ngIf="this.stageSubject.value!=stages.Start">
-        <input [(ngModel)]="userMessage" placeholder="Type your message here..."/>
+        <input [(ngModel)]="userMessage" placeholder="Type your message here..." (keydown.enter)="sendMessage()"/>
         <button (click)="sendMessage()">Send</button>
     </div>
 </div>
