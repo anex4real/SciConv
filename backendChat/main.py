@@ -1,9 +1,6 @@
 import shutil
 import zipfile
 from copy import copy
-from logging import exception
-
-from openai import OpenAI
 from datetime import datetime
 from flask import Flask, request
 from flask_cors import CORS, cross_origin
@@ -11,9 +8,9 @@ from packageExperiment.linux import writeLinuxFile
 from packageExperiment.windows import writeWindowsFIle
 from settings import *
 import tempfile
-import argparse
 
 HOST_VOLUME_PATH = ""
+PROJECTS_LOCATION = 'projects'
 
 app = Flask(__name__)
 cors = CORS(app, resources={r"/api/*": {"origins": "*"}})
@@ -36,32 +33,26 @@ def home():
 def upload_file():
     current_dir = os.path.abspath(".")
     print(current_dir)
-    UPLOAD_FOLDER = 'projects'
-    if not os.path.exists(UPLOAD_FOLDER):
-        os.makedirs(UPLOAD_FOLDER)
-        print(f"Folder '{UPLOAD_FOLDER}' created.")
-    else:
-        print(f"Folder '{UPLOAD_FOLDER}' already exists.")
 
     messagesToUser = []
     messagesToChat = []
 
     if 'file' not in request.files:
-        print("File is missing")
-        appendMessage(messagesToUser, contentShort="File is missing", stage="Start")
+        print("I can’t find your file")
+        appendMessage(messagesToUser, contentShort="I can’t find your file", stage="Start")
         return makeResponse(messagesToUser, 201, True)
 
     file = request.files["file"]
 
     if file.filename == '':
-        print("No selected file")
-        appendMessage(messagesToUser, contentShort="No selected file", stage="Start")
+        print("I can’t select your file")
+        appendMessage(messagesToUser, contentShort="I can’t select your file", stage="Start")
         return makeResponse(messagesToUser, 201, True)
 
     try:
         if file and file.filename.endswith('.zip'):
             # Save the file temporarily
-            temp_path = os.path.join(UPLOAD_FOLDER, file.filename)
+            temp_path = os.path.join(PROJECTS_LOCATION, file.filename)
             file.save(temp_path)
 
             with zipfile.ZipFile(temp_path, 'r') as zip_ref:
@@ -73,13 +64,13 @@ def upload_file():
                         projectUuid = list(folder_names)[0]
 
                 if not folder_names:
-                    print("No folders found in the zip file")
-                    appendMessage(messagesToUser, contentShort="No folders found in the zip file", stage="Start")
+                    print("I can’t select your folder")
+                    appendMessage(messagesToUser, contentShort="I can’t select your folder", stage="Start")
                     return makeResponse(messagesToUser, 201, True)
 
-                projectLocation = os.path.join(UPLOAD_FOLDER, projectUuid)
-                projectLocationRoot = os.path.join(UPLOAD_FOLDER, projectUuid, projectUuid)
-                projectLocationFiles = os.path.join(UPLOAD_FOLDER, projectUuid, "files")
+                projectLocation = os.path.join(PROJECTS_LOCATION, projectUuid)
+                projectLocationRoot = os.path.join(PROJECTS_LOCATION, projectUuid, projectUuid)
+                projectLocationFiles = os.path.join(PROJECTS_LOCATION, projectUuid, "files")
 
                 # Extract all files
                 zip_ref.extractall(projectLocation)
@@ -92,40 +83,30 @@ def upload_file():
                         "contentShort": None,
                         "content": "I need to validate the variable 'projectUuid' for use in this function. "
                                    "\nIf 'projectUuid' is a valid Docker tag name, respond with 'YES'."
-                                   "\nIf it's not valid, return an updated, valid version of 'projectUuid'."
-                                   "\nCurrent value: projectUuid = " + projectUuid + ".\n"
-                                                                                     "The function to execute is: dockerClient.images.build(path=projectPath, tag=projectUuid) and do not support the simbol '-' and capital letters. "
-                                                                                     "Your response should be exactly one word, either 'YES' or the updated 'projectUuid' value."}
+                                   "\nIf it's not valid, return an updated, valid version of 'projectUuid', take into account the following information."
+                                   "\nCurrent value: projectUuid = " + projectUuid +
+                                   ".\nYour response should be exactly one word, either 'YES' or the updated 'projectUuid' value."}
+
             messagesToChat.append(message1)
-            messagesToChat = convert_json_to_string(messagesToChat)
-            # TODO descomentar
-            client = OpenAI()
-            completion = client.chat.completions.create(
-                model="gpt-4-turbo",
-                # model="gpt-4o",
-                # model="chatgpt-4o-latest",
-                messages=
-                messagesToChat,
 
-            )
+            firstMessageText = callGPTModel(messagesToChat)
 
-            firstMessageText = completion.choices[0].message.content
             if firstMessageText == "Yes":
                 appendMessage(messagesToUser, content=projectUuid, stage="FindProjectFiles")
             else:
-                newprojectLocation = os.path.join(UPLOAD_FOLDER, firstMessageText)
+                newprojectLocation = os.path.join(PROJECTS_LOCATION, firstMessageText)
                 os.rename(projectLocation, newprojectLocation)
                 appendMessage(messagesToUser, content=firstMessageText, stage="FindProjectFiles")
-
             return makeResponse(messagesToUser, 201, True)
+
         else:
-            print("Only zip files are allowed")
-            appendMessage(messagesToUser, contentShort="Only zip files are allowed", stage="Start")
+            print("I need to have a zip file")
+            appendMessage(messagesToUser, contentShort="I need to have a zip file", stage="Start")
             return makeResponse(messagesToUser, 201, True)
 
     except Exception as e:
-        print(str(e))
-        appendMessage(messagesToUser, contentShort=str(e), stage="Start")
+        print("Ups! There's an error:" + str(e))
+        appendMessage(messagesToUser, contentShort="Ups! There's an error:" + str(e), stage="Start")
         return makeResponse(messagesToUser, 201, True)
 
 
@@ -133,51 +114,50 @@ def upload_file():
 @cross_origin()
 def find_files_project():
     requestData = json.loads(request.data)
-
-
-    if "possibleProjectUuid" in requestData:
-        possibleProjectUuid = requestData["possibleProjectUuid"]
-
-    askmessage = {"role": "system",
-                  "jsonObject": False,
-                  "contentShort": None,
-                  "content": "Analyze the following message and determine whether it contains a possible folder name."
-                             '\nMessage: ' + possibleProjectUuid +
-                             '\nIf it does, please provide the folder name. If it does not, respond with "NO"'
-                             '\nPlease answer in the required format, with a one-word response.'}
-
-    # TODO descomentar
-    client = OpenAI()
-
-    completion = client.chat.completions.create(
-        model="gpt-4-turbo",
-        ## model="gpt-4o",
-        # model="chatgpt-4o-latest",
-        messages=
-        [askmessage]
-    )
-    projectUuid = completion.choices[0].message.content
-
-    print("possibleProjectUuid:" + projectUuid)
     messagesToUser = []
-    messagesToChat = []
 
-    if projectUuid == "NO":
-        appendMessage(messagesToUser, contentShort="Please enter a valid location", stage="Start")
+    if "possibleProjectUuid" not in requestData:
+        print("I can’t select your folder")
+        appendMessage(messagesToUser, contentShort="I can’t select your folder", stage="Start")
         return makeResponse(messagesToUser, 201, True)
 
-    projectPath = 'projects/' + projectUuid + "/"
-    if not os.path.exists(projectPath):
-        print(f"Project '{projectPath}' does not exist.")
-        appendMessage(messagesToUser, contentShort=f"Project '{projectUuid}' does not exist.\n Please enter a valid location", stage="Start")
-        return makeResponse(messagesToUser, 201, True)
+    possibleProjectUuid = requestData["possibleProjectUuid"]
+    possibleDirectoryPath = f"projects/{possibleProjectUuid}/files"
 
+    if not os.path.exists(possibleDirectoryPath):
+        askmessage = {"role": "system",
+                      "jsonObject": False,
+                      "contentShort": None,
+                      "content": "Analyze the following message and determine whether it contains a possible folder name."
+                                 '\nMessage: ' + possibleProjectUuid +
+                                 '\nIf it does, please provide the folder name. If it does not, respond with "NO"'
+                                 '\nPlease answer in the required format, with a one-word response.'}
 
-    directoryPath = f"/projects/{projectUuid}/files"
+        projectUuid = callGPTModel([askmessage])
+
+        print("possibleProjectUuid:" + projectUuid)
+
+        if projectUuid == "NO":
+            appendMessage(messagesToUser, contentShort="Please enter a valid location", stage="Start")
+            return makeResponse(messagesToUser)
+
+        directoryPath = f"projects/{projectUuid}/files"
+
+        if not os.path.exists(directoryPath):
+            print(f"Project '{directoryPath}' does not exist.")
+            appendMessage(messagesToUser,
+                          contentShort=f"Project '{projectUuid}' does not exist.\n Please enter a valid location",
+                          stage="Start")
+            return makeResponse(messagesToUser)
+    else:
+        projectUuid = possibleProjectUuid
+
+    directoryPath = f"projects/{projectUuid}/files"
 
     all_files = find_files(directoryPath)
     number_interactions = 3
     chat_message = ""
+    messagesToChat = []
 
     try:
         while number_interactions >= 0:
@@ -191,41 +171,24 @@ def find_files_project():
                     'Please format your response in valid JSON as follows:\n' +
                     '{"ExecutableFiles": [List of executable files], "ConfigurationFiles": [List of configuration and installation files]}\n' +
                     'For example:\n' +
-                    '{ "ExecutableFiles": ["./file1.exe", "./file2.py", "./file3.sh", "./folder1/file2.py"], ' +
+                    '{ "ExecutableFiles": ["file1.exe", "file2.py", "file3.sh", "folder1/file2.py"], ' +
                     '"ConfigurationFiles": ["config.yaml", "setup.ini", "install.deb"] }\n' +
                     'If a file does not fit into either category, do not include it in the response.'
             )
 
             chatContent = userContent + '\nHere are the name of the files to classify: ' + str(all_files)
 
-            message_user = {"role": "system",
-                            "jsonObject": False,
-                            "contentShort": None,
-                            "content": userContent}
-            message_chat = {"role": "system",
-                            "jsonObject": False,
-                            "contentShort": None,
-                            "content": chatContent}
-
-            messagesToUser.append(message_user)
-            messagesToChat.append(message_chat)
+            appendMessage(messagesToUser, role="system", content=userContent)
+            appendMessage(messagesToChat, role="system", content=chatContent)
 
             # TODO descomentar
-            client = OpenAI()
-            completion = client.chat.completions.create(
-                model="gpt-4-turbo",
-                # model="gpt-4o",
-                # model="chatgpt-4o-latest",
-                messages=
-                messagesToChat
-            )
-            messageText = completion.choices[0].message.content
-            messageText = messageText.replace("```", "")
-            messageText = messageText.replace("json", "")
+            messageText = callGPTModel(messagesToChat)
+
+            messageText = messageText.replace("```", "").replace("json", "")
             print("find_files_project" + messageText)
 
             # TODO comentar
-            # messageText = '{"ExecutableFiles": ["./myfile.py", "main.py"], "ConfigurationFiles": []}'
+            # messageText = '{"ExecutableFiles": ["myfile.py", "main.py"], "ConfigurationFiles": []}'
             # messageText = '{"ExecutableFiles": ["newproject\\\\main.py", "main2.py", "main3.py", "new\\\\main.py", "new\\\\main2.py", "new\\\\main3.py", "new\\\\newnew\\\\main2.py", "new\\\\newnew\\\\main3.py"]}'
 
             try:
@@ -242,22 +205,23 @@ def find_files_project():
                                   contentShort="We've found your project.\n The project is in folder " + projectUuid +
                                                "\n \n Verify because there are no files to execute.",
                                   stage="ParametersToUse")
-                return makeResponse(messagesToUser, 201, True)
+                return makeResponse(messagesToUser)
 
             except Exception as e:
                 number_interactions -= 1
                 print("number_interactions" + str(number_interactions))
                 print("Error:" + str(e))
-                chat_message = ("The previous result is incorrect. I got this error:" + str(e) +
+                chat_message = ("The previous result is incorrect. Ups! There's an error:" + str(e) +
                                 "\nPlease consider the following information.\n")
 
     except Exception as error:
-        appendMessage(messagesToUser, content="I got this error:" + str(error),
-                      contentShort="I got this error:" + str(error), stage="Start")
-        return makeResponse(messagesToUser, 201, True)
+        appendMessage(messagesToUser, content="Ups! There's an error:" + str(error),
+                      contentShort="Ups! There's an error:" + str(error), stage="Start")
+        return makeResponse(messagesToUser)
 
-    appendMessage(messagesToUser, content="Some error occurred", contentShort="Some error occurred", stage="Start")
-    return makeResponse(messagesToUser, 201, True)
+    appendMessage(messagesToUser, content="Ups! some error occurred", contentShort="Ups! some error occurred",
+                  stage="Start")
+    return makeResponse(messagesToUser)
 
 
 @app.route('/project/<projectUuid>/parameters-to-use-confirmation', methods=['POST'])
@@ -266,17 +230,13 @@ def parameters_to_use_confirmation(projectUuid):
     requestData = json.loads(request.data)
     messagesToUser = []
 
-    if "messages" not in requestData:
-        appendMessage(messagesToUser, contentShort='Messages are missing', stage="Start")
-        return makeResponse(messagesToUser, 201, True)
+    messagesToChat = return_messages(requestData, messagesToUser)
 
-    messagesToChat = requestData["messages"]
     # messages= ['projects/newproject\\main.py', 'projects/newproject\\main2.py', 'projects/newproject\\main3.py', 'projects/newproject\\new\\main.py', 'projects/newproject\\new\\main2.py', 'projects/newproject\\new\\main3.py', 'projects/newproject\\new\\newnew\\main2.py', 'projects/newproject\\new\\newnew\\main3.py']
     length = len(messagesToChat)
     myMessage = messagesToChat[length - 1]["content"]
 
     try:
-
         message1confirmation = {
             "role": "system",
             "jsonObject": False,
@@ -289,82 +249,59 @@ def parameters_to_use_confirmation(projectUuid):
                     "\nYour response should follow one of two options:\n"
                     "- If this message contains a valid command that can be run inside a container in TTY mode, reply with the command to be used in Unix systems.\n"
                     "- If it does not contain a valid command, reply with 'ParametersToUse'.\n"
-
             ),
-
             "contentShort": None
         }
 
         messagesToChat.append(message1confirmation)
-        messagesToChat = convert_json_to_string(messagesToChat)
 
-        client = OpenAI()
-        completion = client.chat.completions.create(
-            model="gpt-4-turbo",
-            # #model="gpt-4o",
-            # model="chatgpt-4o-latest",
-            messages=
-            messagesToChat,
-
-        )
-
-        messageText = completion.choices[0].message.content
-        print(messageText)
+        messageText = callGPTModel(messagesToChat)
 
         if messageText == "ParametersToUse":
-            appendMessage(messagesToUser, contentShort="Please provide a valid command.", stage="ParametersToUse")
+            appendMessage(messagesToUser, contentShort="Please give me a valid command.", stage="ParametersToUse")
         else:
             appendMessage(messagesToUser, content=messageText,
                           contentShort="I will use this command to execute the experiment.\n Command: " + messageText,
                           stage="FindConfigurations")
-        return makeResponse(messagesToUser, 201, True)
+        return makeResponse(messagesToUser)
 
     except Exception as error:
         print(str(error))
-        appendMessage(messagesToUser, content="Some error occurred", contentShort="Some error occurred", stage="Start")
-        return makeResponse(messagesToUser, 201, True)
-
-
-def return_commands_to_use(requestData, messagesToUser):
-    if "commandToRun" not in requestData:
-        appendMessage(messagesToUser, contentShort="The commandToRun is required", stage="BuildDockerFile")
-        return makeResponse(messagesToUser, 201, True)
-
-    commandToRun = requestData["commandToRun"]
-    # commandToUse = "make && ./iubfc 13 0.5 ./Data/IMDBID.txt ./Data/IMDBEdge.txt 10000 ./Data/dataOut.txt"
-    return commandToRun
+        appendMessage(messagesToUser, content="Ups! There's an error " + str(error),
+                      contentShort="Ups! There's an error " + str(error), stage="Start")
+        return makeResponse(messagesToUser)
 
 
 @app.route('/project/<projectUuid>/find-configurations', methods=['POST'])
 @cross_origin()
 def find_configurations(projectUuid):
-    directoryPath = f"/projects/{projectUuid}/files"
+    directoryPath = f"projects/{projectUuid}/files"
     requestData = json.loads(request.data)
     messagesToUser = []
     messagesToChat = []
 
     if "filenames" not in requestData:
         appendMessage(messagesToUser, contentShort='filenames are missing', stage="Start")
-        return makeResponse(messagesToUser, 201, True)
+        return makeResponse(messagesToUser)
 
     filenames = requestData["filenames"]
     # filenames= ['main.py', 'main2.py', 'main3.py', 'new\\main.py', 'new\\main2.py', 'new\\main3.py', 'new\\newnew\\main2.py', 'new\\newnew\\main3.py']
 
     commandToRun = return_commands_to_use(requestData, messagesToUser)
 
-    # filenames = ['main.py']
     all_files_lines = {}
 
     try:
         for filename in filenames:
-            if os.path.isfile(directoryPath + filename):
-                lines = read_first_50_lines(directoryPath + filename)
+            full_path = os.path.join(directoryPath, filename)
+            if os.path.isfile(full_path):
+                lines = read_first_50_lines(full_path)
                 all_files_lines[filename] = lines
             else:
                 print(f"File not found: {filename}")
     except Exception as error:
         appendMessage(messagesToUser, contentShort=str(error), stage="Start")
-        return makeResponse(messagesToUser, 201, True)
+        return makeResponse(messagesToUser)
 
     # Convert the content to JSON format
     filesContent = json.dumps(all_files_lines, indent=4)
@@ -393,7 +330,6 @@ def find_configurations(projectUuid):
                                    '\nExample response:'
                                    '\n{ "PL": ["Python"], "PLVersion": "Python 3.8", "Dependencies": ["pandas", "tqdm"], "DependenciesVersion": ["pandas==2.2.0", "tqdm==4.62.0]}'
                                    '\nPlease respond in the specified format. The answer should be exactly in json format.'
-
                         }
 
             messagesToUser.append(message1)
@@ -402,18 +338,8 @@ def find_configurations(projectUuid):
             messagesToChat.append(myMessage)
 
             # TODO descomentar
-            client = OpenAI()
-            completion = client.chat.completions.create(
-                model="gpt-4-turbo",
-                # #model="gpt-4o",
-                # model="chatgpt-4o-latest",
-                messages=
-                messagesToChat,
-
-            )
-            messageText = completion.choices[0].message.content
-            messageText = messageText.replace("```", "")
-            messageText = messageText.replace("json", "")
+            messageText = callGPTModel(messagesToChat)
+            messageText = messageText.replace("```", "").replace("json", "")
 
             # TODO comentar
             # messageText = '{"PL": "Python",  "PLVersion": "Python 3.10", "Dependencies": ["tqdm", "pandas", "shap","numpy", "matplotlib", "scikit-learn"],  "DependenciesVersion": ["shap==0.41.0", "numpy==1.23.4", "pandas==1.5.2", "scipy==1.9.3", "matplotlib==3.6.2", "tqdm==4.64.1"]}'
@@ -421,7 +347,7 @@ def find_configurations(projectUuid):
             print(messageText)
             try:
                 appendMessage(messagesToUser, content=json.loads(messageText), jsonObject=True, stage="BuildDockerFile")
-                return makeResponse(messagesToUser, 201, True)
+                return makeResponse(messagesToUser)
             except Exception as e:
                 numberInteractions -= 1
                 print("numberInteractions" + str(numberInteractions))
@@ -441,18 +367,8 @@ def find_configurations(projectUuid):
                 messagesToChat.append(message1)
 
                 # TODO descomentar
-                client = OpenAI()
-                completion = client.chat.completions.create(
-                    model="gpt-4-turbo",
-                    # model="gpt-4o",
-                    # model="chatgpt-4o-latest",
-                    messages=
-                    messagesToChat,
-
-                )
-                messageText = completion.choices[0].message.content
-                messageText = messageText.replace("```", "")
-                messageText = messageText.replace("json", "")
+                messageText = callGPTModel(messagesToChat)
+                messageText = messageText.replace("```", "").replace("json", "")
 
                 # TODO comentar
                 # messageText = '{"PL": "Python",  "PLVersion": "Python 3.10", "Dependencies": ["tqdm", "pandas", "shap","numpy", "matplotlib", "scikit-learn"],  "DependenciesVersion": ["shap==0.41.0", "numpy==1.23.4", "pandas==1.5.2", "scipy==1.9.3", "matplotlib==3.6.2", "tqdm==4.64.1"]}'
@@ -461,34 +377,34 @@ def find_configurations(projectUuid):
                 try:
                     appendMessage(messagesToUser, content=json.loads(messageText), jsonObject=True,
                                   stage="BuildDockerFile")
-                    return makeResponse(messagesToUser, 201, True)
+                    return makeResponse(messagesToUser)
                 except Exception as e:
                     print("numberInteractions" + str(numberInteractions))
                     chat_message = "The previous result is incorrect. I encountered this error: " + str(e) + \
                                    "\nPlease consider the following information.\n"
 
     except Exception as error:
-        appendMessage(messagesToUser, content="I got this error:" + str(error),
-                      contentShort="I got this error:" + str(error), stage="Start")
-        return makeResponse(messagesToUser, 201, True)
+        appendMessage(messagesToUser, content="Ups! There's an error:" + str(error),
+                      contentShort="Ups! There's an error:" + str(error), stage="Start")
+        return makeResponse(messagesToUser)
 
-    appendMessage(messagesToUser, content="Some error occurred", contentShort="Some error occurred", stage="Start")
-    return makeResponse(messagesToUser, 201, True)
+    appendMessage(messagesToUser, content="Ups! some error occurred", contentShort="Ups! some error occurred",
+                  stage="Start")
+    return makeResponse(messagesToUser)
 
 
 @app.route('/project/<projectUuid>/find-configurations-change', methods=['POST'])
 @cross_origin()
 def find_configurations_change(projectUuid):
-    directoryPath = f"/projects/{projectUuid}/files"
     requestData = json.loads(request.data)
     messagesToUser = []
     messagesToChat = []
 
-    if "myMessage" in requestData:
-        myMessage = requestData["myMessage"]
-    else:
-        appendMessage(messagesToUser, contentShort='Messages are missing', stage="Start")
-        return makeResponse(messagesToUser, 201, True)
+    if "myMessage" not in requestData:
+        appendMessage(messagesToUser, contentShort='I can’t find the messages', stage="Start")
+        return makeResponse(messagesToUser)
+
+    myMessage = requestData["myMessage"]
 
     message1 = {"role": "system",
                 "jsonObject": False,
@@ -507,30 +423,18 @@ def find_configurations_change(projectUuid):
 
     messagesToUser.append(message1)
     messagesToChat.append(message1)
-    messagesToChat = convert_json_to_string(messagesToChat)
 
     # TODO descomentar
-    client = OpenAI()
-    completion = client.chat.completions.create(
-        model="gpt-4-turbo",
-        # model="gpt-4o",
-        # model="chatgpt-4o-latest",
-        messages=
-        messagesToChat,
-
-    )
-    messageText = completion.choices[0].message.content
-    print(messageText)
+    messageText = callGPTModel(messagesToChat)
 
     if messageText == "BuildDockerFile" or messageText == "WaitChatInteraction":
         appendMessage(messagesToUser, content=messageText, stage=messageText)
-        return makeResponse(messagesToUser, 201, True)
+        return makeResponse(messagesToUser)
     else:
-        messageText = messageText.replace("```", "")
-        messageText = messageText.replace("json", "")
+        messageText = messageText.replace("```", "").replace("json", "")
         try:
             appendMessage(messagesToUser, content=json.loads(messageText), jsonObject=True, stage="WaitChatInteraction")
-            return makeResponse(messagesToUser, 201, True)
+            return makeResponse(messagesToUser)
         except Exception as e:
             numberInteractions = 3
             chat_message = ""
@@ -548,37 +452,56 @@ def find_configurations_change(projectUuid):
                 messagesToChat.append(message1)
 
                 # TODO descomentar
-                client = OpenAI()
-                completion = client.chat.completions.create(
-                    model="gpt-4-turbo",
-                    # model="gpt-4o",
-                    # model="chatgpt-4o-latest",
-                    messages=
-                    messagesToChat,
-
-                )
-                messageText = completion.choices[0].message.content
-                messageText = messageText.replace("```", "")
-                messageText = messageText.replace("json", "")
-
+                messageText = callGPTModel(messagesToChat)
+                messageText = messageText.replace("```", "").replace("json", "")
+                print(messageText)
                 # TODO comentar
                 # messageText = '{"PL": "Python",  "PLVersion": "Python 3.10", "Dependencies": ["tqdm", "pandas", "shap","numpy", "matplotlib", "scikit-learn"],  "DependenciesVersion": ["shap==0.41.0", "numpy==1.23.4", "pandas==1.5.2", "scipy==1.9.3", "matplotlib==3.6.2", "tqdm==4.64.1"]}'
 
-                print(messageText)
                 try:
                     appendMessage(messagesToUser, content=json.loads(messageText), jsonObject=True,
                                   stage="BuildDockerFile")
-                    return makeResponse(messagesToUser, 201, True)
+                    return makeResponse(messagesToUser)
                 except Exception as e:
                     numberInteractions -= 1
                     print("numberInteractions" + str(numberInteractions))
-                    chat_message = "The previous result is incorrect. Please consider the following information.\n"
+                    print("Error:" + str(e))
+                    messagesToChat = []
 
-        appendMessage(messagesToUser, content="Some error occurred", contentShort="Some error occurred",
-                      stage="FindConfigurations")
+                    message1 = {"role": "system",
+                                "jsonObject": False,
+                                "contentShort": None,
+                                "content": chat_message +
+                                           "\nExtract from the following message a JSON in the required format."
+                                           "\nMessage: " + messageText +
+                                           '\nRequired JSON format: '
+                                           '{ "PL": [programming language], "PLVersion": [programming language version], "Dependencies": [dependencies], "DependenciesVersion": [version of dependencies] }'
+                                           '\nEnsure the response is in the specified JSON format. '
+                                }
+                    messagesToChat.append(message1)
+
+                    # TODO descomentar
+                    messageText = callGPTModel(messagesToChat)
+                    messageText = messageText.replace("```", "").replace("json", "")
+                    print(messageText)
+
+                    # TODO comentar
+                    # messageText = '{"PL": "Python",  "PLVersion": "Python 3.10", "Dependencies": ["tqdm", "pandas", "shap","numpy", "matplotlib", "scikit-learn"],  "DependenciesVersion": ["shap==0.41.0", "numpy==1.23.4", "pandas==1.5.2", "scipy==1.9.3", "matplotlib==3.6.2", "tqdm==4.64.1"]}'
+
+                    try:
+                        appendMessage(messagesToUser, content=json.loads(messageText), jsonObject=True,
+                                      stage="WaitChatInteraction")
+                        return makeResponse(messagesToUser)
+                    except Exception as e:
+                        print("numberInteractions" + str(numberInteractions))
+                        chat_message = "The previous result is incorrect. I encountered this error: " + str(e) + \
+                                       "\nPlease consider the following information.\n"
+
+        appendMessage(messagesToUser, content="Ups! some error occurred", contentShort="Ups! some error occurred",
+                      stage="FindConfigurationsInteraction")
         # TODO comentar
         # messageText = '{"PL": "Python", "PLVersion": "Python 3.10",  "Dependencies": ["numpy", "matplotlib", "scikit-learn"],  "DependenciesVersion": ["numpy==1.21.5", "matplotlib==3.5.1", "scikit-learn==1.2.0"]}'
-        return makeResponse(messagesToUser, 201, True)
+        return makeResponse(messagesToUser)
 
 
 @app.route("/project/<projectUuid>/build-docker-file-chat", methods=['POST'])
@@ -589,12 +512,9 @@ def buildDockerFileChat(projectUuid):
     requestData = json.loads(request.data)
     messagesToUser = []
 
-    if "messages" in requestData:
-        messagesToChat = requestData["messages"]
-        # messages= ['projects/newproject\\main.py', 'projects/newproject\\main2.py', 'projects/newproject\\main3.py', 'projects/newproject\\new\\main.py', 'projects/newproject\\new\\main2.py', 'projects/newproject\\new\\main3.py', 'projects/newproject\\new\\newnew\\main2.py', 'projects/newproject\\new\\newnew\\main3.py']
-    else:
-        appendMessage(messagesToUser, contentShort='Messages are missing', stage="Start")
-        return makeResponse(messagesToUser, 201, True)
+    messagesToChat = return_messages(requestData, messagesToUser)
+
+    # messages= ['projects/newproject\\main.py', 'projects/newproject\\main2.py', 'projects/newproject\\main3.py', 'projects/newproject\\new\\main.py', 'projects/newproject\\new\\main2.py', 'projects/newproject\\new\\main3.py', 'projects/newproject\\new\\newnew\\main2.py', 'projects/newproject\\new\\newnew\\main3.py']
 
     message1 = {"role": "system",
                 "jsonObject": False,
@@ -615,24 +535,12 @@ def buildDockerFileChat(projectUuid):
 
     messagesToUser.append(message1)
     messagesToChat.append(message1)
-    messagesToChat = convert_json_to_string(messagesToChat)
+
     # messageText = ''
 
     # TODO descomentar
-    client = OpenAI()
-    completion = client.chat.completions.create(
-        model="gpt-4-turbo",
-        # #model="gpt-4o",
-        # model="chatgpt-4o-latest",
-        messages=
-        messagesToChat,
-
-    )
-
-    messageText = completion.choices[0].message.content
-    messageText = messageText.replace("```", "")
-    messageText = messageText.replace("Dockerfile", "")
-    messageText = messageText.replace("dockerfile", "")
+    messageText = callGPTModel(messagesToChat)
+    messageText = messageText.replace("Dockerfile", "").replace("dockerfile", "").replace("```", "")
 
     #####COnfirmaçao1
     messageVerify = {"role": "system",
@@ -654,20 +562,8 @@ def buildDockerFileChat(projectUuid):
     messagesToChat.append(messageVerify)
 
     # TODO descomentar
-    client = OpenAI()
-    completion = client.chat.completions.create(
-        model="gpt-4-turbo",
-        # #model="gpt-4o",
-        # model="chatgpt-4o-latest",
-        messages=
-        messagesToChat,
-
-    )
-
-    messageText = completion.choices[0].message.content
-    messageText = messageText.replace("```", "")
-    messageText = messageText.replace("Dockerfile", "")
-    messageText = messageText.replace("dockerfile", "")
+    messageText = callGPTModel(messagesToChat)
+    messageText = messageText.replace("Dockerfile", "").replace("dockerfile", "").replace("```", "")
 
     # TODO comentar
     #     messageText = """FROM python:3.10
@@ -682,31 +578,26 @@ def buildDockerFileChat(projectUuid):
         appendMessage(messagesToUser, content=json.loads(messageText), jsonObject=True, stage="BuildDockerImage")
     except Exception as e:
         appendMessage(messagesToUser, content=messageText, stage="BuildDockerImage")
-    return makeResponse(messagesToUser, 201, True)
+    return makeResponse(messagesToUser)
 
 
 @app.route('/project/<projectUuid>/chat-interation', methods=['POST'])
 @cross_origin()
 def chat_interation(projectUuid):
-    projectPath = 'projects/' + projectUuid + "/"
-
     requestData = json.loads(request.data)
     messagesToUser = []
 
-    if "messages" in requestData:
-        messagesToChat = requestData["messages"]
-        length = len(messagesToChat)
-        myMessage = messagesToChat[length - 1]["content"]
-        # messages= ['projects/newproject\\main.py', 'projects/newproject\\main2.py', 'projects/newproject\\main3.py', 'projects/newproject\\new\\main.py', 'projects/newproject\\new\\main2.py', 'projects/newproject\\new\\main3.py', 'projects/newproject\\new\\newnew\\main2.py', 'projects/newproject\\new\\newnew\\main3.py']
-    else:
-        appendMessage(messagesToUser, contentShort='Messages are missing', stage="Start")
-        return makeResponse(messagesToUser, 201, True)
+    messagesToChat = return_messages(requestData, messagesToUser)
+
+    length = len(messagesToChat)
+    myMessage = messagesToChat[length - 1]["content"]
+    # messages= ['projects/newproject\\main.py', 'projects/newproject\\main2.py', 'projects/newproject\\main3.py', 'projects/newproject\\new\\main.py', 'projects/newproject\\new\\main2.py', 'projects/newproject\\new\\main3.py', 'projects/newproject\\new\\newnew\\main2.py', 'projects/newproject\\new\\newnew\\main3.py']
 
     if "nextStep" in requestData:
         nextStep = requestData["nextStep"]
     else:
         appendMessage(messagesToUser, contentShort='NextStep is missing', stage="Start")
-        return makeResponse(messagesToUser, 201, True)
+        return makeResponse(messagesToUser)
 
     numberInteractions = 3
     chatMessage = ""
@@ -727,19 +618,7 @@ def chat_interation(projectUuid):
             messagesToUser.append(message1)
             messagesToChat.append(message1)
 
-            messagesToChat = convert_json_to_string(messagesToChat)
-
-            client = OpenAI()
-            completion = client.chat.completions.create(
-                model="gpt-4-turbo",
-                # #model="gpt-4o",
-                # model="chatgpt-4o-latest",
-                messages=
-                messagesToChat,
-
-            )
-            messageText = completion.choices[0].message.content
-            print(messageText)
+            messageText = callGPTModel(messagesToChat)
 
             palavras = messageText.split()
             if len(palavras) == 1:
@@ -760,31 +639,19 @@ def chat_interation(projectUuid):
                     messagesToUser.append(message1)
                     messagesToChat.append(message1)
 
-                    messagesToChat = convert_json_to_string(messagesToChat)
-
-                    client = OpenAI()
-                    completion = client.chat.completions.create(
-                        model="gpt-4-turbo",
-                        # #model="gpt-4o",
-                        # model="chatgpt-4o-latest",
-                        messages=
-                        messagesToChat,
-
-                    )
-                    messageText = completion.choices[0].message.content
-                    print(messageText)
+                    messageText = callGPTModel(messagesToChat)
 
                     words = messageText.split()
                     if len(words) == 1:
                         appendMessage(messagesToUser, content=messageText, stage=messageText)
-                        return makeResponse(messagesToUser, 201, True)
+                        return makeResponse(messagesToUser)
                     else:
                         chatMessage = "The previous result is incorrect. Please consider the following information.\n"
                         numberInteractions -= 1
                         print("numberInteractions" + str(numberInteractions))
                 else:
                     appendMessage(messagesToUser, content=messageText, stage=messageText)
-                    return makeResponse(messagesToUser, 201, True)
+                    return makeResponse(messagesToUser)
             else:
                 chatMessage = "The previous result is incorrect. The answer should be exactly one word. Please consider the following information.\n"
                 numberInteractions -= 1
@@ -793,10 +660,11 @@ def chat_interation(projectUuid):
 
     except Exception as error:
         appendMessage(messagesToUser, content=str(error), contentShort=str(error), stage="Start")
-        return makeResponse(messagesToUser, 201, True)
+        return makeResponse(messagesToUser)
 
-    appendMessage(messagesToUser, content="Some error occurred", contentShort="Some error occurred", stage="Start")
-    return makeResponse(messagesToUser, 201, True)
+    appendMessage(messagesToUser, content="Ups! some error occurred", contentShort="Ups! some error occurred",
+                  stage="Start")
+    return makeResponse(messagesToUser)
 
 
 @app.route("/project/<projectUuid>/build-docker-image-chat", methods=['POST'])
@@ -805,12 +673,6 @@ def buildDockerImageChat(projectUuid):
     projectPath = 'projects/' + projectUuid + "/"
     requestData = json.loads(request.data)
     messagesToUser = []
-
-    if "messages" in requestData:
-        messagesToChat = requestData["messages"]
-    else:
-        appendMessage(messagesToUser, contentShort='Messages are missing', stage="Start")
-        return makeResponse(messagesToUser, 201, True)
 
     try:
         dockerClientResult = startDockerClient()
@@ -829,6 +691,7 @@ def buildDockerImageChat(projectUuid):
         #             print(chunk)  # Catch other potential messages (like errors)
         # except Exception as e:
         #     raise Exception(str(e))
+
         dockerImageBuilt = dockerClient.images.build(path=projectPath, tag=projectUuid + ":" + number, rm=True)
         dockerImageBuiltFiltered = [s for s in dockerImageBuilt[0].tags if projectUuid in s]
         dockerTagslength = len(dockerImageBuiltFiltered) - 1
@@ -840,8 +703,7 @@ def buildDockerImageChat(projectUuid):
         # raise Exception("gcc: error: -E or -x required when input is from standard input")
 
         appendMessage(messagesToUser, content=messageText, stage="RunContainer")
-
-        return makeResponse(messagesToUser, 201, True)
+        return makeResponse(messagesToUser)
     except Exception as e:
         print(str(e))
         dockerfile_content = read_file(projectPath + "Dockerfile")
@@ -858,20 +720,14 @@ def buildDockerImageChat(projectUuid):
         messagesToChat = []
         messagesToChat.append(message11)
 
-        client = OpenAI()
-        completion = client.chat.completions.create(
-            model="gpt-4-turbo",
-            # model="gpt-4o",
-            # model="chatgpt-4o-latest",
-            messages=messagesToChat
-        )
-        messageText = completion.choices[0].message.content
+        messageText = callGPTModel(messagesToChat)
+
         if messageText == "YES":
             appendMessage(messagesToUser,
                           content='\nI have this Dockerfile:' + dockerfile_content +
                                   '\nI tried to build the Docker image, but an error occurred:' + str(e),
                           contentShort='An error occurred during the environment build. I propose to try to build a new environment.',
-                          stage="FindConfigurations")
+                          stage="FindConfigurations", goBack=True)
         else:
             errorMessage = (
                     "An error occurred during the environment build. \n"
@@ -883,13 +739,13 @@ def buildDockerImageChat(projectUuid):
                         )
             appendMessage(messagesToUser, contentShort=errorMessage, stage="WaitChatInteraction", examples=examples)
 
-        return makeResponse(messagesToUser, 201, True)
+        return makeResponse(messagesToUser)
 
 
 @app.route("/project/<projectUuid>/run-container-chat", methods=['POST'])
 @cross_origin()
 def runDockerContainerChat(projectUuid):
-    projectPath = 'projects/' + projectUuid + "/"
+    projectPath = f"/projects/{projectUuid}/"
     directoryPath = f"/projects/{projectUuid}/files"
 
     requestData = json.loads(request.data)
@@ -897,12 +753,11 @@ def runDockerContainerChat(projectUuid):
 
     commandToRun = return_commands_to_use(requestData, messagesToUser)
 
-    if "dockerImageId" in requestData:
-        dockerImageId = requestData["dockerImageId"]
-    else:
+    if "dockerImageId" not in requestData:
         appendMessage(messagesToUser, contentShort="The dockerImageId is required", stage="BuildDockerFile")
-        return makeResponse(messagesToUser, 201, True)
+        return makeResponse(messagesToUser)
 
+    dockerImageId = requestData["dockerImageId"]
     number_of_attempts = 3
 
     while number_of_attempts >= 0:
@@ -914,8 +769,7 @@ def runDockerContainerChat(projectUuid):
             now = datetime.now()
             number = now.strftime("%Y%m%d%H%M%S")
 
-            container_volume_path = f"/projects/{projectUuid}/files"
-            volumes = {HOST_VOLUME_PATH: {'bind': container_volume_path, 'mode': 'rw'}}
+            volumes = {HOST_VOLUME_PATH: {'bind': directoryPath, 'mode': 'rw'}}
 
             # Run the container
             container = dockerClient.containers.run(
@@ -1008,7 +862,7 @@ def runDockerContainerChat(projectUuid):
             # for file in created_files:
             #     print(file)
 
-            return makeResponse(messagesToUser, 201, True)
+            return makeResponse(messagesToUser)
         except Exception as e:
             print(str(e))
             number_of_attempts -= 1
@@ -1032,14 +886,8 @@ def runDockerContainerChat(projectUuid):
             messagesToChat = []
             messagesToChat.append(message11)
 
-            client = OpenAI()
-            completion = client.chat.completions.create(
-                model="gpt-4-turbo",
-                # model="gpt-4o",
-                # model="chatgpt-4o-latest",
-                messages=messagesToChat
-            )
-            messageText = completion.choices[0].message.content
+            messageText = callGPTModel(messagesToChat)
+
             message2 = {"role": "system",
                         "jsonObject": False,
                         "contentShort": "An error occurred. I propose that we go back and fix it. \n"
@@ -1049,40 +897,38 @@ def runDockerContainerChat(projectUuid):
                         "stage": messageText}
 
             messagesToUser.append(message2)
-            return makeResponse(messagesToUser, 201, True)
+            return makeResponse(messagesToUser)
 
 
 @app.route("/project/<projectUuid>/research-artifact-chat", methods=['POST'])
 @cross_origin()
 def researchArtifactChat(projectUuid):
-    projectsLocation = 'projects'
-    projectPath = projectsLocation + "/" + projectUuid
+    projectPath = PROJECTS_LOCATION + "/" + projectUuid
     zipFilePath = f"{projectPath}.zip"
 
     requestData = json.loads(request.data)
     messagesToUser = []
-    #
+
+    if "dockerImageId" not in requestData:
+        appendMessage(messagesToUser, contentShort="The dockerImageId is required", stage="BuildDockerFile")
+        return makeResponse(messagesToUser)
+    dockerImageID = requestData["dockerImageId"]
     # dockerImageID = "20240820192103"
-    # commandToRun = ["python ./main2.py"]
 
     commandToRun = return_commands_to_use(requestData, messagesToUser)
+    commandToRun1 = [commandToRun]
+    # commandToRun = ["python ./main2.py"]
 
-    # Fetch dockerImageId from requestData
-    if "dockerImageId" in requestData:
-        dockerImageID = requestData["dockerImageId"]
-    else:
-        appendMessage(messagesToUser, contentShort="The dockerImageId is required", stage="BuildDockerFile")
-        return makeResponse(messagesToUser, 201, True)
-
-    commandToRun1 = []
-    commandToRun1.append(commandToRun)
-    # Generate files for Windows and Linux
     arrayFiles = writeWindowsFIle(projectPath + "/", projectUuid, commandToRun1, dockerImageID, False, None)
     arrayFiles += writeLinuxFile(projectPath + "/", projectUuid, commandToRun1, dockerImageID, False, None)
 
-    # TODO descomentar linha1
-    ##todo precisa de um try
-    # saveDockerImage(projectPath, projectUuid, dockerImageID)
+    try:
+        saveDockerImage(projectPath, projectUuid, dockerImageID)
+    except Exception as error:
+        appendMessage(messagesToUser, content="Ups! There's an error:" + str(error),
+                      contentShort="Ups! There's an error:" + str(error), stage="ResearchArtifact")
+        return makeResponse(messagesToUser)
+
     # zip.write(projectPath + "/" + projectUuid + ".tar.gz", "./" + projectUuid + ".tar.gz")
 
     # Check if the zip file already exists
@@ -1121,17 +967,11 @@ def researchArtifactChat(projectUuid):
     shutil.move(zipFilePath, finalZipPath)
 
     print(f"All files and folders from '{projectPath}' have been zipped into '{finalZipPath}'.")
+    appendMessage(messagesToUser,
+                  contentShort=f"The research artifact has been generated and is located in the root directory of our project '{finalZipPath}'",
+                  stage="Completed")
+    return makeResponse(messagesToUser)
 
-    messagesToUser = [
-        {"role": "assistant",
-         "contentShort": f"The research artifact has been generated and is located in the root directory of our project '{finalZipPath}'",
-         "content": f"The research artifact has been generated and is located in the root directory of our project '{finalZipPath}'",
-         "jsonObject": False}
-    ]
-
-    return makeResponse(messagesToUser, 201, True)
-
-    # return send_from_directory(projectPath, f"{projectUuid}.zip", as_attachment=True, mimetype="application/zip")
 
 if __name__ == '__main__':
     try:
@@ -1142,29 +982,20 @@ if __name__ == '__main__':
         print(f"The HOST_VOLUME_PATH is '{HOST_VOLUME_PATH}'.")
         dockerClientResult = startDockerClient()
 
+        if not os.path.exists(PROJECTS_LOCATION):
+            os.makedirs(PROJECTS_LOCATION)
+            print(f"Folder '{PROJECTS_LOCATION}' created.")
+        else:
+            print(f"Folder '{PROJECTS_LOCATION}' already exists.")
+
         app.run(host='0.0.0.0', port=8080)
     except Exception as e:
         print(str(e))
 
-    # Initialize the Docker client
-    # client = docker.from_env()
-    #
-    # # Get all running containers
-    # containers = client.containers.list()
-    #
-    # # Print details of each container
-    # for container in containers:
-    #     print(f"Container ID: {container.id}")
-    #     print(f"Image: {container.image.tags}")
-    #     print(f"Name: {container.name}")
-    #     print(f"Status: {container.status}")
-    #     print(f"Ports: {container.attrs['NetworkSettings']['Ports']}")
-    #     print("-" * 40)
-
     # TODO é necssario escrever FLASK_RUN_PORT=8080 nas variaveis de ambiente da execução para a porta a executar ser a correta
 
-    #Get current working directory
-    #Get current working directory
+    # Get current working directory
+    # Get current working directory
     # project_uuid = "ads_main"
     # current_path = os.getcwd()
     # directory_path = os.path.join('projects', project_uuid, 'files')  # Improved path handling

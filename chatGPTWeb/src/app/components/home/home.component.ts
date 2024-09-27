@@ -65,11 +65,14 @@ export class HomeComponent implements OnInit {
     examplesToAsk: any = undefined
     showInfo: boolean = false
     errorMessage: any;
+    GOBACKNUMBER: any = 3;
+    goBack: any
 
 
     constructor(private sanitizer: DomSanitizer,
                 protected backend: BackendService, private http: HttpClient
     ) {
+        this.goBack = this.GOBACKNUMBER
     }
 
     ngOnInit(): void {
@@ -304,6 +307,7 @@ export class HomeComponent implements OnInit {
                 + "Remove the programming language c++.\n"
                 + "Add the programming language c++.\n"
                 + "Add the dependency pandas.\n"
+                + "I want to use this configuration networkx==2.5 scikit-learn==0.23.2 tqdm==4.49.0 and python version 3.8"
         });
 
     }
@@ -344,11 +348,6 @@ export class HomeComponent implements OnInit {
             if (response[responseLength - 1].stage) {
                 this.changeStage(response[responseLength - 1].stage)
             }
-
-            //this.changeStage(this.stages.BuildDockerImage)
-            //this.changeStage(this.stages.RunContainer)
-            //this.changeStage(this.stages.Completed)
-            //this.changeStage(this.stages.ResearchArtifact)
         });
     }
 
@@ -371,7 +370,15 @@ export class HomeComponent implements OnInit {
                 this.messageToAsk = undefined
                 this.stageAfterChat = this.stages.FindConfigurations
             }
-            this.changeStage(response[responseLength - 1].stage)
+            if (response[responseLength - 1].goBack) {
+                this.goBack = this.goBack - 1
+                if (this.goBack <= 0) {
+                    this.changeStage(this.stages.Start)
+                    this.goBack = this.GOBACKNUMBER
+                }
+            } else {
+                this.changeStage(response[responseLength - 1].stage)
+            }
         });
     }
 
@@ -416,8 +423,8 @@ export class HomeComponent implements OnInit {
             console.log("response");
             console.log(response);
             this.messages.push(...response)
-
-            this.changeStage(this.stages.Completed)
+            let responseLength = response.length
+            this.changeStage(response[responseLength - 1].stage)
         });
     }
 
@@ -509,11 +516,11 @@ export class HomeComponent implements OnInit {
     }
 
     onSubmitpass() {
-            if (this.backend.validatePassword(this.password)) {
-                this.isAuthenticated = true;
-                this.errorMessage = '';
-            } else {
-                this.errorMessage = 'Invalid password. Please try again.';
-            }
+        if (this.backend.validatePassword(this.password)) {
+            this.isAuthenticated = true;
+            this.errorMessage = '';
+        } else {
+            this.errorMessage = 'Invalid password. Please try again.';
         }
+    }
 }

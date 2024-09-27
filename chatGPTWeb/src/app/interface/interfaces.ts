@@ -37,9 +37,10 @@ export interface Message {
     role: string;
     content: any;
     contentShort: any;
-    stage?:any
-    examples?: any,
-    projectUuid?: any
+    stage?:any;
+    examples?: any;
+    projectUuid?: any;
+    goBack?:any
 }
 
 export interface ProjectConfiguration {

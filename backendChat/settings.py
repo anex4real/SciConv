@@ -4,6 +4,8 @@ import flask
 import socket
 import docker
 import os
+from openai import OpenAI
+
 
 requestConfig = {
     "headers": {
@@ -30,7 +32,9 @@ def find_files(directory):
             # Remove the directory prefix from the full path
             reduced_path = os.path.relpath(full_path, directory)
 
+            #files.append(f"./{reduced_path}")
             files.append(f"./{reduced_path}")
+
 
     return files
 
@@ -61,7 +65,7 @@ def read_first_50_lines(file_path):
     return lines
 
 
-def makeResponse(response=None, status=200, isJson=False):
+def makeResponse(response=None, status=200, isJson=True):
     if response is None:
         response = {}
     if isJson:
@@ -76,7 +80,7 @@ def makeResponse(response=None, status=200, isJson=False):
 
 
 def appendMessage(messages, content=None, contentShort=None, stage=None, role="assistant", jsonObject=False,
-                  examples=None):
+                  examples=None, goBack=None):
     message = {"role": role,
                "jsonObject": jsonObject,
                "contentShort": contentShort,
@@ -87,6 +91,11 @@ def appendMessage(messages, content=None, contentShort=None, stage=None, role="a
 
     if examples is not None:
         message["examples"] = examples
+
+    if goBack is not None:
+        message["goBack"] = goBack
+
+
 
     messages.append(message)
 
@@ -261,6 +270,37 @@ def read_file(location):
     print(f"Content of {location} read successfully.")
     print(content)
     return content
+
+def return_commands_to_use(requestData, messagesToUser):
+    if "commandToRun" not in requestData:
+        appendMessage(messagesToUser, contentShort="The commandToRun is required", stage="ParametersToUse")
+        return makeResponse(messagesToUser)
+
+    commandToRun = requestData["commandToRun"]
+    # commandToUse = "make && ./iubfc 13 0.5 ./Data/IMDBID.txt ./Data/IMDBEdge.txt 10000 ./Data/dataOut.txt"
+    return commandToRun
+
+def return_messages(requestData, messagesToUser):
+    if "messages" not in requestData:
+        appendMessage(messagesToUser, contentShort='I can’t find the messages', stage="Start")
+        return makeResponse(messagesToUser)
+
+    return requestData["messages"]
+
+def callGPTModel(messagesToChat, modelUsed="gpt-4-turbo"):
+
+    messagesToChat= convert_json_to_string(messagesToChat)
+    client = OpenAI()
+    completion = client.chat.completions.create(
+        model=modelUsed,
+        # #model="gpt-4o",
+        # model="chatgpt-4o-latest",
+        messages=
+        messagesToChat,
+    )
+    result= completion.choices[0].message.content
+    print(result)
+    return result
 
 # @app.route('/project/<projectUuid>/parameters-to-use-confirmation', methods=['POST'])
 # @cross_origin()
