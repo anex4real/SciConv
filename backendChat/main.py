@@ -1,7 +1,6 @@
 import shutil
 import zipfile
 from copy import copy
-from datetime import datetime
 from flask import Flask, request
 from flask_cors import CORS, cross_origin
 from packageExperiment.linux import writeLinuxFile
@@ -51,6 +50,7 @@ def upload_file():
 
     try:
         if file and file.filename.endswith('.zip'):
+            firtsTime = True
             # Save the file temporarily
             temp_path = os.path.join(PROJECTS_LOCATION, file.filename)
             file.save(temp_path)
@@ -72,6 +72,17 @@ def upload_file():
                 projectLocationRoot = os.path.join(PROJECTS_LOCATION, projectUuid, projectUuid)
                 projectLocationFiles = os.path.join(PROJECTS_LOCATION, projectUuid, "files")
 
+                if firtsTime:
+                    if os.path.exists(projectLocation) and os.path.isdir(projectLocation):
+                        try:
+                            shutil.rmtree(projectLocation)
+                            print(f"Folder '{projectLocation}' has been removed.")
+                        except Exception as e:
+                            print(f"Error removing folder '{projectLocation}': {e}")
+                    else:
+                        print(f"Folder '{projectLocation}' does not exist.")
+                firtsTime = False
+
                 # Extract all files
                 zip_ref.extractall(projectLocation)
 
@@ -91,7 +102,7 @@ def upload_file():
 
             firstMessageText = callGPTModel(messagesToChat)
 
-            if firstMessageText == "Yes":
+            if firstMessageText == "YES":
                 appendMessage(messagesToUser, content=projectUuid, stage="FindProjectFiles")
             else:
                 newprojectLocation = os.path.join(PROJECTS_LOCATION, firstMessageText)
@@ -914,6 +925,9 @@ def researchArtifactChat(projectUuid):
         return makeResponse(messagesToUser)
     dockerImageID = requestData["dockerImageId"]
     # dockerImageID = "20240820192103"
+
+    messagesToUser = return_messages(requestData, messagesToUser)
+    write_messagesUser_to_file(messagesToUser, projectPath)
 
     commandToRun = return_commands_to_use(requestData, messagesToUser)
     commandToRun1 = [commandToRun]

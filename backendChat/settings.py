@@ -1,5 +1,7 @@
 import json
 import os
+from datetime import datetime
+
 import flask
 import socket
 import docker
@@ -270,6 +272,26 @@ def read_file(location):
     print(f"Content of {location} read successfully.")
     print(content)
     return content
+
+
+def write_messagesUser_to_file(messagesToUser, projectPath):
+    number = datetime.now().strftime("%Y%m%d%H%M%S")
+    file_path = os.path.join(projectPath, f"{number}.txt")
+
+
+    try:
+        # Open the file in write mode
+        with open(file_path, 'w') as file:
+            # Iterate over the messages array
+            for message in messagesToUser:
+                # Extract 'role' and 'contentShort', and write them to the file in a formatted way
+                file.write(f"Role: {message['role']}, ContentShort: {message['contentShort']}\n")
+
+        print(f"Successfully written to {file_path}")
+    except Exception as e:
+        print(f"An error occurred: {e}")
+
+
 
 def return_commands_to_use(requestData, messagesToUser):
     if "commandToRun" not in requestData:
