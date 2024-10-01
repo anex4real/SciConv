@@ -1,0 +1,24 @@
+<div *ngIf="!surveyService.isScalesCompleted" class="ml-3">
+    <div>
+        <app-survey-scale [scaleIndex]="1"></app-survey-scale>
+    </div>
+    <button (click)="nextStep()">Next</button>
+
+</div>
+
+
+<div class="ml-3 bold " *ngIf="surveyService.isScalesCompleted && !this.startTask2" [id]="startTask2">
+    <p>Task Questionnaire - Part 2</p>
+
+    <p> One each of the following 15 screens, click on the scale title that represents the more important contributor to
+        workload for the task</p>
+    <button (click)="nextStep2()">Next</button>
+
+</div>
+
+<div *ngIf="surveyService.isScalesCompleted && this.startTask2">
+    <app-survey-pairs *ngIf="surveyService.isScalesCompleted" [surveyId]="this.surveyId"></app-survey-pairs>
+
+</div>
+
+

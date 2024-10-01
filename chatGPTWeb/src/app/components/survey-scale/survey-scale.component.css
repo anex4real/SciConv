@@ -1,0 +1,60 @@
+
+datalist {
+    display: flex;
+    justify-content: space-between;
+    position: absolute;
+    width: 80%;
+    bottom: -25px;
+}
+
+datalist option {
+    position: relative;
+    height: 10px;
+}
+
+datalist option::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 50%;
+    transform: translateX(-50%);
+    height: 15px;
+    width: 1px;
+    background: black;
+}
+.scale-name {
+    font-weight: bold;
+    font-size: 1.2rem;
+    text-align: left;
+    margin-bottom: 5px;
+}
+
+.custom-slider {
+    width: 50% /* Set the width of the slider */
+}
+
+/* Hide thumb when currentValue is null */
+.custom-slider.thumb-hidden::-webkit-slider-thumb {
+    opacity: 0;
+}
+
+.custom-slider.thumb-hidden::-moz-range-thumb {
+    opacity: 0;
+}
+
+.custom-slider.thumb-hidden::-ms-thumb {
+    opacity: 0;
+}
+
+
+
+
+
+
+
+
+
+
+
+
+

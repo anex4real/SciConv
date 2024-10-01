@@ -1,0 +1,20 @@
+<div  *ngIf="!surveyService.getWriteToFileFinal()" class="ml-3">
+
+    <div class="button-container mb-1">
+        <div>
+            <button (click)="onSelectChoice(getCurrentPair()[0])">{{ surveyService.scales[getCurrentPair()[0]].name }}</button>
+        </div>
+        <div class="mb-1 definition">{{ surveyService.scales[getCurrentPair()[0]]['definition'] }}</div>
+    </div>
+    <span> or</span>
+    <div class="button-container mt-1">
+        <div>
+            <button (click)="onSelectChoice(getCurrentPair()[1])">{{ surveyService.scales[getCurrentPair()[1]].name }}</button>
+        </div>
+        <div class="mb-1 definition">{{ surveyService.scales[getCurrentPair()[1]]['definition']  }}</div>
+    </div>
+</div>
+
+<div  class="ml-3" *ngIf="surveyService.isPairComparisonFinished(this.surveyId)">
+    <h3>Thank you for completing the survey!</h3>
+</div>

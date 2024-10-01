@@ -1,0 +1,40 @@
+.scale button {
+    width: 40px;
+    height: 40px;
+    margin: 5px;
+    background-color: white;
+    border: 1px solid black;
+}
+
+.scale button:hover {
+    background-color: #DDDDDD;
+}
+
+.scale {
+    display: flex;
+    justify-content: space-between;
+}
+
+table {
+    width: 100%;
+    border-collapse: collapse;
+}
+
+th, td {
+    border: 1px solid black;
+    padding: 8px;
+    text-align: center;
+}
+
+.button-container {
+    display: flex;             /* Enables flexbox layout */
+    justify-content: space-between; /* Optional: Adds space between the buttons */
+    gap: 10px;                 /* Optional: Adds a gap between the divs */
+}
+
+.button-container > div {
+    flex: 1;                   /* Makes each button take equal space */
+}
+.definition {
+    flex: 5!important;                   /* Makes each button take equal space */
+}

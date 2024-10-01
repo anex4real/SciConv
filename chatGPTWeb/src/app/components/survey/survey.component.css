@@ -1,0 +1,14 @@
+.scale {
+    display: flex;
+    justify-content: space-between;
+    margin: 10px 0;
+}
+
+.definition {
+    font-size: 12px;
+    color: gray;
+}
+
+button {
+    margin: 10px 0;
+}
