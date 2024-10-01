@@ -15,7 +15,7 @@ export class SurveyComponent {
         this.route.params.subscribe(params => {
             this.surveyId = params['id'];
             // @ts-ignore
-            if(this.surveyId != "SciConv" && this.surveyId != "codeocean" ) {
+            if(this.surveyId != "sciconv" && this.surveyId != "codeocean" ) {
                 alert('Survey ID:'+  this.surveyId);
             }
             // You can now use this.surveyId to fetch survey data or perform other logic
