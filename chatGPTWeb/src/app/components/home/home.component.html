@@ -66,7 +66,13 @@
     <div class="chat-input" *ngIf="this.stageSubject.value==stages.Start">
         <form (ngSubmit)="onSubmit()" #fileUploadForm="ngForm">
             <input type="file" (change)="onFileChange($event)" accept=".zip"/>
-            <button type="submit">Upload</button>
+            <button  type="submit" [disabled]="isLoading">
+                <span *ngIf="!isLoading">Upload</span>
+                <span *ngIf="isLoading">
+                    <i class="fa fa-spinner fa-spin"></i> Loading...
+                    </span>
+            </button>
+
         </form>
     </div>
     <div class="chat-input" *ngIf="this.stageSubject.value==stages.Start">
@@ -77,6 +83,11 @@
 
     <div class="chat-input" *ngIf="this.stageSubject.value!=stages.Start">
         <input [(ngModel)]="userMessage" placeholder="Type your message here..." (keydown.enter)="sendMessage()"/>
-        <button (click)="sendMessage()">Send</button>
+        <button  type="submit" [disabled]="isLoading" (click)="sendMessage()">
+            <span *ngIf="!isLoading">Send</span>
+            <span *ngIf="isLoading">
+                    <i class="fa fa-spinner fa-spin"></i> Loading...
+                    </span>
+        </button>
     </div>
 </div>

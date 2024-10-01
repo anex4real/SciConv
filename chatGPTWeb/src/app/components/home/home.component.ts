@@ -68,6 +68,7 @@ export class HomeComponent implements OnInit {
     errorMessage: any;
     GOBACKNUMBER: any = 3;
     goBack: any
+    isLoading: boolean = false
 
 
     constructor(private sanitizer: DomSanitizer,
@@ -164,6 +165,8 @@ export class HomeComponent implements OnInit {
     }
 
     sendMessage() {
+
+
         this.messages.push({
             role: this.role,
             contentShort: this.userMessage,
@@ -211,7 +214,9 @@ export class HomeComponent implements OnInit {
     }
 
     findProjectFiles() {
+        this.isLoading = true;
         this.backend.findProjectFiles(this.projectUuid).subscribe((response: any) => {
+            this.isLoading = false;
             this.messages.push(...response)
             let responseLength = response.length
 
@@ -258,7 +263,11 @@ export class HomeComponent implements OnInit {
     }
 
     parametersToUseConfirmation() {
+        this.isLoading = true;
+
         this.backend.parametersToUseConfirmation(this.projectUuid, this.messages).subscribe((response: any) => {
+                this.isLoading = false;
+
                 this.messages.push(...response)
                 let responseLength = response.length
                 if (response[responseLength - 1].stage) {
@@ -280,9 +289,12 @@ export class HomeComponent implements OnInit {
             contentShort: "I will now infer all the necessary information to build the environment, which can take some time.",
             jsonObject: false
         });
+        this.isLoading = true;
 
 
         this.backend.findConfigurations(this.projectUuid, this.executableFiles, this.commandToRun).subscribe((response: any) => {
+            this.isLoading = false;
+
             console.log(response);
             this.messages.push(...response)
 
@@ -316,12 +328,14 @@ export class HomeComponent implements OnInit {
 
     findConfigurationsFunc(userMessage: any) {
 
+        this.isLoading = true;
         let myMessage = "Here are the configuration used: " +
             JSON.stringify(this.configurations) +
             "The question is: Are they correct, or would you like to change anything? \n" +
             "The user action is: " + userMessage;
 
         this.backend.findConfigurationsFunc(this.projectUuid, this.messages, myMessage).subscribe((response: any) => {
+            this.isLoading = false;
             console.log(response);
             this.messages.push(...response)
             let responseLength = response.length
@@ -342,7 +356,11 @@ export class HomeComponent implements OnInit {
     }
 
     buildDockerFile() {
+        this.isLoading = true;
+
         this.backend.BuildDockerFile(this.projectUuid, this.messages).subscribe((response: any) => {
+            this.isLoading = false;
+
             console.log(response);
             this.messages.push(...response)
             let responseLength = response.length
@@ -360,7 +378,11 @@ export class HomeComponent implements OnInit {
             contentShort: "I will now build the environment to run the experiment, which can take some time.",
             jsonObject: false
         });
+        this.isLoading = true;
+
         this.backend.BuildDockerImage(this.projectUuid, this.messages).subscribe((response: any) => {
+            this.isLoading = false;
+
             console.log(response);
             this.messages.push(...response)
             let responseLength = response.length
@@ -380,7 +402,7 @@ export class HomeComponent implements OnInit {
                     this.goBack = this.GOBACKNUMBER
                 }
             }
-                this.changeStage(response[responseLength - 1].stage)
+            this.changeStage(response[responseLength - 1].stage)
 
         });
     }
@@ -393,7 +415,10 @@ export class HomeComponent implements OnInit {
             jsonObject: false
         });
         console.log("asasas" + this.commandToRun)
+        this.isLoading = true;
         this.backend.RunContainer(this.projectUuid, this.dockerImageID, this.commandToRun, this.messages).subscribe((response: any) => {
+            this.isLoading = false;
+
             console.log(response);
             this.messages.push(...response)
             let responseLength = response.length
@@ -422,7 +447,10 @@ export class HomeComponent implements OnInit {
             contentShort: "I will now package all the experiment results into a zip folder and provide you with the result as soon as possible.\n",
             jsonObject: false
         });
+        this.isLoading = true;
         this.backend.ResearchArtifact(this.projectUuid, this.dockerImageID, this.commandToRun, this.messages).subscribe((response: any) => {
+            this.isLoading = false;
+
             console.log("response");
             console.log(response);
             this.messages.push(...response)
@@ -461,13 +489,16 @@ export class HomeComponent implements OnInit {
     }
 
     chatInteraction() {
+
         if (this.stageAfterChat == undefined) {
             console.error("forcei mudança")
             this.stageAfterChat = this.stages.FindConfigurationsInteraction
         }
+        this.isLoading = true;
         this.backend.ChatInteraction(this.projectUuid, this.messages, this.stageAfterChat).subscribe((response: any) => {
-            console.log(response);
+            this.isLoading = false;
 
+            console.log(response);
             this.messages.push(...response)
             let responseLength = response.length
 
@@ -484,10 +515,7 @@ export class HomeComponent implements OnInit {
     }
 
 
-    onFileChange(event
-                     :
-                     any
-    ) {
+    onFileChange(event: any) {
         const file = event.target.files[0];
         if (file && (file.type === 'application/x-zip-compressed' || file.type === 'application/zip')) {
             this.fileToUpload = file;
@@ -502,7 +530,11 @@ export class HomeComponent implements OnInit {
         if (this.fileToUpload) {
             const formData = new FormData();
             formData.append('file', this.fileToUpload);
+
+            this.isLoading = true;
             this.backend.uploadProject(formData).subscribe((response: any) => {
+                this.isLoading = false;
+
                 console.log("response");
                 console.log(response);
                 let responseLength = response.length
