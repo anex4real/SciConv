@@ -152,3 +152,7 @@ can be found in the LICENSE file at https://angular.io/license
 */
 html, body { height: 100%; }
 body { margin: 0; font-family: Roboto, "Helvetica Neue", sans-serif; }
+
+.bold {
+  font-weight: bold;
+}

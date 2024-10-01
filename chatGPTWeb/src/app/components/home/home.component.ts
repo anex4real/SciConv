@@ -4,6 +4,7 @@ import {BackendService} from "../../service";
 import {HttpClient} from '@angular/common/http';
 import {Message} from "../../interface/interfaces";
 import {BehaviorSubject} from 'rxjs';
+import {SurveyService} from "../../service/survey.service";
 
 enum Stage {
     Start = 'Start',
@@ -70,7 +71,8 @@ export class HomeComponent implements OnInit {
 
 
     constructor(private sanitizer: DomSanitizer,
-                protected backend: BackendService, private http: HttpClient
+                protected backend: BackendService, private http: HttpClient,
+                public surveyService: SurveyService
     ) {
         this.goBack = this.GOBACKNUMBER
     }
@@ -371,14 +373,15 @@ export class HomeComponent implements OnInit {
                 this.stageAfterChat = this.stages.FindConfigurations
             }
             if (response[responseLength - 1].goBack) {
+                console.log("goback")
                 this.goBack = this.goBack - 1
                 if (this.goBack <= 0) {
                     this.changeStage(this.stages.Start)
                     this.goBack = this.GOBACKNUMBER
                 }
-            } else {
-                this.changeStage(response[responseLength - 1].stage)
             }
+                this.changeStage(response[responseLength - 1].stage)
+
         });
     }
 
@@ -522,5 +525,10 @@ export class HomeComponent implements OnInit {
         } else {
             this.errorMessage = 'Invalid password. Please try again.';
         }
+    }
+
+
+    nextStep() {
+
     }
 }

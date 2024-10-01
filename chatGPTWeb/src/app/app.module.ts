@@ -16,6 +16,9 @@ import {BrowserModule, Title} from '@angular/platform-browser';
 import {platformBrowserDynamic} from '@angular/platform-browser-dynamic';
 import {NgModule} from "@angular/core";
 import {BrowserAnimationsModule} from "@angular/platform-browser/animations";
+import {SurveyPairsComponent} from "./components/survey-pairs/survey-pairs.component";
+import {SurveyScaleComponent} from "./components/survey-scale/survey-scale.component";
+import {SurveyComponent} from "./components/survey/survey.component";
 
 
 @NgModule({
@@ -26,7 +29,9 @@ import {BrowserAnimationsModule} from "@angular/platform-browser/animations";
         RoutingModule,
         AlertModule,
         FormsModule,
-        BrowserAnimationsModule
+        BrowserAnimationsModule,
+
+
     ],
     providers: [BackendService, Title,
         {provide: HTTP_INTERCEPTORS, useClass: ErrorInterceptor, multi: true},
@@ -38,6 +43,9 @@ import {BrowserAnimationsModule} from "@angular/platform-browser/animations";
         HeaderComponent,
         HomeComponent,
         FooterComponent,
+        SurveyPairsComponent,
+        SurveyScaleComponent,
+        SurveyComponent
     ],
     bootstrap: [
         AppComponent

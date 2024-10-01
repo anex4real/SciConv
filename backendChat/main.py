@@ -10,6 +10,7 @@ import tempfile
 
 HOST_VOLUME_PATH = ""
 PROJECTS_LOCATION = 'projects'
+QUESTIONNAIRES_LOCATION = 'questionnaires'
 
 app = Flask(__name__)
 cors = CORS(app, resources={r"/api/*": {"origins": "*"}})
@@ -987,6 +988,24 @@ def researchArtifactChat(projectUuid):
     return makeResponse(messagesToUser)
 
 
+@app.route("/<surveyId>/nasa", methods=['POST'])
+@cross_origin()
+def nasa(surveyId):
+    requestData = json.loads(request.data)
+
+    # Step 2: Specify the filename
+    number = surveyId + datetime.now().strftime("%y%m%d_%H%M")
+    file_path = os.path.join(QUESTIONNAIRES_LOCATION, f"{number}.json")
+
+    # Step 3: Write the dictionary to a JSON file
+    with open(file_path, 'w') as json_file:
+        json.dump(requestData, json_file, indent=4)  # indent for pretty printing
+
+    print(f"Data has been written to {number}.json.")
+
+    return makeResponse([])
+
+
 if __name__ == '__main__':
     try:
         HOST_VOLUME_PATH = os.environ.get("HOST_VOLUME_PATH")
@@ -1001,6 +1020,12 @@ if __name__ == '__main__':
             print(f"Folder '{PROJECTS_LOCATION}' created.")
         else:
             print(f"Folder '{PROJECTS_LOCATION}' already exists.")
+
+        if not os.path.exists(QUESTIONNAIRES_LOCATION):
+            os.makedirs(QUESTIONNAIRES_LOCATION)
+            print(f"Folder '{QUESTIONNAIRES_LOCATION}' created.")
+        else:
+            print(f"Folder '{QUESTIONNAIRES_LOCATION}' already exists.")
 
         app.run(host='0.0.0.0', port=8080)
     except Exception as e:
