@@ -12,7 +12,6 @@ export class SurveyPairsComponent {
   constructor(public surveyService: SurveyService) {}
 
   getCurrentPair() {
-    console.log("aqui")
     return this.surveyService.getCurrentPair();
   }
 

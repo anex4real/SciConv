@@ -1,3 +1,4 @@
+import re
 import shutil
 import zipfile
 from copy import copy
@@ -51,7 +52,7 @@ def upload_file():
 
     try:
         if file and file.filename.endswith('.zip'):
-            firtsTime = True
+
             # Save the file temporarily
             temp_path = os.path.join(PROJECTS_LOCATION, file.filename)
             file.save(temp_path)
@@ -66,25 +67,30 @@ def upload_file():
 
                 if not folder_names:
                     print("I can’t select your folder")
+                    os.remove(temp_path)  # Clean up the temporary file
                     appendMessage(messagesToUser, contentShort="I can’t select your folder", stage="Start")
                     return makeResponse(messagesToUser, 201, True)
 
-                projectLocation = os.path.join(PROJECTS_LOCATION, projectUuid)
+
+            projectUuid =  re.sub(r'[^\w\s_-]', '', projectUuid)
+            projectLocation = os.path.join(PROJECTS_LOCATION, projectUuid)
+
+            if os.path.exists(projectLocation) and os.path.isdir(projectLocation):
+                number = datetime.now().strftime("%m%d%H%M")
+                newProjectUuid = f"{projectUuid}_{number}"
+                projectLocation = os.path.join(PROJECTS_LOCATION, newProjectUuid)
+                print(f"ProjectLocation '{projectLocation}' has been changed.")
+                projectLocationRoot = os.path.join(PROJECTS_LOCATION, newProjectUuid, projectUuid)
+                projectLocationFiles = os.path.join(PROJECTS_LOCATION, newProjectUuid, "files")
+                projectUuid= newProjectUuid
+
+            else:
                 projectLocationRoot = os.path.join(PROJECTS_LOCATION, projectUuid, projectUuid)
                 projectLocationFiles = os.path.join(PROJECTS_LOCATION, projectUuid, "files")
 
-                if firtsTime:
-                    if os.path.exists(projectLocation) and os.path.isdir(projectLocation):
-                        try:
-                            shutil.rmtree(projectLocation)
-                            print(f"Folder '{projectLocation}' has been removed.")
-                        except Exception as e:
-                            print(f"Error removing folder '{projectLocation}': {e}")
-                    else:
-                        print(f"Folder '{projectLocation}' does not exist.")
-                firtsTime = False
 
-                # Extract all files
+            # Extract all files into the new project location
+            with zipfile.ZipFile(temp_path, 'r') as zip_ref:
                 zip_ref.extractall(projectLocation)
 
             os.remove(temp_path)  # Remove the zip file after extraction
@@ -336,7 +342,7 @@ def find_configurations(projectUuid):
                                                   '\nProvide your response in the following format:'
                                                   '{ "PL": [all the programming languages used], "PLVersion": [all the programming language version],"Dependencies": [dependencies], "DependenciesVersion": [version of dependencies] }'
                                                   '\nEnsure the dependency names are correct. If the provided name is incorrect, adjust it. For example, in Python, to install the sklearn dependency, the correct command is pip install scikit-learn.'
-                                                  '\nMake sure to list the most recent supported version of the programming language, and format the result in JSON.'
+                                                  '\nBe careful to return a list in which the version of the programming language and the version of the dependencies used are compatible and format the result in JSON.'
                                                   "\nOnly put values that you can infer, don't put generic values"
                                                   '\nCommand To Use: ' + commandToRun +
                                    '\nExample response:'
@@ -806,9 +812,11 @@ def runDockerContainerChat(projectUuid):
             containerLogs += exit_code
 
             print(containerLogs)
-
-            container.stop()
-            container.remove()
+            try:
+                container.stop()
+                container.remove()
+            except Exception as e:
+                print(str(e))
 
             # waitToConclude(container)
             # containerLogs = container.logs().decode("utf-8")
@@ -1035,7 +1043,7 @@ if __name__ == '__main__':
 
     # Get current working directory
     # Get current working directory
-    # project_uuid = "ads_main"
+    # project_uuid = "tutorial_project"
     # current_path = os.getcwd()
     # directory_path = os.path.join('projects', project_uuid, 'files')  # Improved path handling
     # directory_path2 = os.path.join('projects', project_uuid)  # Improved path handling
@@ -1067,7 +1075,7 @@ if __name__ == '__main__':
     #
     # # Get current timestamp for unique container name
     # number = datetime.now().strftime("%Y%m%d%H%M%S")
-    # project_image = "ads_main:20240926180050"  # Ensure this image exists
+    # project_image = "tutorial_project:20240926180050"  # Ensure this image exists
     #
     # # Start Docker client
     # dockerClientResult = startDockerClient()
@@ -1101,9 +1109,9 @@ if __name__ == '__main__':
     # dockerClientResult = startDockerClient()
     # dockerClient, port = dockerClientResult["dockerClient"], dockerClientResult["port"]
     # number = datetime.now().strftime("%Y%m%d%H%M%S")
-    # projectUuid = "adsketch_main"
+    # projectUuid = "tutorialproject10021525"
     # projectPath = 'projects/' + projectUuid + "/"
-    #
+    # #
     # dockerImageBuilt = dockerClient.images.build(path=projectPath, tag=projectUuid + ":" + number, rm=True)
     # dockerImageBuiltFiltered = [s for s in dockerImageBuilt[0].tags if projectUuid in s]
     # dockerTagslength = len(dockerImageBuiltFiltered) - 1
@@ -1139,4 +1147,5 @@ if __name__ == '__main__':
     #
     # print(containerLogs)
     #
-    # # container.stop()
+    # container.stop()
+    # container.remove()

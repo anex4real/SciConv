@@ -17,7 +17,6 @@ import {platformBrowserDynamic} from '@angular/platform-browser-dynamic';
 import {NgModule} from "@angular/core";
 import {BrowserAnimationsModule} from "@angular/platform-browser/animations";
 import {SurveyPairsComponent} from "./components/survey-pairs/survey-pairs.component";
-import {SurveyScaleComponent} from "./components/survey-scale/survey-scale.component";
 import {SurveyComponent} from "./components/survey/survey.component";
 
 
@@ -44,7 +43,6 @@ import {SurveyComponent} from "./components/survey/survey.component";
         HomeComponent,
         FooterComponent,
         SurveyPairsComponent,
-        SurveyScaleComponent,
         SurveyComponent
     ],
     bootstrap: [

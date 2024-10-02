@@ -1,6 +1,37 @@
 <div *ngIf="!surveyService.isScalesCompleted" class="ml-3">
     <div>
-        <app-survey-scale [scaleIndex]="1"></app-survey-scale>
+        <div class="survey-item" *ngFor="let scale of surveyScales">
+            <!-- Scale Name and Description -->
+            <div class="scale-info">
+                <div class="scale-name">{{ scale.name }}</div>
+                <div class="scale-description">{{ scale.description }}</div>
+            </div>
+
+            <!-- Custom Range Input with Tick Marks -->
+            <div class="slider-container mb-2">
+                <span class="slider-label">Low</span>
+                <input
+                        type="range"
+                        min="5"
+                        max="100"
+                        step="5"
+                        [value]="currentValue"
+                        (input)="onRatingSelected($event, scale)"
+                        list="tickmarks"
+                        class="custom-slider"
+                        [class.thumb-hidden]="currentValue === null"
+                />
+                <span class="slider-label">High</span>
+
+                <!-- Datalist for Ticks -->
+                <datalist id="tickmarks">
+                    <option *ngFor="let tick of ticks" [value]="tick"></option>
+                </datalist>
+
+            </div>
+
+        </div>
+
     </div>
     <button (click)="nextStep()">Next</button>
 

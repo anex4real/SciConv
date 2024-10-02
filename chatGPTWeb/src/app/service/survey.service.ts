@@ -13,6 +13,7 @@ export class SurveyService {
     writeToFile: boolean = false;
     writeToFileFinal: boolean = false;
     NUM_SCALES = 6;
+    scalesNames = ['Mental Demand', 'Physical Demand', 'Temporal Demand', 'Performance', 'Effort', 'Frustration']
     scales = [
 
         {
@@ -62,7 +63,7 @@ export class SurveyService {
     pairings = ['4 3', '2 5', '2 4', '1 5', '3 5', '1 2', '1 3', '2 0', '5 4', '3 0', '3 2', '0 4', '0 1', '4 1', '5 0'];
     pair_num: number = 0;
 
-    resultsRating: number[] = [];
+    rating: number[] = [];
     resultsTally: number[] = new Array(this.NUM_SCALES).fill(0);
     currentPairIndex = 0;
 
@@ -79,11 +80,12 @@ export class SurveyService {
 
     setRating(index: number, value: any) {
         console.log("aqui")
-        this.resultsRating[index] = value;
-        console.log(this.resultsRating)
+        this.rating[index] = value;
+        console.log(this.scales[index].name)
+        console.log(this.rating)
     }
 
-    isPairComparisonFinished(surveyId:any) {
+    isPairComparisonFinished(surveyId: any) {
         this.writeToFile = this.currentPairIndex >= this.pairings.length;
         console.log("final")
         console.log(this.writeToFile)
@@ -93,11 +95,27 @@ export class SurveyService {
         if (this.writeToFile) {
             if (!this.writeToFileFinal) {
                 this.calculateResults()
-                const dataToSend = {
-                    weights: this.results_weight,
-                    tally: this.resultsTally,
-                    overall: this.results_overall
-                };
+                // const dataToSend = {
+                //     rating: this.rating,
+                //     tally: this.resultsTally,
+                //     weights: this.results_weight,
+                //     overall: this.results_overall,
+                //
+                // };
+                let resultToSend = []
+                for (let i = 0; i < this.NUM_SCALES; i++) {
+                    let element = {
+                        "name": this.scales[i].name,
+                        "rating": this.rating[i],
+                        "tally": this.resultsTally[i],
+                        "weights": this.results_weight[i],
+                    }
+                    resultToSend.push(element)
+                }
+                let dataToSend={"resultToSend":resultToSend,
+                    "overall": this.results_overall
+
+                }
 
                 // Send data to the server
                 this.sendDataToServer(dataToSend, surveyId).subscribe((response: any) => {
@@ -118,6 +136,7 @@ export class SurveyService {
         console.log(this.pairings[this.currentPairIndex].split(' ').map(Number))
         return this.pairings[this.currentPairIndex].split(' ').map(Number);
     }
+
     getScales() {
         return this.scales
     }
@@ -130,7 +149,7 @@ export class SurveyService {
     areScalesCompleted() {
 
 
-        const nullElements = this.resultsRating.filter(element => element === null);
+        const nullElements = this.rating.filter(element => element === null);
 
         if (nullElements.length > 0) {
             console.log(`The array contains ${nullElements.length} null element(s).`);
@@ -154,23 +173,11 @@ export class SurveyService {
         this.pair2Def = this.scales[parseInt(indexes[1])].description;
     }
 
-
-    // nextPair() {
-    //     this.pair_num++;
-    //     if (this.pair_num >= this.pairings.length) {
-    //         this.part3 = false;
-    //         this.part4 = true;
-    //         this.calculateResults();
-    //     } else {
-    //         this.setPairLabels();
-    //     }
-    // }
-
     calculateResults() {
         this.results_overall = 0;
         for (let i = 0; i < this.NUM_SCALES; i++) {
             this.results_weight[i] = this.resultsTally[i] / 15.0;
-            this.results_overall += this.results_weight[i] * this.resultsRating[i];
+            this.results_overall += this.results_weight[i] * this.rating[i];
         }
         console.log("Weight")
         console.log(this.results_weight)
@@ -183,19 +190,15 @@ export class SurveyService {
         // Prepare data to send to the server
 
 
-
     }
 
-    sendDataToServer(dataToSend: any, surveyId:any): Observable<any> {
+    sendDataToServer(dataToSend: any, surveyId: any): Observable<any> {
+
         console.log("send")
         return this.http.post(`${this.baseUrl}/${surveyId}/nasa`, dataToSend);
 
     }
 
-
-    finalizeResults() {
-        // Calculate weighted results (optional depending on how you want to display results)
-    }
 
     getWriteToFileFinal() {
         return this.writeToFileFinal
