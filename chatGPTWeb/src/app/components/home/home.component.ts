@@ -387,24 +387,32 @@ export class HomeComponent implements OnInit {
             this.messages.push(...response)
             let responseLength = response.length
 
-            if (response[responseLength - 1].stage == "RunContainer") {
-                this.dockerImageID = response[responseLength - 1]["content"];
-                console.log(this.dockerImageID)
-            } else if (response[responseLength - 1].stage == "WaitChatInteraction") {
-                this.messageToAsk = undefined
-                this.stageAfterChat = this.stages.FindConfigurations
-            }
             if (response[responseLength - 1].goBack) {
                 console.log("goback")
                 this.goBack = this.goBack - 1
                 if (this.goBack <= 0) {
-                    this.changeStage(this.stages.Start)
+                    this.changeStage(this.stages.FindConfigurationsInteraction)
                     this.goBack = this.GOBACKNUMBER
+                } else {
+                    this.auxFunction(response, responseLength)
                 }
+            } else {
+                this.auxFunction(response, responseLength)
             }
-            this.changeStage(response[responseLength - 1].stage)
+
 
         });
+    }
+
+    auxFunction(response: any, responseLength: any) {
+        if (response[responseLength - 1].stage == "RunContainer") {
+            this.dockerImageID = response[responseLength - 1]["content"];
+            console.log(this.dockerImageID)
+        } else if (response[responseLength - 1].stage == "WaitChatInteraction") {
+            this.messageToAsk = undefined
+            this.stageAfterChat = this.stages.FindConfigurations
+        }
+        this.changeStage(response[responseLength - 1].stage)
     }
 
     runContainer() {
