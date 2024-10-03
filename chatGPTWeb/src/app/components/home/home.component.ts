@@ -1,10 +1,8 @@
 import {Component, OnInit} from '@angular/core';
 import {DomSanitizer} from "@angular/platform-browser";
 import {BackendService} from "../../service";
-import {HttpClient} from '@angular/common/http';
 import {Message} from "../../interface/interfaces";
 import {BehaviorSubject} from 'rxjs';
-import {SurveyService} from "../../service/survey.service";
 
 enum Stage {
     Start = 'Start',
@@ -42,7 +40,6 @@ export class HomeComponent implements OnInit {
     currentStage$ = this.stageSubject.asObservable(); // Observable to track the current stage
     role: string = 'system'; // You can make this dynamic as needed
     stageAfterChat: any
-    stageCurrentChat: any
 
     userMessage = '';
     configurations: any
@@ -51,9 +48,11 @@ export class HomeComponent implements OnInit {
     configurationFiles: object = {}
     dockerImageID: any;
     //todo remover conteudo
-    projectUuid: string = 'ads_main';
+    projectUuid: string = ""
+    //projectUuid: string = 'ads_main';
     //projectUuid: string = "iubfc_main"
-    commandToRun = "python ./yahoo_demo.py\n"
+    commandToRun = ""
+    //commandToRun = "python ./yahoo_demo.py\n"
     //commandToRun: string = "python ./myfile.py";
     //commandToRun: string = "make"
     //commandToRun: string = "make && ./iubfc 13 0.5 ./Data/IMDBID.txt ./Data/IMDBEdge.txt 10000 ./Data/dataOut.txt"
@@ -64,50 +63,39 @@ export class HomeComponent implements OnInit {
     modified_files: any;
     messageToAsk: any;
     examplesToAsk: any = undefined
-    showInfo: boolean = false
     errorMessage: any;
     GOBACKNUMBER: any = 3;
     goBack: any
     isLoading: boolean = false
 
 
-    constructor(private sanitizer: DomSanitizer,
-                protected backend: BackendService, private http: HttpClient,
-                public surveyService: SurveyService
-    ) {
+    constructor(private sanitizer: DomSanitizer, protected backend: BackendService) {
         this.goBack = this.GOBACKNUMBER
     }
 
     ngOnInit(): void {
-        // Subscribe to stage changes
         this.currentStage$.subscribe((newStage) => {
             console.log(`Stage changed to ${newStage}`);
             this.performActionBasedOnStage(newStage);
         });
     }
 
-    // Mapeia o estado de visibilidade para cada mensagem (por ID ou algum identificador único)
     examplesVisibility: { [key: string]: boolean } = {};
 
     toggleExamples(message: any): void {
-        // Inverte o estado de visibilidade para a mensagem específica
         const messageId = message.id || message.contentShort;
         this.examplesVisibility[messageId] = !this.examplesVisibility[messageId];
     }
 
     isExamplesVisible(message: any): boolean {
-        // Retorna true se a mensagem tiver exemplos visíveis
         const messageId = message.id || message.contentShort;
         return !!this.examplesVisibility[messageId];
     }
 
-    // Method to change the stage
     changeStage(newStage: Stage): void {
         this.stageSubject.next(newStage);
     }
 
-
-    // Perform an action based on the stage
     private performActionBasedOnStage(stage: Stage): void {
         switch (stage) {
             case Stage.Start:
@@ -154,19 +142,15 @@ export class HomeComponent implements OnInit {
         }
     }
 
-    // Method to get the keys of the object
     objectKeys(obj: any): string[] {
         return Object.keys(obj);
     }
 
-    // Method to check if a value is an object
     isObject(value: any): boolean {
         return value && typeof value === 'object' && !Array.isArray(value);
     }
 
     sendMessage() {
-
-
         this.messages.push({
             role: this.role,
             contentShort: this.userMessage,
@@ -210,7 +194,6 @@ export class HomeComponent implements OnInit {
 
         this.userMessage = this.projectUuid
         //this.sendMessage()
-
     }
 
     findProjectFiles() {
@@ -243,7 +226,6 @@ export class HomeComponent implements OnInit {
         });
     }
 
-
     parametersToUseFunc() {
         this.messages.push({
             role: "assistant",
@@ -257,9 +239,7 @@ export class HomeComponent implements OnInit {
                 "You can provide a sequence of commands, e.g., python ./myfile.py && cd folder && python ./myfile2.py "
         });
 
-        //TODO remover
         this.userMessage = this.commandToRun
-        //this.sendMessage()
     }
 
     parametersToUseConfirmation() {
@@ -290,7 +270,6 @@ export class HomeComponent implements OnInit {
             jsonObject: false
         });
         this.isLoading = true;
-
 
         this.backend.findConfigurations(this.projectUuid, this.executableFiles, this.commandToRun).subscribe((response: any) => {
             this.isLoading = false;
@@ -327,7 +306,6 @@ export class HomeComponent implements OnInit {
     }
 
     findConfigurationsFunc(userMessage: any) {
-
         this.isLoading = true;
         let myMessage = "Here are the configuration used: " +
             JSON.stringify(this.configurations) +
@@ -378,8 +356,8 @@ export class HomeComponent implements OnInit {
             contentShort: "I will now build the environment to run the experiment, which can take some time.",
             jsonObject: false
         });
-        this.isLoading = true;
 
+        this.isLoading = true;
         this.backend.BuildDockerImage(this.projectUuid, this.messages).subscribe((response: any) => {
             this.isLoading = false;
 
@@ -399,8 +377,6 @@ export class HomeComponent implements OnInit {
             } else {
                 this.auxFunction(response, responseLength)
             }
-
-
         });
     }
 
@@ -516,9 +492,7 @@ export class HomeComponent implements OnInit {
                     "I want to change the project location.\n" +
                     "I want to change the computing environment used (programming languages, dependencies).\n"
             }
-
             this.changeStage(response[responseLength - 1].stage)
-
         });
     }
 
@@ -565,10 +539,5 @@ export class HomeComponent implements OnInit {
         } else {
             this.errorMessage = 'Invalid password. Please try again.';
         }
-    }
-
-
-    nextStep() {
-
     }
 }

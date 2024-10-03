@@ -16,25 +16,6 @@ const routes: Routes = [
                 title: 'survey'
             }
         }
-
-// ,
-// {path: 'jupyterhub', component: JupyterComponent},
-// {
-//   path: 'project/create', component: ProjectComponent, data: {
-//     title: 'Project Creation'
-//   }
-// },
-// {
-//   path: 'projects', component: ProjectsListComponent, data: {
-//     title: 'List Projects'
-//   }
-// },
-// {
-//   path: 'project/edit/:id', component: ProjectEditComponent, data: {
-//     title: 'Edit the Project'
-//   }
-
-
 ];
 
 @NgModule({

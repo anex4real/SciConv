@@ -1,68 +1,9 @@
 <mat-nav-list>
-    <!--    <a mat-list-item [matMenuTriggerFor]="docMenu">
-            <mat-icon>description</mat-icon>
-            <span class="nav-caption">Create Repository</span>
-        </a>-->
     <button mat-menu-item routerLink="project/create" (click)="onSidenavClose()">
             <mat-icon>description</mat-icon>Create Project
     </button>
     <button mat-menu-item routerLink="projects" (click)="onSidenavClose()">
             <mat-icon>description</mat-icon>List Projects
     </button>
-<!--    <button mat-menu-item routerLink="project/edit/1" (click)="onSidenavClose()">-->
-<!--        <mat-icon></mat-icon>-->
-<!--            <mat-icon>description</mat-icon>-->
-<!--            Edit Project-->
-<!--    </button>-->
-    <!--    <mat-menu #docMenu="matMenu">
-                  <button mat-menu-item routerLink="/searchdoc" (click)="onSidenavClose()">
-                       <mat-icon>search</mat-icon>
-                       Search Document
-                   </button>
-                   <button mat-menu-item routerLink="/createdoc" (click)="onSidenavClose()">
-                       <mat-icon>description</mat-icon>
-                       Document
-                   </button>
-
-               </mat-menu>
-
-               <mat-menu #menu="matMenu">
-                   <button mat-menu-item routerLink="/event/conservation_restoration/1" (click)="onSidenavClose()">
-                       <mat-icon>event</mat-icon>
-                       Conservation and restoration action
-                   </button>
-                   <button mat-menu-item routerLink="/event/support/1" (click)="onSidenavClose()">
-                       <mat-icon>event</mat-icon>
-                       Support transfer action
-                   </button>
-                   <button mat-menu-item routerLink="/event/generic/1" (click)="onSidenavClose()">
-                       <mat-icon>event</mat-icon>
-                       Generic
-                   </button>
-               </mat-menu>
-               <a mat-list-item routerLink="/searchplace" (click)="onSidenavClose()">
-                   <mat-icon>place</mat-icon>
-                   <span class="nav-caption">Place</span>
-               </a>
-               <a mat-list-item routerLink="/searchorganization" (click)="onSidenavClose()">
-                   <mat-icon>group_add</mat-icon>
-                   <span class="nav-caption">Organization</span>
-               </a>
-               <a mat-list-item [matMenuTriggerFor]="searchmenu">
-                   <mat-icon>search</mat-icon>
-                   <span class="nav-caption">Advanced Search</span>
-                   <span class="nav-caption">Advanced Search</span>
-               </a>
-               <mat-menu #searchmenu="matMenu">
-                   <button mat-menu-item routerLink="/advancedsearch" (click)="onSidenavClose()">
-                       <mat-icon>search</mat-icon>
-                       Advanced Search
-                   </button>
-                   <button mat-menu-item routerLink="/hierarchy" (click)="onSidenavClose()">
-                       <mat-icon>explore</mat-icon>
-                       Document Hierarchy
-                   </button>
-
-    </mat-menu>-->
 </mat-nav-list>
 
