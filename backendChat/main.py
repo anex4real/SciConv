@@ -107,14 +107,14 @@ def upload_file():
 
             messagesToChat.append(message1)
 
-            firstMessageText = callGPTModel(messagesToChat)
+            gpt_result = callGPTModel(messagesToChat)
 
-            if firstMessageText == "YES":
+            if gpt_result == "YES":
                 appendMessage(messagesToUser, content=projectUuid, stage="FindProjectFiles")
             else:
-                newprojectLocation = os.path.join(PROJECTS_LOCATION, firstMessageText)
+                newprojectLocation = os.path.join(PROJECTS_LOCATION, gpt_result)
                 os.rename(projectLocation, newprojectLocation)
-                appendMessage(messagesToUser, content=firstMessageText, stage="FindProjectFiles")
+                appendMessage(messagesToUser, content=gpt_result, stage="FindProjectFiles")
             return makeResponse(messagesToUser, 201, True)
 
         else:
@@ -153,14 +153,12 @@ def find_files_project():
 
         projectUuid = callGPTModel([askmessage])
 
-        print("possibleProjectUuid:" + projectUuid)
-
         if projectUuid == "NO":
+            print("possibleProjectUuid: No")
             appendMessage(messagesToUser, contentShort="Please enter a valid location", stage="Start")
             return makeResponse(messagesToUser)
 
         directoryPath = f"projects/{projectUuid}/files"
-
         if not os.path.exists(directoryPath):
             print(f"Project '{directoryPath}' does not exist.")
             appendMessage(messagesToUser,
@@ -170,6 +168,7 @@ def find_files_project():
     else:
         projectUuid = possibleProjectUuid
 
+    print("possibleProjectUuid:" + projectUuid)
     directoryPath = f"projects/{projectUuid}/files"
 
     all_files = find_files(directoryPath)
@@ -204,10 +203,6 @@ def find_files_project():
 
             messageText = messageText.replace("```", "").replace("json", "")
             print("find_files_project" + messageText)
-
-            # TODO comentar
-            # messageText = '{"ExecutableFiles": ["myfile.py", "main.py"], "ConfigurationFiles": []}'
-            # messageText = '{"ExecutableFiles": ["newproject\\\\main.py", "main2.py", "main3.py", "new\\\\main.py", "new\\\\main2.py", "new\\\\main3.py", "new\\\\newnew\\\\main2.py", "new\\\\newnew\\\\main3.py"]}'
 
             try:
                 userMessage = json.loads(messageText)
@@ -250,7 +245,6 @@ def parameters_to_use_confirmation(projectUuid):
 
     messagesToChat = return_messages(requestData, messagesToUser)
 
-    # messages= ['projects/newproject\\main.py', 'projects/newproject\\main2.py', 'projects/newproject\\main3.py', 'projects/newproject\\new\\main.py', 'projects/newproject\\new\\main2.py', 'projects/newproject\\new\\main3.py', 'projects/newproject\\new\\newnew\\main2.py', 'projects/newproject\\new\\newnew\\main3.py']
     length = len(messagesToChat)
     myMessage = messagesToChat[length - 1]["content"]
 
@@ -301,14 +295,11 @@ def find_configurations(projectUuid):
     if "filenames" not in requestData:
         appendMessage(messagesToUser, contentShort='filenames are missing', stage="Start")
         return makeResponse(messagesToUser)
-
     filenames = requestData["filenames"]
-    # filenames= ['main.py', 'main2.py', 'main3.py', 'new\\main.py', 'new\\main2.py', 'new\\main3.py', 'new\\newnew\\main2.py', 'new\\newnew\\main3.py']
 
     commandToRun = return_commands_to_use(requestData, messagesToUser)
 
     all_files_lines = {}
-
     try:
         for filename in filenames:
             full_path = os.path.join(directoryPath, filename)
@@ -326,7 +317,6 @@ def find_configurations(projectUuid):
 
     numberInteractions = 3
     chat_message = ""
-
     try:
         while numberInteractions >= 0:
             message1 = {"role": "system",
@@ -336,17 +326,17 @@ def find_configurations(projectUuid):
                                                   "\nGiven the JSON containing the name of the files, the first 50 lines of each file and the command used to execute this project, determine the following:"
                                                   "\nThe programming language of the files."
                                                   "\nThe version of these languages."
-                                                  "\nAny dependencies needed to execute the command and their versions."
-                                                  "\nI am providing the first 50 lines of each file. Some of the imported dependencies may not be utilized within these lines, but please return all the imported and referenced dependencies present in the files."
-                                                  "\nIt is necessary to verify if the version of all the dependencies is compatible with other dependencies and the programming language."
+                                                  "\nAny dependencies needed to execute the command."
+                                                  "\nI am providing the first 50 lines of each file. Some of the imported dependencies may not be utilized within these lines, but please return all the imported and referenced dependencies present in the files that needs to be installed."
+                                                  "\nIt is necessary to verify if all the dependencies is compatible with other dependencies and the programming language."
                                                   '\nProvide your response in the following format:'
-                                                  '{ "PL": [all the programming languages used], "PLVersion": [all the programming language version],"Dependencies": [dependencies], "DependenciesVersion": [version of dependencies] }'
+                                                  '{ "PL": [all the programming languages used], "PLVersion": [all the programming language version],"Dependencies": [dependencies]}'
                                                   '\nEnsure the dependency names are correct. If the provided name is incorrect, adjust it. For example, in Python, to install the sklearn dependency, the correct command is pip install scikit-learn.'
-                                                  '\nBe careful to return a list in which the version of the programming language and the version of the dependencies used are compatible and format the result in JSON.'
+                                                  '\nBe careful to return a result in which the version of the programming language and the dependencies used are compatible and format the result in JSON.'
                                                   "\nOnly put values that you can infer, don't put generic values"
                                                   '\nCommand To Use: ' + commandToRun +
                                    '\nExample response:'
-                                   '\n{ "PL": ["Python"], "PLVersion": "Python 3.8", "Dependencies": ["pandas", "tqdm"], "DependenciesVersion": ["pandas==2.2.0", "tqdm==4.62.0]}'
+                                   '\n{ "PL": ["Python"], "PLVersion": "Python 3.8", "Dependencies": ["pandas", "tqdm"]}'
                                    '\nPlease respond in the specified format. The answer should be exactly in json format.'
                         }
 
@@ -355,12 +345,8 @@ def find_configurations(projectUuid):
             myMessage["content"] = myMessage["content"] + '\nThe first 50 lines of each file: ' + str(filesContent)
             messagesToChat.append(myMessage)
 
-            # TODO descomentar
             messageText = callGPTModel(messagesToChat)
             messageText = messageText.replace("```", "").replace("json", "")
-
-            # TODO comentar
-            # messageText = '{"PL": "Python",  "PLVersion": "Python 3.10", "Dependencies": ["tqdm", "pandas", "shap","numpy", "matplotlib", "scikit-learn"],  "DependenciesVersion": ["shap==0.41.0", "numpy==1.23.4", "pandas==1.5.2", "scipy==1.9.3", "matplotlib==3.6.2", "tqdm==4.64.1"]}'
 
             print(messageText)
             try:
@@ -379,17 +365,13 @@ def find_configurations(projectUuid):
                                        "\nExtract from the following message a JSON in the required format."
                                        "\nMessage: " + messageText +
                                        '\nRequired JSON format: '
-                                       '{ "PL": [programming language], "PLVersion": [programming language version], "Dependencies": [dependencies], "DependenciesVersion": [version of dependencies] }'
+                                       '{ "PL": [programming language], "PLVersion": [programming language version], "Dependencies": [dependencies]}'
                                        '\nEnsure the response is in the specified JSON format. '
                             }
                 messagesToChat.append(message1)
 
-                # TODO descomentar
                 messageText = callGPTModel(messagesToChat)
                 messageText = messageText.replace("```", "").replace("json", "")
-
-                # TODO comentar
-                # messageText = '{"PL": "Python",  "PLVersion": "Python 3.10", "Dependencies": ["tqdm", "pandas", "shap","numpy", "matplotlib", "scikit-learn"],  "DependenciesVersion": ["shap==0.41.0", "numpy==1.23.4", "pandas==1.5.2", "scipy==1.9.3", "matplotlib==3.6.2", "tqdm==4.64.1"]}'
 
                 print(messageText)
                 try:
@@ -433,8 +415,8 @@ def find_configurations_change(projectUuid):
                            '\nConsider the following three options: '
                            '\nReply with "BuildDockerFile" if the content is positive.'
                            '\nReply with "WaitChatInteraction" if the content is negative, but no changes are proposed.'
-                           '\nIf the user wants to make changes, implement the proposed changes and provide your response in the following format: '
-                           '{ "PL": [programming language], "PLVersion": [programming language version], "Dependencies": [dependencies], "DependenciesVersion": [version of dependencies] }'
+                           '\nIf the user wants to make changes, such as use a specific dependency version, implement the proposed changes and provide your response in the following format: '
+                           '{ "PL": [programming language], "PLVersion": [programming language version], "Dependencies": [dependency used, which may include the version]}'
                            '\nIf the user wants to make changes, ensure the response is in the specified JSON format. '
                            'If no changes are requested, the response should be a single word.'
                 }
@@ -464,7 +446,7 @@ def find_configurations_change(projectUuid):
                                        "\nI'll give you a message, and based on the settings used and the actions taken by the user, make the necessary changes."
                                        "\nMessage: " + myMessage +
                                        '\nImplement the proposed changes and provide your response in the following format: '
-                                       '{ "PL": [programming language], "PLVersion": [programming language version], "Dependencies": [dependencies], "DependenciesVersion": [version of dependencies] }'
+                                       '{ "PL": [programming language], "PLVersion": [programming language version], "Dependencies": [dependencies] }'
                                        '\nEnsure the response is in the specified JSON format. '
                             }
                 messagesToChat.append(message1)
@@ -493,7 +475,7 @@ def find_configurations_change(projectUuid):
                                            "\nExtract from the following message a JSON in the required format."
                                            "\nMessage: " + messageText +
                                            '\nRequired JSON format: '
-                                           '{ "PL": [programming language], "PLVersion": [programming language version], "Dependencies": [dependencies], "DependenciesVersion": [version of dependencies] }'
+                                           '{ "PL": [programming language], "PLVersion": [programming language version], "Dependencies": [dependencies]}'
                                            '\nEnsure the response is in the specified JSON format. '
                                 }
                     messagesToChat.append(message1)
@@ -502,9 +484,6 @@ def find_configurations_change(projectUuid):
                     messageText = callGPTModel(messagesToChat)
                     messageText = messageText.replace("```", "").replace("json", "")
                     print(messageText)
-
-                    # TODO comentar
-                    # messageText = '{"PL": "Python",  "PLVersion": "Python 3.10", "Dependencies": ["tqdm", "pandas", "shap","numpy", "matplotlib", "scikit-learn"],  "DependenciesVersion": ["shap==0.41.0", "numpy==1.23.4", "pandas==1.5.2", "scipy==1.9.3", "matplotlib==3.6.2", "tqdm==4.64.1"]}'
 
                     try:
                         appendMessage(messagesToUser, content=json.loads(messageText), jsonObject=True,
@@ -517,8 +496,6 @@ def find_configurations_change(projectUuid):
 
         appendMessage(messagesToUser, content="Ups! some error occurred", contentShort="Ups! some error occurred",
                       stage="FindConfigurationsInteraction")
-        # TODO comentar
-        # messageText = '{"PL": "Python", "PLVersion": "Python 3.10",  "Dependencies": ["numpy", "matplotlib", "scikit-learn"],  "DependenciesVersion": ["numpy==1.21.5", "matplotlib==3.5.1", "scikit-learn==1.2.0"]}'
         return makeResponse(messagesToUser)
 
 
@@ -540,7 +517,7 @@ def buildDockerFileChat(projectUuid):
                 "content": "The stage of this interaction is: BuildDockerFile. "
                            "Check if you find this sentence in the conversation history. I tried to build the Docker image, but an error occurred "
                            "If so, you have to take the previous docker file into account so that you don't provide the same dockerfile because the previous one had an error."
-                           'Please use the information I have provided, such as the dependencies, their versions (DependenciesVersion), programming languages (PL), and programming language versions (PLVersion), to build a Dockerfile. '
+                           'Please use the information I have provided, such as the dependencies, programming languages (PL), and programming language versions (PLVersion), to build a Dockerfile. '
                            'All the files I want to use are located in the files folder. Inside the container, I want all the files to remain in the files folder as well. '
                            'Therefore, the following two commands should be used: '
                            '"WORKDIR /files" and "COPY files/ ."'
@@ -1109,7 +1086,7 @@ if __name__ == '__main__':
     # dockerClientResult = startDockerClient()
     # dockerClient, port = dockerClientResult["dockerClient"], dockerClientResult["port"]
     # number = datetime.now().strftime("%Y%m%d%H%M%S")
-    # projectUuid = "tutorialproject10021525"
+    # projectUuid = "tutorial_project"
     # projectPath = 'projects/' + projectUuid + "/"
     # #
     # dockerImageBuilt = dockerClient.images.build(path=projectPath, tag=projectUuid + ":" + number, rm=True)
