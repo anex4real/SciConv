@@ -5,6 +5,6 @@ export const environment = {
   //baseUrl: 'http://10.61.12.96:8080'
   //baseUrl: 'http://127.0.0.1:8080'
 
-  baseURL: 'http:/194.117.30.76'
+  baseURL: 'http:/194.117.30.76/8080'
   // baseUrl: 'http://sciconv.inesctec.pt:8080',
 };
