@@ -23,7 +23,7 @@ export class BackendService {
         //this.user = this.userSubject.asObservable();
 
         this.getServerHome().subscribe((response: any) => {
-            console.log(response)
+            console.log("successful server connection")
         })
     }
 

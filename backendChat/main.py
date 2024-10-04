@@ -14,11 +14,11 @@ PROJECTS_LOCATION = 'projects'
 QUESTIONNAIRES_LOCATION = 'questionnaires'
 
 app = Flask(__name__)
-cors = CORS(app, resources={r"/api/*": {"origins": "*"}})
-
+#cors = CORS(app, resources={r"/api/*": {"origins": "*"}})
+CORS(app)  # This will allow CORS for all routes by default
 
 @app.route("/", methods=['get'])
-@cross_origin()
+#@cross_origin()
 def home():
     messagesToUser = [
         {"role": "assistant",
