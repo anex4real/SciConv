@@ -8,7 +8,7 @@ RUN npm run build
 # Use `serve` package to serve the production build
 RUN npm install -g serve
 
-CMD ["serve", "-s", "dist", "-l", "4300"]
+CMD ["serve", "-s", "dist", "-l", "4200"]
 
 #CMD ./script.sh
 
