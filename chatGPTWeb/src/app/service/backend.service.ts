@@ -15,14 +15,16 @@ export class BackendService {
     baseUrl: string = environment.baseUrl;  // Set the baseUrl from environment
 
 
-
-
     constructor(private router: Router,
                 private http: HttpClient
     ) {
         //const user: any = localStorage.getItem('user');
         //this.userSubject = new BehaviorSubject<User>(JSON.parse(user));
         //this.user = this.userSubject.asObservable();
+
+        this.getServerHome().subscribe((response: any) => {
+            console.log(response)
+        })
     }
 
 
@@ -48,13 +50,18 @@ export class BackendService {
     }
 
 
-    findProjectFiles(projectUuid: any): Observable<any> {
-        return this.http.post(`${this.baseUrl}/project/find_files`,{
-            possibleProjectUuid: projectUuid,
-            });
+    getServerHome() {
+        return this.http.get(`${this.baseUrl}/`);
     }
 
-    findConfigurations(projectUuid: string, filenames: string[], commandToRun:any) {
+
+    findProjectFiles(projectUuid: any): Observable<any> {
+        return this.http.post(`${this.baseUrl}/project/find_files`, {
+            possibleProjectUuid: projectUuid,
+        });
+    }
+
+    findConfigurations(projectUuid: string, filenames: string[], commandToRun: any) {
         return this.http.post(`${this.baseUrl}/project/${projectUuid}/find-configurations`, {
             filenames: filenames,
             commandToRun: commandToRun
@@ -86,7 +93,7 @@ export class BackendService {
     }
 
     ResearchArtifact(projectUuid: string, dockerImageID: string, commandToRun: string, messages: Message[]) {
-        
+
         return this.http.post(`${this.baseUrl}/project/${projectUuid}/research-artifact-chat`, {
             messages: messages,
             dockerImageId: dockerImageID,
@@ -94,7 +101,7 @@ export class BackendService {
         });
     }
 
-    ChatInteraction(projectUuid: string, messages: Message[], nextStep:any) {
+    ChatInteraction(projectUuid: string, messages: Message[], nextStep: any) {
         return this.http.post(`${this.baseUrl}/project/${projectUuid}/chat-interation`, {
             messages: messages,
             nextStep: nextStep
