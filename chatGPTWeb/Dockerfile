@@ -2,13 +2,13 @@ FROM node:latest
 WORKDIR /webapp
 COPY . .
 RUN npm install
-EXPOSE 4200
+EXPOSE 80
 RUN npm run build
 # Serve the application using a simple static file server
 # Use `serve` package to serve the production build
 RUN npm install -g serve
 
-CMD ["serve", "-s", "dist", "-l", "4200"]
+CMD ["serve", "-s", "dist", "-l", "80"]
 
 #CMD ./script.sh
 
