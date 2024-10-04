@@ -7,6 +7,7 @@ export const environment = {
 
   //baseUrl: 'http://sciconv.inesctec.pt:8080',funcionou com as portas abertas
 
-  //baseUrl: 'http://194.117.30.76:8080', funcionou
-  baseUrl: ' http://172.18.0.3:8080'
+  baseUrl: 'http://194.117.30.76:8080', //funcionou
+
+  //baseUrl: ' http://172.18.0.3:8080' nao deu
 };
