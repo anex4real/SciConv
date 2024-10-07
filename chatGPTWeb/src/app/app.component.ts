@@ -2,6 +2,7 @@ import { Component } from '@angular/core';
 import { ActivatedRoute, Router, NavigationEnd } from '@angular/router';
 import { Title } from '@angular/platform-browser';
 import { filter, map } from 'rxjs/operators';
+import {BackendService} from "./service";
 
 
 @Component({
@@ -13,7 +14,12 @@ import { filter, map } from 'rxjs/operators';
 })
 export class AppComponent {
 
-  constructor(private router: Router, private activatedRoute: ActivatedRoute, private titleService: Title) {
+  constructor(private router: Router, private activatedRoute: ActivatedRoute, private titleService: Title, protected backend: BackendService) {
+
+    this.backend.getServerHome().subscribe((response: any) => {
+      console.log(response)
+      console.log("successful server connection")
+    })
 
     this.router.events.pipe(
       filter((event: any) => event instanceof NavigationEnd),

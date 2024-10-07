@@ -11,6 +11,9 @@ python_metadata
 .jupyter
 venv
 __pycache__
-projects/
 .idea
+
+projects/**/files/
+projects/**/*.zip
+projects/**/*.tar
 
