@@ -15,8 +15,8 @@ QUESTIONNAIRES_LOCATION = 'questionnaires'
 
 app = Flask(__name__)
 #cors = CORS(app, resources={r"/*": {"origins": "*"}})
-cors = CORS(app, resources={r"/api/*": {"origins": "*"}})
-#CORS(app)  # This will allow CORS for all routes by default
+#cors = CORS(app, resources={r"/api/*": {"origins": "*"}})
+CORS(app)  # This will allow CORS for all routes by default
 
 
 
