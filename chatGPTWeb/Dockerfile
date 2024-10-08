@@ -14,6 +14,7 @@ CMD ["serve", "-s", "dist", "-l", "4200"]
 
  #docker build -t web:2 .
  #docker container run -p 4200:4200 -it web:2
+ #docker container run -it e2:2 /bin/sh
 
 
 

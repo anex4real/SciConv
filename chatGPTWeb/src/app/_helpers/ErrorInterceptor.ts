@@ -7,8 +7,8 @@ import {BackendService, AlertService} from '../service';
 
 @Injectable()
 export class ErrorInterceptor implements HttpInterceptor {
-  constructor(public alertService: AlertService,
-              public backendService: BackendService
+  constructor(public alertService: AlertService
+
   ) {
   }
 
