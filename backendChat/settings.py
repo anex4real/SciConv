@@ -1,6 +1,10 @@
 import json
 import os
 from datetime import datetime
+import pytz
+
+# Specify your timezone (e.g., 'America/New_York', 'Europe/London', etc.)
+timezone = pytz.timezone('Europe/London')
 
 import flask
 import socket
@@ -277,7 +281,7 @@ def read_file(location):
 
 
 def write_messagesUser_to_file(messagesToUser, projectPath):
-    number = datetime.now().strftime("%Y%m%d%H%M%S")
+    number = datetime.now(timezone).strftime("%y%m%d_%H%M")
     file_path = os.path.join(projectPath, f"{number}.txt")
 
 
