@@ -1,0 +1,41 @@
+{
+    "resultToSend": [
+        {
+            "name": "Mental Demand",
+            "rating": 100,
+            "tally": 2,
+            "weights": 0.13333333333333333
+        },
+        {
+            "name": "Physical Demand",
+            "rating": 15,
+            "tally": 0,
+            "weights": 0
+        },
+        {
+            "name": "Temporal Demand",
+            "rating": 70,
+            "tally": 4,
+            "weights": 0.26666666666666666
+        },
+        {
+            "name": "Performance",
+            "rating": 85,
+            "tally": 4,
+            "weights": 0.26666666666666666
+        },
+        {
+            "name": "Effort",
+            "rating": 100,
+            "tally": 2,
+            "weights": 0.13333333333333333
+        },
+        {
+            "name": "Frustration",
+            "rating": 60,
+            "tally": 3,
+            "weights": 0.2
+        }
+    ],
+    "overall": 80
+}
