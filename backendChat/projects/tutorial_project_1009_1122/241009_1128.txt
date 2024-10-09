@@ -1,0 +1,611 @@
+Role: system, ContentShort: None
+Role: assistant, ContentShort: We've found your project.
+ The project is in folder tutorial_project_1009_1122
+
+Role: assistant, ContentShort: Please provide the commands required to run the experiment, keeping in mind that I will execute them sequentially.
+Role: system, ContentShort: python ./yahoo_demo.py --res_dir ./res/yahoo/
+Role: assistant, ContentShort: I will use this command to execute the experiment.
+ Command: python ./yahoo_demo.py --res_dir ./res/yahoo/
+Role: assistant, ContentShort: I will now infer all the necessary information to build the environment, which can take some time.
+Role: system, ContentShort: None
+Role: assistant, ContentShort: None
+Role: system, ContentShort: None
+Role: assistant, ContentShort: None
+Role: assistant, ContentShort: I will now build the environment to run the experiment, which can take some time.
+Role: assistant, ContentShort: An error occurred during the environment build. I propose to try to build a new environment.
+Role: assistant, ContentShort: I will now infer all the necessary information to build the environment, which can take some time.
+Role: system, ContentShort: None
+Role: assistant, ContentShort: None
+Role: system, ContentShort: None
+Role: assistant, ContentShort: None
+Role: assistant, ContentShort: I will now build the environment to run the experiment, which can take some time.
+Role: assistant, ContentShort: An error occurred during the environment build. 
+Error: The command '/bin/sh -c pip install numpy pandas scikit-learn matplotlib stumpy networkx tqdm pickle' returned a non-zero code: 1
+What might have caused this unexpected result?
+Role: system, ContentShort: I want to change the computing environment used (programming languages, dependencies).  
+Role: system, ContentShort: None
+Role: system, ContentShort: None
+Role: assistant, ContentShort: None
+Role: assistant, ContentShort: I used these settings. Are they correct, or would you like to change anything? 
+{"PL":["Python"],"PLVersion":["Python 3.7","Python 3.8","Python 3.9"],"Dependencies":["numpy","pandas","stumpy","tqdm","networkx","matplotlib","scikit-learn","pickle"]}
+Role: system, ContentShort: I want only Python 3.8
+Role: system, ContentShort: None
+Role: assistant, ContentShort: None
+Role: assistant, ContentShort: I used these settings. Are they correct, or would you like to change anything? 
+{"PL":["Python"],"PLVersion":["Python 3.8"],"Dependencies":["numpy","pandas","stumpy","tqdm","networkx","matplotlib","scikit-learn","pickle"]}
+Role: system, ContentShort: yes
+Role: system, ContentShort: None
+Role: assistant, ContentShort: None
+Role: system, ContentShort: None
+Role: assistant, ContentShort: None
+Role: assistant, ContentShort: I will now build the environment to run the experiment, which can take some time.
+Role: assistant, ContentShort: An error occurred during the environment build. I propose to try to build a new environment.
+Role: assistant, ContentShort: I will now infer all the necessary information to build the environment, which can take some time.
+Role: system, ContentShort: None
+Role: assistant, ContentShort: None
+Role: system, ContentShort: None
+Role: assistant, ContentShort: None
+Role: assistant, ContentShort: I will now build the environment to run the experiment, which can take some time.
+Role: assistant, ContentShort: None
+Role: assistant, ContentShort: I will now run the experiment and provide you with the results as soon as possible.
+Role: assistant, ContentShort: Command Output:2024-10-09 10:26:57,311 [INFO]: ^^^^^^^^^^^^^^^ Offline anomaly detection for Yahoo dataset ^^^^^^^^^^^^^^^
+2024-10-09 10:26:57,394 [INFO]: ============================================================
+2024-10-09 10:26:57,394 [INFO]: Dataset: yahoo (metric real_0), m: 3, p: 99.8
+2024-10-09 10:27:20,723 [INFO]: The number of anomalous seqs: 3
+2024-10-09 10:27:20,735 [INFO]: The number of anomalous seqs after ap clustering: 3
+2024-10-09 10:27:20,735 [INFO]: The number of anomalous clusters: 3
+2024-10-09 10:27:20,737 [INFO]: Metric patterns dumped.
+2024-10-09 10:27:20,739 [INFO]: precision: 0.400, recall: 1.000, f1: 0.571
+2024-10-09 10:27:20,757 [INFO]: Experiment result plotted!
+2024-10-09 10:27:20,917 [INFO]: ============================================================
+2024-10-09 10:27:20,917 [INFO]: Dataset: yahoo (metric real_1), m: 3, p: 99
+2024-10-09 10:27:20,944 [INFO]: The number of anomalous seqs: 12
+2024-10-09 10:27:20,961 [INFO]: The number of anomalous seqs after ap clustering: 12
+2024-10-09 10:27:20,961 [INFO]: The number of anomalous clusters: 3
+2024-10-09 10:27:20,964 [INFO]: Metric patterns dumped.
+2024-10-09 10:27:20,966 [INFO]: precision: 0.929, recall: 1.000, f1: 0.963
+2024-10-09 10:27:20,971 [INFO]: Experiment result plotted!
+2024-10-09 10:27:21,105 [INFO]: ============================================================
+2024-10-09 10:27:21,105 [INFO]: Dataset: yahoo (metric real_2), m: 3, p: 99
+2024-10-09 10:27:21,131 [INFO]: The number of anomalous seqs: 12
+2024-10-09 10:27:21,142 [INFO]: The number of anomalous seqs after ap clustering: 12
+2024-10-09 10:27:21,142 [INFO]: The number of anomalous clusters: 12
+2024-10-09 10:27:21,144 [INFO]: Metric patterns dumped.
+2024-10-09 10:27:21,147 [INFO]: precision: 1.000, recall: 0.737, f1: 0.848
+2024-10-09 10:27:21,152 [INFO]: Experiment result plotted!
+2024-10-09 10:27:21,277 [INFO]: ============================================================
+2024-10-09 10:27:21,277 [INFO]: Dataset: yahoo (metric real_3), m: 3, p: 99
+2024-10-09 10:27:21,302 [INFO]: The number of anomalous seqs: 12
+2024-10-09 10:27:21,313 [INFO]: The number of anomalous seqs after ap clustering: 3
+2024-10-09 10:27:21,313 [INFO]: The number of anomalous clusters: 3
+2024-10-09 10:27:21,316 [INFO]: Metric patterns dumped.
+2024-10-09 10:27:21,318 [INFO]: precision: 0.400, recall: 1.000, f1: 0.571
+2024-10-09 10:27:21,320 [INFO]: Experiment result plotted!
+2024-10-09 10:27:21,447 [INFO]: ============================================================
+2024-10-09 10:27:21,447 [INFO]: Dataset: yahoo (metric real_4), m: 3, p: 99
+2024-10-09 10:27:21,470 [INFO]: The number of anomalous seqs: 12
+2024-10-09 10:27:21,486 [INFO]: The number of anomalous seqs after ap clustering: 10
+2024-10-09 10:27:21,486 [INFO]: The number of anomalous clusters: 3
+2024-10-09 10:27:21,489 [INFO]: Metric patterns dumped.
+2024-10-09 10:27:21,491 [INFO]: precision: 0.643, recall: 1.000, f1: 0.783
+2024-10-09 10:27:21,495 [INFO]: Experiment result plotted!
+2024-10-09 10:27:21,635 [INFO]: ============================================================
+2024-10-09 10:27:21,635 [INFO]: Dataset: yahoo (metric real_5), m: 3, p: 99
+2024-10-09 10:27:21,661 [INFO]: The number of anomalous seqs: 12
+2024-10-09 10:27:21,673 [INFO]: The number of anomalous seqs after ap clustering: 6
+2024-10-09 10:27:21,673 [INFO]: The number of anomalous clusters: 4
+2024-10-09 10:27:21,675 [INFO]: Metric patterns dumped.
+2024-10-09 10:27:21,677 [INFO]: precision: 0.154, recall: 1.000, f1: 0.267
+2024-10-09 10:27:21,681 [INFO]: Experiment result plotted!
+2024-10-09 10:27:21,817 [INFO]: ============================================================
+2024-10-09 10:27:21,817 [INFO]: Dataset: yahoo (metric real_6), m: 3, p: 99
+2024-10-09 10:27:21,845 [INFO]: The number of anomalous seqs: 12
+2024-10-09 10:27:21,861 [INFO]: The number of anomalous seqs after ap clustering: 10
+2024-10-09 10:27:21,861 [INFO]: The number of anomalous clusters: 4
+2024-10-09 10:27:21,863 [INFO]: Metric patterns dumped.
+2024-10-09 10:27:21,865 [INFO]: precision: 0.571, recall: 1.000, f1: 0.727
+2024-10-09 10:27:21,871 [INFO]: Experiment result plotted!
+2024-10-09 10:27:22,016 [INFO]: ============================================================
+2024-10-09 10:27:22,016 [INFO]: Dataset: yahoo (metric real_7), m: 3, p: 99
+2024-10-09 10:27:22,041 [INFO]: The number of anomalous seqs: 12
+2024-10-09 10:27:22,052 [INFO]: The number of anomalous seqs after ap clustering: 3
+2024-10-09 10:27:22,052 [INFO]: The number of anomalous clusters: 3
+2024-10-09 10:27:22,055 [INFO]: Metric patterns dumped.
+2024-10-09 10:27:22,057 [INFO]: precision: 0.600, recall: 1.000, f1: 0.750
+2024-10-09 10:27:22,059 [INFO]: Experiment result plotted!
+2024-10-09 10:27:22,199 [INFO]: ============================================================
+2024-10-09 10:27:22,199 [INFO]: Dataset: yahoo (metric real_8), m: 10, p: 92
+2024-10-09 10:27:22,222 [INFO]: The number of anomalous seqs: 90
+2024-10-09 10:27:22,243 [INFO]: The number of anomalous seqs after ap clustering: 90
+2024-10-09 10:27:22,243 [INFO]: The number of anomalous clusters: 6
+2024-10-09 10:27:22,245 [INFO]: Metric patterns dumped.
+2024-10-09 10:27:22,247 [INFO]: precision: 0.956, recall: 0.665, f1: 0.784
+2024-10-09 10:27:22,282 [INFO]: Experiment result plotted!
+2024-10-09 10:27:22,547 [INFO]: ============================================================
+2024-10-09 10:27:22,547 [INFO]: Dataset: yahoo (metric real_9), m: 3, p: 99
+2024-10-09 10:27:22,574 [INFO]: The number of anomalous seqs: 12
+2024-10-09 10:27:22,591 [INFO]: The number of anomalous seqs after ap clustering: 6
+2024-10-09 10:27:22,591 [INFO]: The number of anomalous clusters: 3
+2024-10-09 10:27:22,593 [INFO]: Metric patterns dumped.
+2024-10-09 10:27:22,595 [INFO]: precision: 0.300, recall: 1.000, f1: 0.462
+2024-10-09 10:27:22,598 [INFO]: Experiment result plotted!
+2024-10-09 10:27:22,739 [INFO]: ============================================================
+2024-10-09 10:27:22,739 [INFO]: Dataset: yahoo (metric real_10), m: 10, p: 92
+2024-10-09 10:27:22,761 [INFO]: The number of anomalous seqs: 90
+2024-10-09 10:27:22,783 [INFO]: The number of anomalous seqs after ap clustering: 90
+2024-10-09 10:27:22,783 [INFO]: The number of anomalous clusters: 6
+2024-10-09 10:27:22,785 [INFO]: Metric patterns dumped.
+2024-10-09 10:27:22,788 [INFO]: precision: 0.914, recall: 0.656, f1: 0.764
+2024-10-09 10:27:22,822 [INFO]: Experiment result plotted!
+2024-10-09 10:27:22,975 [INFO]: ============================================================
+2024-10-09 10:27:22,975 [INFO]: Dataset: yahoo (metric real_11), m: 3, p: 99
+2024-10-09 10:27:23,000 [INFO]: The number of anomalous seqs: 12
+2024-10-09 10:27:23,011 [INFO]: The number of anomalous seqs after ap clustering: 12
+2024-10-09 10:27:23,011 [INFO]: The number of anomalous clusters: 12
+2024-10-09 10:27:23,013 [INFO]: Metric patterns dumped.
+2024-10-09 10:27:23,016 [INFO]: precision: 0.765, recall: 0.812, f1: 0.788
+2024-10-09 10:27:23,021 [INFO]: Experiment result plotted!
+2024-10-09 10:27:23,155 [INFO]: ============================================================
+2024-10-09 10:27:23,155 [INFO]: Dataset: yahoo (metric real_12), m: 3, p: 99
+2024-10-09 10:27:23,179 [INFO]: The number of anomalous seqs: 12
+2024-10-09 10:27:23,191 [INFO]: The number of anomalous seqs after ap clustering: 3
+2024-10-09 10:27:23,191 [INFO]: The number of anomalous clusters: 3
+2024-10-09 10:27:23,193 [INFO]: Metric patterns dumped.
+2024-10-09 10:27:23,196 [INFO]: precision: 0.400, recall: 0.061, f1: 0.105
+2024-10-09 10:27:23,199 [INFO]: Experiment result plotted!
+2024-10-09 10:27:23,337 [INFO]: ============================================================
+2024-10-09 10:27:23,337 [INFO]: Dataset: yahoo (metric real_13), m: 3, p: 99
+2024-10-09 10:27:23,362 [INFO]: The number of anomalous seqs: 12
+2024-10-09 10:27:23,373 [INFO]: The number of anomalous seqs after ap clustering: 11
+2024-10-09 10:27:23,373 [INFO]: The number of anomalous clusters: 10
+2024-10-09 10:27:23,375 [INFO]: Metric patterns dumped.
+2024-10-09 10:27:23,377 [INFO]: precision: 0.353, recall: 1.000, f1: 0.522
+2024-10-09 10:27:23,382 [INFO]: Experiment result plotted!
+2024-10-09 10:27:23,522 [INFO]: ============================================================
+2024-10-09 10:27:23,522 [INFO]: Dataset: yahoo (metric real_14), m: 10, p: 92
+2024-10-09 10:27:23,546 [INFO]: The number of anomalous seqs: 89
+2024-10-09 10:27:23,567 [INFO]: The number of anomalous seqs after ap clustering: 62
+2024-10-09 10:27:23,568 [INFO]: The number of anomalous clusters: 11
+2024-10-09 10:27:23,570 [INFO]: Metric patterns dumped.
+2024-10-09 10:27:23,572 [INFO]: precision: 0.887, recall: 1.000, f1: 0.940
+2024-10-09 10:27:23,596 [INFO]: Experiment result plotted!
+2024-10-09 10:27:23,739 [INFO]: ============================================================
+2024-10-09 10:27:23,740 [INFO]: Dataset: yahoo (metric real_15), m: 3, p: 99
+2024-10-09 10:27:23,765 [INFO]: The number of anomalous seqs: 12
+2024-10-09 10:27:23,784 [INFO]: The number of anomalous seqs after ap clustering: 12
+2024-10-09 10:27:23,784 [INFO]: The number of anomalous clusters: 6
+2024-10-09 10:27:23,787 [INFO]: Metric patterns dumped.
+2024-10-09 10:27:23,789 [INFO]: precision: 0.667, recall: 0.632, f1: 0.649
+2024-10-09 10:27:23,794 [INFO]: Experiment result plotted!
+2024-10-09 10:27:23,933 [INFO]: ============================================================
+2024-10-09 10:27:23,933 [INFO]: Dataset: yahoo (metric real_16), m: 3, p: 99
+2024-10-09 10:27:23,960 [INFO]: The number of anomalous seqs: 12
+2024-10-09 10:27:23,976 [INFO]: The number of anomalous seqs after ap clustering: 12
+2024-10-09 10:27:23,976 [INFO]: The number of anomalous clusters: 2
+2024-10-09 10:27:23,978 [INFO]: Metric patterns dumped.
+2024-10-09 10:27:23,980 [INFO]: precision: 1.000, recall: 0.875, f1: 0.933
+2024-10-09 10:27:23,986 [INFO]: Experiment result plotted!
+2024-10-09 10:27:24,132 [INFO]: ============================================================
+2024-10-09 10:27:24,132 [INFO]: Dataset: yahoo (metric real_17), m: 10, p: 92
+2024-10-09 10:27:24,156 [INFO]: The number of anomalous seqs: 89
+2024-10-09 10:27:24,172 [INFO]: The number of anomalous seqs after ap clustering: 42
+2024-10-09 10:27:24,172 [INFO]: The number of anomalous clusters: 42
+2024-10-09 10:27:24,176 [INFO]: Metric patterns dumped.
+2024-10-09 10:27:24,178 [INFO]: precision: 0.843, recall: 1.000, f1: 0.915
+2024-10-09 10:27:24,195 [INFO]: Experiment result plotted!
+2024-10-09 10:27:24,337 [INFO]: ============================================================
+2024-10-09 10:27:24,338 [INFO]: Dataset: yahoo (metric real_18), m: 3, p: 99
+2024-10-09 10:27:24,366 [INFO]: The number of anomalous seqs: 12
+2024-10-09 10:27:24,383 [INFO]: The number of anomalous seqs after ap clustering: 8
+2024-10-09 10:27:24,383 [INFO]: The number of anomalous clusters: 4
+2024-10-09 10:27:24,385 [INFO]: Metric patterns dumped.
+2024-10-09 10:27:24,387 [INFO]: precision: 0.000, recall: 0.000, f1: 0.000
+2024-10-09 10:27:24,391 [INFO]: Experiment result plotted!
+2024-10-09 10:27:24,536 [INFO]: ============================================================
+2024-10-09 10:27:24,536 [INFO]: Dataset: yahoo (metric real_19), m: 3, p: 99
+2024-10-09 10:27:24,561 [INFO]: The number of anomalous seqs: 12
+2024-10-09 10:27:24,575 [INFO]: The number of anomalous seqs after ap clustering: 0
+2024-10-09 10:27:24,575 [INFO]: The number of anomalous clusters: 0
+2024-10-09 10:27:24,577 [INFO]: Metric patterns dumped.
+2024-10-09 10:27:24,577 [INFO]: No anomalous patterns detected!
+2024-10-09 10:27:24,577 [INFO]: precision: 0.000, recall: 0.000, f1: 0.000
+2024-10-09 10:27:24,578 [INFO]: Experiment result plotted!
+2024-10-09 10:27:24,718 [INFO]: ============================================================
+2024-10-09 10:27:24,718 [INFO]: Dataset: yahoo (metric real_20), m: 3, p: 99
+2024-10-09 10:27:24,744 [INFO]: The number of anomalous seqs: 12
+2024-10-09 10:27:24,755 [INFO]: The number of anomalous seqs after ap clustering: 0
+2024-10-09 10:27:24,755 [INFO]: The number of anomalous clusters: 0
+2024-10-09 10:27:24,757 [INFO]: Metric patterns dumped.
+2024-10-09 10:27:24,757 [INFO]: No anomalous patterns detected!
+2024-10-09 10:27:24,757 [INFO]: precision: 0.000, recall: 0.000, f1: 0.000
+2024-10-09 10:27:24,758 [INFO]: Experiment result plotted!
+2024-10-09 10:27:24,890 [INFO]: ============================================================
+2024-10-09 10:27:24,890 [INFO]: Dataset: yahoo (metric real_21), m: 3, p: 99
+2024-10-09 10:27:24,914 [INFO]: The number of anomalous seqs: 12
+2024-10-09 10:27:24,925 [INFO]: The number of anomalous seqs after ap clustering: 7
+2024-10-09 10:27:24,925 [INFO]: The number of anomalous clusters: 4
+2024-10-09 10:27:24,927 [INFO]: Metric patterns dumped.
+2024-10-09 10:27:24,929 [INFO]: precision: 0.333, recall: 0.714, f1: 0.455
+2024-10-09 10:27:24,933 [INFO]: Experiment result plotted!
+2024-10-09 10:27:25,064 [INFO]: ============================================================
+2024-10-09 10:27:25,064 [INFO]: Dataset: yahoo (metric real_22), m: 3, p: 99
+2024-10-09 10:27:25,092 [INFO]: The number of anomalous seqs: 12
+2024-10-09 10:27:25,103 [INFO]: The number of anomalous seqs after ap clustering: 12
+2024-10-09 10:27:25,104 [INFO]: The number of anomalous clusters: 7
+2024-10-09 10:27:25,106 [INFO]: Metric patterns dumped.
+2024-10-09 10:27:25,108 [INFO]: precision: 1.000, recall: 0.933, f1: 0.966
+2024-10-09 10:27:25,113 [INFO]: Experiment result plotted!
+2024-10-09 10:27:25,254 [INFO]: ============================================================
+2024-10-09 10:27:25,255 [INFO]: Dataset: yahoo (metric real_23), m: 3, p: 99
+2024-10-09 10:27:25,278 [INFO]: The number of anomalous seqs: 12
+2024-10-09 10:27:25,294 [INFO]: The number of anomalous seqs after ap clustering: 11
+2024-10-09 10:27:25,295 [INFO]: The number of anomalous clusters: 7
+2024-10-09 10:27:25,297 [INFO]: Metric patterns dumped.
+2024-10-09 10:27:25,299 [INFO]: precision: 0.600, recall: 1.000, f1: 0.750
+2024-10-09 10:27:25,304 [INFO]: Experiment result plotted!
+2024-10-09 10:27:25,447 [INFO]: ============================================================
+2024-10-09 10:27:25,447 [INFO]: Dataset: yahoo (metric real_24), m: 3, p: 99
+2024-10-09 10:27:25,475 [INFO]: The number of anomalous seqs: 12
+2024-10-09 10:27:25,485 [INFO]: The number of anomalous seqs after ap clustering: 12
+2024-10-09 10:27:25,485 [INFO]: The number of anomalous clusters: 2
+2024-10-09 10:27:25,487 [INFO]: Metric patterns dumped.
+2024-10-09 10:27:25,489 [INFO]: precision: 0.842, recall: 0.667, f1: 0.744
+2024-10-09 10:27:25,495 [INFO]: Experiment result plotted!
+2024-10-09 10:27:25,624 [INFO]: ============================================================
+2024-10-09 10:27:25,624 [INFO]: Dataset: yahoo (metric real_25), m: 10, p: 92
+2024-10-09 10:27:25,647 [INFO]: The number of anomalous seqs: 90
+2024-10-09 10:27:25,668 [INFO]: The number of anomalous seqs after ap clustering: 66
+2024-10-09 10:27:25,668 [INFO]: The number of anomalous clusters: 2
+2024-10-09 10:27:25,670 [INFO]: Metric patterns dumped.
+2024-10-09 10:27:25,673 [INFO]: precision: 0.360, recall: 0.574, f1: 0.443
+2024-10-09 10:27:25,698 [INFO]: Experiment result plotted!
+2024-10-09 10:27:25,842 [INFO]: ============================================================
+2024-10-09 10:27:25,842 [INFO]: Dataset: yahoo (metric real_26), m: 3, p: 99
+2024-10-09 10:27:25,866 [INFO]: The number of anomalous seqs: 12
+2024-10-09 10:27:25,877 [INFO]: The number of anomalous seqs after ap clustering: 3
+2024-10-09 10:27:25,877 [INFO]: The number of anomalous clusters: 3
+2024-10-09 10:27:25,879 [INFO]: Metric patterns dumped.
+2024-10-09 10:27:25,881 [INFO]: precision: 0.400, recall: 1.000, f1: 0.571
+2024-10-09 10:27:25,885 [INFO]: Experiment result plotted!
+2024-10-09 10:27:26,015 [INFO]: ============================================================
+2024-10-09 10:27:26,016 [INFO]: Dataset: yahoo (metric real_27), m: 3, p: 99.8
+2024-10-09 10:27:26,040 [INFO]: The number of anomalous seqs: 3
+2024-10-09 10:27:26,051 [INFO]: The number of anomalous seqs after ap clustering: 2
+2024-10-09 10:27:26,051 [INFO]: The number of anomalous clusters: 1
+2024-10-09 10:27:26,053 [INFO]: Metric patterns dumped.
+2024-10-09 10:27:26,055 [INFO]: precision: 0.750, recall: 0.429, f1: 0.545
+2024-10-09 10:27:26,057 [INFO]: Experiment result plotted!
+2024-10-09 10:27:26,200 [INFO]: ============================================================
+2024-10-09 10:27:26,200 [INFO]: Dataset: yahoo (metric real_28), m: 3, p: 99.8
+2024-10-09 10:27:26,228 [INFO]: The number of anomalous seqs: 3
+2024-10-09 10:27:26,238 [INFO]: The number of anomalous seqs after ap clustering: 0
+2024-10-09 10:27:26,238 [INFO]: The number of anomalous clusters: 0
+2024-10-09 10:27:26,239 [INFO]: Metric patterns dumped.
+2024-10-09 10:27:26,240 [INFO]: No anomalous patterns detected!
+2024-10-09 10:27:26,240 [INFO]: precision: 1.000, recall: 1.000, f1: 1.000
+2024-10-09 10:27:26,241 [INFO]: Experiment result plotted!
+2024-10-09 10:27:26,385 [INFO]: ============================================================
+2024-10-09 10:27:26,385 [INFO]: Dataset: yahoo (metric real_29), m: 3, p: 99.8
+2024-10-09 10:27:26,411 [INFO]: The number of anomalous seqs: 3
+2024-10-09 10:27:26,421 [INFO]: The number of anomalous seqs after ap clustering: 3
+2024-10-09 10:27:26,421 [INFO]: The number of anomalous clusters: 2
+2024-10-09 10:27:26,423 [INFO]: Metric patterns dumped.
+2024-10-09 10:27:26,425 [INFO]: precision: 0.800, recall: 0.800, f1: 0.800
+2024-10-09 10:27:26,427 [INFO]: Experiment result plotted!
+2024-10-09 10:27:26,560 [INFO]: ============================================================
+2024-10-09 10:27:26,560 [INFO]: Dataset: yahoo (metric real_30), m: 10, p: 92
+2024-10-09 10:27:26,587 [INFO]: The number of anomalous seqs: 90
+2024-10-09 10:27:26,612 [INFO]: The number of anomalous seqs after ap clustering: 52
+2024-10-09 10:27:26,612 [INFO]: The number of anomalous clusters: 3
+2024-10-09 10:27:26,614 [INFO]: Metric patterns dumped.
+2024-10-09 10:27:26,617 [INFO]: precision: 0.212, recall: 1.000, f1: 0.351
+2024-10-09 10:27:26,743 [INFO]: Experiment result plotted!
+2024-10-09 10:27:26,891 [INFO]: ============================================================
+2024-10-09 10:27:26,891 [INFO]: Dataset: yahoo (metric real_31), m: 3, p: 99
+2024-10-09 10:27:26,916 [INFO]: The number of anomalous seqs: 12
+2024-10-09 10:27:26,935 [INFO]: The number of anomalous seqs after ap clustering: 8
+2024-10-09 10:27:26,935 [INFO]: The number of anomalous clusters: 3
+2024-10-09 10:27:26,937 [INFO]: Metric patterns dumped.
+2024-10-09 10:27:26,939 [INFO]: precision: 0.400, recall: 0.667, f1: 0.500
+2024-10-09 10:27:26,943 [INFO]: Experiment result plotted!
+2024-10-09 10:27:27,084 [INFO]: ============================================================
+2024-10-09 10:27:27,084 [INFO]: Dataset: yahoo (metric real_32), m: 3, p: 99
+2024-10-09 10:27:27,107 [INFO]: The number of anomalous seqs: 12
+2024-10-09 10:27:27,118 [INFO]: The number of anomalous seqs after ap clustering: 10
+2024-10-09 10:27:27,118 [INFO]: The number of anomalous clusters: 6
+2024-10-09 10:27:27,120 [INFO]: Metric patterns dumped.
+2024-10-09 10:27:27,122 [INFO]: precision: 0.571, recall: 0.800, f1: 0.667
+2024-10-09 10:27:27,127 [INFO]: Experiment result plotted!
+2024-10-09 10:27:27,261 [INFO]: ============================================================
+2024-10-09 10:27:27,261 [INFO]: Dataset: yahoo (metric real_33), m: 3, p: 99.8
+2024-10-09 10:27:27,295 [INFO]: The number of anomalous seqs: 3
+2024-10-09 10:27:27,312 [INFO]: The number of anomalous seqs after ap clustering: 3
+2024-10-09 10:27:27,312 [INFO]: The number of anomalous clusters: 3
+2024-10-09 10:27:27,316 [INFO]: Metric patterns dumped.
+2024-10-09 10:27:27,319 [INFO]: precision: 0.600, recall: 0.600, f1: 0.600
+2024-10-09 10:27:27,322 [INFO]: Experiment result plotted!
+2024-10-09 10:27:27,457 [INFO]: ============================================================
+2024-10-09 10:27:27,458 [INFO]: Dataset: yahoo (metric real_34), m: 10, p: 92
+2024-10-09 10:27:27,490 [INFO]: The number of anomalous seqs: 90
+2024-10-09 10:27:27,514 [INFO]: The number of anomalous seqs after ap clustering: 74
+2024-10-09 10:27:27,514 [INFO]: The number of anomalous clusters: 4
+2024-10-09 10:27:27,517 [INFO]: Metric patterns dumped.
+2024-10-09 10:27:27,520 [INFO]: precision: 0.708, recall: 0.938, f1: 0.806
+2024-10-09 10:27:27,550 [INFO]: Experiment result plotted!
+2024-10-09 10:27:27,714 [INFO]: ============================================================
+2024-10-09 10:27:27,714 [INFO]: Dataset: yahoo (metric real_35), m: 3, p: 99
+2024-10-09 10:27:27,739 [INFO]: The number of anomalous seqs: 12
+2024-10-09 10:27:27,750 [INFO]: The number of anomalous seqs after ap clustering: 6
+2024-10-09 10:27:27,750 [INFO]: The number of anomalous clusters: 6
+2024-10-09 10:27:27,753 [INFO]: Metric patterns dumped.
+2024-10-09 10:27:27,755 [INFO]: precision: 0.200, recall: 1.000, f1: 0.333
+2024-10-09 10:27:27,759 [INFO]: Experiment result plotted!
+2024-10-09 10:27:27,906 [INFO]: ============================================================
+2024-10-09 10:27:27,906 [INFO]: Dataset: yahoo (metric real_36), m: 10, p: 92
+2024-10-09 10:27:27,937 [INFO]: The number of anomalous seqs: 91
+2024-10-09 10:27:27,960 [INFO]: The number of anomalous seqs after ap clustering: 91
+2024-10-09 10:27:27,961 [INFO]: The number of anomalous clusters: 9
+2024-10-09 10:27:27,965 [INFO]: Metric patterns dumped.
+2024-10-09 10:27:27,967 [INFO]: precision: 0.352, recall: 1.000, f1: 0.521
+2024-10-09 10:27:28,006 [INFO]: Experiment result plotted!
+2024-10-09 10:27:28,164 [INFO]: ============================================================
+2024-10-09 10:27:28,164 [INFO]: Dataset: yahoo (metric real_37), m: 3, p: 99
+2024-10-09 10:27:28,199 [INFO]: The number of anomalous seqs: 12
+2024-10-09 10:27:28,211 [INFO]: The number of anomalous seqs after ap clustering: 5
+2024-10-09 10:27:28,211 [INFO]: The number of anomalous clusters: 5
+2024-10-09 10:27:28,214 [INFO]: Metric patterns dumped.
+2024-10-09 10:27:28,216 [INFO]: precision: 0.429, recall: 0.111, f1: 0.176
+2024-10-09 10:27:28,219 [INFO]: Experiment result plotted!
+2024-10-09 10:27:28,359 [INFO]: ============================================================
+2024-10-09 10:27:28,359 [INFO]: Dataset: yahoo (metric real_38), m: 3, p: 99
+2024-10-09 10:27:28,390 [INFO]: The number of anomalous seqs: 12
+2024-10-09 10:27:28,402 [INFO]: The number of anomalous seqs after ap clustering: 6
+2024-10-09 10:27:28,402 [INFO]: The number of anomalous clusters: 5
+2024-10-09 10:27:28,404 [INFO]: Metric patterns dumped.
+2024-10-09 10:27:28,406 [INFO]: precision: 0.750, recall: 0.667, f1: 0.706
+2024-10-09 10:27:28,409 [INFO]: Experiment result plotted!
+2024-10-09 10:27:28,554 [INFO]: ============================================================
+2024-10-09 10:27:28,554 [INFO]: Dataset: yahoo (metric real_39), m: 3, p: 99
+2024-10-09 10:27:28,585 [INFO]: The number of anomalous seqs: 12
+2024-10-09 10:27:28,596 [INFO]: The number of anomalous seqs after ap clustering: 0
+2024-10-09 10:27:28,597 [INFO]: The number of anomalous clusters: 0
+2024-10-09 10:27:28,599 [INFO]: Metric patterns dumped.
+2024-10-09 10:27:28,599 [INFO]: No anomalous patterns detected!
+2024-10-09 10:27:28,599 [INFO]: precision: 0.000, recall: 0.000, f1: 0.000
+2024-10-09 10:27:28,600 [INFO]: Experiment result plotted!
+2024-10-09 10:27:28,735 [INFO]: ============================================================
+2024-10-09 10:27:28,736 [INFO]: Dataset: yahoo (metric real_40), m: 10, p: 92
+2024-10-09 10:27:28,769 [INFO]: The number of anomalous seqs: 91
+2024-10-09 10:27:28,793 [INFO]: The number of anomalous seqs after ap clustering: 91
+2024-10-09 10:27:28,793 [INFO]: The number of anomalous clusters: 1
+2024-10-09 10:27:28,796 [INFO]: Metric patterns dumped.
+2024-10-09 10:27:28,798 [INFO]: precision: 1.000, recall: 0.972, f1: 0.986
+2024-10-09 10:27:28,840 [INFO]: Experiment result plotted!
+2024-10-09 10:27:29,000 [INFO]: ============================================================
+2024-10-09 10:27:29,000 [INFO]: Dataset: yahoo (metric real_41), m: 3, p: 99
+2024-10-09 10:27:29,031 [INFO]: The number of anomalous seqs: 12
+2024-10-09 10:27:29,052 [INFO]: The number of anomalous seqs after ap clustering: 3
+2024-10-09 10:27:29,052 [INFO]: The number of anomalous clusters: 2
+2024-10-09 10:27:29,055 [INFO]: Metric patterns dumped.
+2024-10-09 10:27:29,058 [INFO]: precision: 0.286, recall: 0.200, f1: 0.235
+2024-10-09 10:27:29,061 [INFO]: Experiment result plotted!
+2024-10-09 10:27:29,221 [INFO]: ============================================================
+2024-10-09 10:27:29,221 [INFO]: Dataset: yahoo (metric real_42), m: 3, p: 99
+2024-10-09 10:27:29,249 [INFO]: The number of anomalous seqs: 12
+2024-10-09 10:27:29,259 [INFO]: The number of anomalous seqs after ap clustering: 2
+2024-10-09 10:27:29,259 [INFO]: The number of anomalous clusters: 1
+2024-10-09 10:27:29,261 [INFO]: Metric patterns dumped.
+2024-10-09 10:27:29,263 [INFO]: precision: 0.167, recall: 0.042, f1: 0.067
+2024-10-09 10:27:29,265 [INFO]: Experiment result plotted!
+2024-10-09 10:27:29,391 [INFO]: ============================================================
+2024-10-09 10:27:29,391 [INFO]: Dataset: yahoo (metric real_43), m: 3, p: 99
+2024-10-09 10:27:29,414 [INFO]: The number of anomalous seqs: 12
+2024-10-09 10:27:29,429 [INFO]: The number of anomalous seqs after ap clustering: 6
+2024-10-09 10:27:29,430 [INFO]: The number of anomalous clusters: 3
+2024-10-09 10:27:29,432 [INFO]: Metric patterns dumped.
+2024-10-09 10:27:29,434 [INFO]: precision: 0.300, recall: 1.000, f1: 0.462
+2024-10-09 10:27:29,437 [INFO]: Experiment result plotted!
+2024-10-09 10:27:29,580 [INFO]: ============================================================
+2024-10-09 10:27:29,580 [INFO]: Dataset: yahoo (metric real_44), m: 3, p: 99.8
+2024-10-09 10:27:29,608 [INFO]: The number of anomalous seqs: 3
+2024-10-09 10:27:29,618 [INFO]: The number of anomalous seqs after ap clustering: 3
+2024-10-09 10:27:29,618 [INFO]: The number of anomalous clusters: 3
+2024-10-09 10:27:29,621 [INFO]: Metric patterns dumped.
+2024-10-09 10:27:29,623 [INFO]: precision: 0.400, recall: 1.000, f1: 0.571
+2024-10-09 10:27:29,625 [INFO]: Experiment result plotted!
+2024-10-09 10:27:29,773 [INFO]: ============================================================
+2024-10-09 10:27:29,774 [INFO]: Dataset: yahoo (metric real_45), m: 3, p: 99
+2024-10-09 10:27:29,801 [INFO]: The number of anomalous seqs: 12
+2024-10-09 10:27:29,818 [INFO]: The number of anomalous seqs after ap clustering: 12
+2024-10-09 10:27:29,819 [INFO]: The number of anomalous clusters: 6
+2024-10-09 10:27:29,821 [INFO]: Metric patterns dumped.
+2024-10-09 10:27:29,823 [INFO]: precision: 0.318, recall: 1.000, f1: 0.483
+2024-10-09 10:27:29,829 [INFO]: Experiment result plotted!
+2024-10-09 10:27:29,965 [INFO]: ============================================================
+2024-10-09 10:27:29,965 [INFO]: Dataset: yahoo (metric real_46), m: 3, p: 99
+2024-10-09 10:27:29,991 [INFO]: The number of anomalous seqs: 12
+2024-10-09 10:27:30,001 [INFO]: The number of anomalous seqs after ap clustering: 0
+2024-10-09 10:27:30,001 [INFO]: The number of anomalous clusters: 0
+2024-10-09 10:27:30,003 [INFO]: Metric patterns dumped.
+2024-10-09 10:27:30,003 [INFO]: No anomalous patterns detected!
+2024-10-09 10:27:30,003 [INFO]: precision: 0.000, recall: 0.000, f1: 0.000
+2024-10-09 10:27:30,005 [INFO]: Experiment result plotted!
+2024-10-09 10:27:30,149 [INFO]: ============================================================
+2024-10-09 10:27:30,149 [INFO]: Dataset: yahoo (metric real_47), m: 3, p: 99
+2024-10-09 10:27:30,174 [INFO]: The number of anomalous seqs: 12
+2024-10-09 10:27:30,185 [INFO]: The number of anomalous seqs after ap clustering: 5
+2024-10-09 10:27:30,185 [INFO]: The number of anomalous clusters: 1
+2024-10-09 10:27:30,187 [INFO]: Metric patterns dumped.
+2024-10-09 10:27:30,189 [INFO]: precision: 0.615, recall: 0.727, f1: 0.667
+2024-10-09 10:27:30,192 [INFO]: Experiment result plotted!
+2024-10-09 10:27:30,326 [INFO]: ============================================================
+2024-10-09 10:27:30,326 [INFO]: Dataset: yahoo (metric real_48), m: 3, p: 99
+2024-10-09 10:27:30,353 [INFO]: The number of anomalous seqs: 12
+2024-10-09 10:27:30,368 [INFO]: The number of anomalous seqs after ap clustering: 12
+2024-10-09 10:27:30,368 [INFO]: The number of anomalous clusters: 2
+2024-10-09 10:27:30,370 [INFO]: Metric patterns dumped.
+2024-10-09 10:27:30,372 [INFO]: precision: 1.000, recall: 0.824, f1: 0.903
+2024-10-09 10:27:30,378 [INFO]: Experiment result plotted!
+2024-10-09 10:27:30,524 [INFO]: ============================================================
+2024-10-09 10:27:30,524 [INFO]: Dataset: yahoo (metric real_49), m: 3, p: 99
+2024-10-09 10:27:30,541 [INFO]: The number of anomalous seqs: 5
+2024-10-09 10:27:30,554 [INFO]: The number of anomalous seqs after ap clustering: 0
+2024-10-09 10:27:30,554 [INFO]: The number of anomalous clusters: 0
+2024-10-09 10:27:30,555 [INFO]: Metric patterns dumped.
+2024-10-09 10:27:30,555 [INFO]: No anomalous patterns detected!
+2024-10-09 10:27:30,555 [INFO]: precision: 1.000, recall: 1.000, f1: 1.000
+2024-10-09 10:27:30,556 [INFO]: Experiment result plotted!
+2024-10-09 10:27:30,693 [INFO]: ============================================================
+2024-10-09 10:27:30,693 [INFO]: Dataset: yahoo (metric real_50), m: 3, p: 99
+2024-10-09 10:27:30,721 [INFO]: The number of anomalous seqs: 12
+2024-10-09 10:27:30,737 [INFO]: The number of anomalous seqs after ap clustering: 12
+2024-10-09 10:27:30,737 [INFO]: The number of anomalous clusters: 1
+2024-10-09 10:27:30,739 [INFO]: Metric patterns dumped.
+2024-10-09 10:27:30,742 [INFO]: precision: 0.000, recall: 0.000, f1: 0.000
+2024-10-09 10:27:30,747 [INFO]: Experiment result plotted!
+2024-10-09 10:27:31,009 [INFO]: ============================================================
+2024-10-09 10:27:31,009 [INFO]: Dataset: yahoo (metric real_51), m: 3, p: 99
+2024-10-09 10:27:31,034 [INFO]: The number of anomalous seqs: 12
+2024-10-09 10:27:31,045 [INFO]: The number of anomalous seqs after ap clustering: 0
+2024-10-09 10:27:31,046 [INFO]: The number of anomalous clusters: 0
+2024-10-09 10:27:31,048 [INFO]: Metric patterns dumped.
+2024-10-09 10:27:31,048 [INFO]: No anomalous patterns detected!
+2024-10-09 10:27:31,048 [INFO]: precision: 0.000, recall: 0.000, f1: 0.000
+2024-10-09 10:27:31,049 [INFO]: Experiment result plotted!
+2024-10-09 10:27:31,191 [INFO]: ============================================================
+2024-10-09 10:27:31,191 [INFO]: Dataset: yahoo (metric real_52), m: 3, p: 99
+2024-10-09 10:27:31,214 [INFO]: The number of anomalous seqs: 12
+2024-10-09 10:27:31,230 [INFO]: The number of anomalous seqs after ap clustering: 12
+2024-10-09 10:27:31,230 [INFO]: The number of anomalous clusters: 10
+2024-10-09 10:27:31,232 [INFO]: Metric patterns dumped.
+2024-10-09 10:27:31,234 [INFO]: precision: 0.000, recall: 0.000, f1: 0.000
+2024-10-09 10:27:31,240 [INFO]: Experiment result plotted!
+2024-10-09 10:27:31,380 [INFO]: ============================================================
+2024-10-09 10:27:31,380 [INFO]: Dataset: yahoo (metric real_53), m: 10, p: 92
+2024-10-09 10:27:31,406 [INFO]: The number of anomalous seqs: 90
+2024-10-09 10:27:31,420 [INFO]: The number of anomalous seqs after ap clustering: 42
+2024-10-09 10:27:31,420 [INFO]: The number of anomalous clusters: 10
+2024-10-09 10:27:31,423 [INFO]: Metric patterns dumped.
+2024-10-09 10:27:31,425 [INFO]: precision: 0.843, recall: 1.000, f1: 0.915
+2024-10-09 10:27:31,441 [INFO]: Experiment result plotted!
+2024-10-09 10:27:31,578 [INFO]: ============================================================
+2024-10-09 10:27:31,578 [INFO]: Dataset: yahoo (metric real_54), m: 3, p: 99.8
+2024-10-09 10:27:31,603 [INFO]: The number of anomalous seqs: 3
+2024-10-09 10:27:31,619 [INFO]: The number of anomalous seqs after ap clustering: 0
+2024-10-09 10:27:31,619 [INFO]: The number of anomalous clusters: 0
+2024-10-09 10:27:31,622 [INFO]: Metric patterns dumped.
+2024-10-09 10:27:31,622 [INFO]: No anomalous patterns detected!
+2024-10-09 10:27:31,622 [INFO]: precision: 1.000, recall: 1.000, f1: 1.000
+2024-10-09 10:27:31,623 [INFO]: Experiment result plotted!
+2024-10-09 10:27:31,784 [INFO]: ============================================================
+2024-10-09 10:27:31,785 [INFO]: Dataset: yahoo (metric real_55), m: 3, p: 99
+2024-10-09 10:27:31,812 [INFO]: The number of anomalous seqs: 12
+2024-10-09 10:27:31,823 [INFO]: The number of anomalous seqs after ap clustering: 6
+2024-10-09 10:27:31,823 [INFO]: The number of anomalous clusters: 3
+2024-10-09 10:27:31,826 [INFO]: Metric patterns dumped.
+2024-10-09 10:27:31,828 [INFO]: precision: 1.000, recall: 1.000, f1: 1.000
+2024-10-09 10:27:31,831 [INFO]: Experiment result plotted!
+2024-10-09 10:27:31,960 [INFO]: ============================================================
+2024-10-09 10:27:31,960 [INFO]: Dataset: yahoo (metric real_56), m: 3, p: 99
+2024-10-09 10:27:31,986 [INFO]: The number of anomalous seqs: 12
+2024-10-09 10:27:31,998 [INFO]: The number of anomalous seqs after ap clustering: 12
+2024-10-09 10:27:31,998 [INFO]: The number of anomalous clusters: 10
+2024-10-09 10:27:32,000 [INFO]: Metric patterns dumped.
+2024-10-09 10:27:32,002 [INFO]: precision: 0.444, recall: 0.500, f1: 0.471
+2024-10-09 10:27:32,008 [INFO]: Experiment result plotted!
+2024-10-09 10:27:32,147 [INFO]: ============================================================
+2024-10-09 10:27:32,147 [INFO]: Dataset: yahoo (metric real_57), m: 3, p: 99
+2024-10-09 10:27:32,177 [INFO]: The number of anomalous seqs: 12
+2024-10-09 10:27:32,188 [INFO]: The number of anomalous seqs after ap clustering: 12
+2024-10-09 10:27:32,188 [INFO]: The number of anomalous clusters: 12
+2024-10-09 10:27:32,190 [INFO]: Metric patterns dumped.
+2024-10-09 10:27:32,192 [INFO]: precision: 0.050, recall: 0.042, f1: 0.045
+2024-10-09 10:27:32,198 [INFO]: Experiment result plotted!
+2024-10-09 10:27:32,338 [INFO]: ============================================================
+2024-10-09 10:27:32,338 [INFO]: Dataset: yahoo (metric real_58), m: 3, p: 99
+2024-10-09 10:27:32,359 [INFO]: The number of anomalous seqs: 5
+2024-10-09 10:27:32,367 [INFO]: The number of anomalous seqs after ap clustering: 5
+2024-10-09 10:27:32,367 [INFO]: The number of anomalous clusters: 5
+2024-10-09 10:27:32,369 [INFO]: Metric patterns dumped.
+2024-10-09 10:27:32,370 [INFO]: precision: 0.444, recall: 1.000, f1: 0.615
+2024-10-09 10:27:32,373 [INFO]: Experiment result plotted!
+2024-10-09 10:27:32,506 [INFO]: ============================================================
+2024-10-09 10:27:32,506 [INFO]: Dataset: yahoo (metric real_59), m: 3, p: 99
+2024-10-09 10:27:32,541 [INFO]: The number of anomalous seqs: 12
+2024-10-09 10:27:32,558 [INFO]: The number of anomalous seqs after ap clustering: 6
+2024-10-09 10:27:32,558 [INFO]: The number of anomalous clusters: 1
+2024-10-09 10:27:32,561 [INFO]: Metric patterns dumped.
+2024-10-09 10:27:32,564 [INFO]: precision: 1.000, recall: 1.000, f1: 1.000
+2024-10-09 10:27:32,568 [INFO]: Experiment result plotted!
+2024-10-09 10:27:32,729 [INFO]: ============================================================
+2024-10-09 10:27:32,729 [INFO]: Dataset: yahoo (metric real_60), m: 3, p: 99
+2024-10-09 10:27:32,765 [INFO]: The number of anomalous seqs: 12
+2024-10-09 10:27:32,784 [INFO]: The number of anomalous seqs after ap clustering: 11
+2024-10-09 10:27:32,784 [INFO]: The number of anomalous clusters: 8
+2024-10-09 10:27:32,788 [INFO]: Metric patterns dumped.
+/usr/local/lib/python3.8/site-packages/sklearn/metrics/_classification.py:1471: UndefinedMetricWarning: Recall and F-score are ill-defined and being set to 0.0 due to no true samples. Use `zero_division` parameter to control this behavior.
+  _warn_prf(average, modifier, msg_start, len(result))
+2024-10-09 10:27:32,791 [INFO]: precision: 0.000, recall: 0.000, f1: 0.000
+2024-10-09 10:27:32,797 [INFO]: Experiment result plotted!
+2024-10-09 10:27:32,972 [INFO]: ============================================================
+2024-10-09 10:27:32,972 [INFO]: Dataset: yahoo (metric real_61), m: 3, p: 99
+2024-10-09 10:27:33,007 [INFO]: The number of anomalous seqs: 12
+2024-10-09 10:27:33,019 [INFO]: The number of anomalous seqs after ap clustering: 12
+2024-10-09 10:27:33,019 [INFO]: The number of anomalous clusters: 10
+2024-10-09 10:27:33,023 [INFO]: Metric patterns dumped.
+2024-10-09 10:27:33,025 [INFO]: precision: 0.312, recall: 0.294, f1: 0.303
+2024-10-09 10:27:33,031 [INFO]: Experiment result plotted!
+2024-10-09 10:27:33,171 [INFO]: ============================================================
+2024-10-09 10:27:33,171 [INFO]: Dataset: yahoo (metric real_62), m: 3, p: 99
+2024-10-09 10:27:33,204 [INFO]: The number of anomalous seqs: 12
+2024-10-09 10:27:33,219 [INFO]: The number of anomalous seqs after ap clustering: 12
+2024-10-09 10:27:33,219 [INFO]: The number of anomalous clusters: 12
+2024-10-09 10:27:33,223 [INFO]: Metric patterns dumped.
+2024-10-09 10:27:33,225 [INFO]: precision: 0.833, recall: 0.714, f1: 0.769
+2024-10-09 10:27:33,231 [INFO]: Experiment result plotted!
+2024-10-09 10:27:33,375 [INFO]: ============================================================
+2024-10-09 10:27:33,375 [INFO]: Dataset: yahoo (metric real_63), m: 3, p: 99
+2024-10-09 10:27:33,407 [INFO]: The number of anomalous seqs: 12
+2024-10-09 10:27:33,419 [INFO]: The number of anomalous seqs after ap clustering: 12
+2024-10-09 10:27:33,419 [INFO]: The number of anomalous clusters: 12
+2024-10-09 10:27:33,422 [INFO]: Metric patterns dumped.
+2024-10-09 10:27:33,424 [INFO]: precision: 0.900, recall: 0.783, f1: 0.837
+2024-10-09 10:27:33,430 [INFO]: Experiment result plotted!
+2024-10-09 10:27:33,564 [INFO]: ============================================================
+2024-10-09 10:27:33,564 [INFO]: Dataset: yahoo (metric real_64), m: 10, p: 92
+2024-10-09 10:27:33,598 [INFO]: The number of anomalous seqs: 90
+2024-10-09 10:27:33,620 [INFO]: The number of anomalous seqs after ap clustering: 81
+2024-10-09 10:27:33,620 [INFO]: The number of anomalous clusters: 4
+2024-10-09 10:27:33,623 [INFO]: Metric patterns dumped.
+2024-10-09 10:27:33,626 [INFO]: precision: 0.303, recall: 0.789, f1: 0.438
+2024-10-09 10:27:33,657 [INFO]: Experiment result plotted!
+2024-10-09 10:27:33,810 [INFO]: ============================================================
+2024-10-09 10:27:33,810 [INFO]: Dataset: yahoo (metric real_65), m: 3, p: 99
+2024-10-09 10:27:33,843 [INFO]: The number of anomalous seqs: 12
+2024-10-09 10:27:33,854 [INFO]: The number of anomalous seqs after ap clustering: 12
+2024-10-09 10:27:33,854 [INFO]: The number of anomalous clusters: 12
+2024-10-09 10:27:33,857 [INFO]: Metric patterns dumped.
+2024-10-09 10:27:33,860 [INFO]: precision: 0.556, recall: 1.000, f1: 0.714
+2024-10-09 10:27:33,865 [INFO]: Experiment result plotted!
+2024-10-09 10:27:34,006 [INFO]: ============================================================
+2024-10-09 10:27:34,006 [INFO]: Dataset: yahoo (metric real_66), m: 3, p: 99
+2024-10-09 10:27:34,039 [INFO]: The number of anomalous seqs: 12
+2024-10-09 10:27:34,049 [INFO]: The number of anomalous seqs after ap clustering: 12
+2024-10-09 10:27:34,050 [INFO]: The number of anomalous clusters: 10
+2024-10-09 10:27:34,052 [INFO]: Metric patterns dumped.
+2024-10-09 10:27:34,054 [INFO]: precision: 0.350, recall: 0.875, f1: 0.500
+2024-10-09 10:27:34,060 [INFO]: Experiment result plotted!
+2024-10-09 10:27:34,200 [INFO]: ^^^^^^^^^^^^^^^ Experimental results of Yahoo dataset ^^^^^^^^^^^^^^^
+2024-10-09 10:27:34,201 [INFO]: precision: 0.526, recall: 0.688, f1: 0.556
+
+
+Exit Code: 0
+
+Role: assistant, ContentShort: Can you confirm whether the result of the execution is correct? 
+Please respond by either confirming or identifying what might have caused this unexpected result and proposing a solution.
+
+Role: system, ContentShort: yes
+Role: system, ContentShort: None
+Role: assistant, ContentShort: None
+Role: assistant, ContentShort: I will now package all the experiment results into a zip folder and provide you with the result as soon as possible.
+
