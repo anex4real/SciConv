@@ -14,14 +14,6 @@ RUN pip install --no-cache-dir -r requirements.txt
 EXPOSE 8080
 
 
-# Define environment variable for the Docker host
-#ENV DOCKER_HOST=unix:///var/run/docker.sock
-#ENV HOST_VOLUME_PATH=/home/lazaro/Github/SciConv/backendChat/projects
-
-# Set the OpenAI API key as an environment variable
-# NOTE: It is not recommended to hardcode sensitive keys in the Dockerfile
-# Consider passing this in at runtime instead for security.
-#ENV OPENAI_API_KEY=sk-proj-qepUh5gGMRDgmqTRIVNpT3BlbkFJpOAXTCkCnvYtUTFvEKJk
 
 
 # Command to run your application

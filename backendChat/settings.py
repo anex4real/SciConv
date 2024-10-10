@@ -121,11 +121,8 @@ def startDockerClient():
 
     try:
 
-        if os.path.exists('/home/lazaro/.docker/desktop/docker.sock'):
-            print("Using Docker socket from Docker Desktop: /home/lazaro/.docker/desktop/docker.sock")
-            client = docker.DockerClient(base_url='unix:///home/lazaro/.docker/desktop/docker.sock')
-        # Check if the default Docker socket exists
-        elif os.path.exists('/home/ubuntu/my_docker.sock'):
+
+        if os.path.exists('/home/ubuntu/my_docker.sock'):
             print("Using Docker socket: /home/ubuntu/my_docker.sock")
             client = docker.DockerClient(base_url='unix:///home/ubuntu/my_docker.sock')
         elif os.path.exists('/var/run/docker.sock'):
@@ -192,9 +189,7 @@ def saveDockerImage(myProjectFolder, dockerImageName, dockerTagId):
     try:
         # Check if the Docker socket exists
 
-        if os.path.exists('/home/lazaro/.docker/desktop/docker.sock'):
-            client = docker.DockerClient(base_url='unix:///home/lazaro/.docker/desktop/docker.sock')
-        elif os.path.exists('/home/ubuntu/my_docker.sock'):
+        if os.path.exists('/home/ubuntu/my_docker.sock'):
             print("Using default Docker socket: /home/ubuntu/my_docker.sock")
             client = docker.DockerClient(base_url='unix:///home/ubuntu/my_docker.sock')
         elif os.path.exists('/var/run/docker.sock'):
