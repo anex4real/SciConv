@@ -1,0 +1,55 @@
+services:
+  backend:
+    container_name: backend
+    hostname: backend
+    build: ./backendChat
+    ports:
+      - 8080:8080
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock  # Docker socket for Docker API
+      
+      - ${PWD}/backendChat/projects:/backendChat/projects
+      - ${PWD}/backendChat/questionnaires:/backendChat/questionnaires
+
+      
+    networks:
+      - my-network
+    #networks:
+     # backend_network:
+      #  ipv4_address: "172.20.0.2"  # Static IP for backend
+
+    environment:
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - HOST_VOLUME_PATH=${PWD}/backendChat/projects
+
+      
+
+  webapp:
+    container_name: webapp
+    hostname: webapp
+    build: ./chatGPTWeb
+    volumes:
+      - ${PWD}/chatGPTWeb/dist:/chatGPTWeb/dist    
+
+    ports:
+      - 4200:4200
+    #networks:
+     # backend_network:
+      #  ipv4_address: "172.20.0.3"  # Static IP for backend
+    networks:
+      - my-network
+    #links:
+     # - backend
+  
+#networks:
+ # backend_network:
+  #  driver: bridge  # Use the bridge network driver
+   # ipam:
+    #  config:
+     #   - subnet: "172.20.0.0/16"  # Define the subnet for the network
+#networks:
+ # backend:
+networks:
+  my-network:
+    driver: bridge
+
