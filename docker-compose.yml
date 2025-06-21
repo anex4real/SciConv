@@ -7,9 +7,9 @@ services:
       - 8080:8080
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock  # Docker socket for Docker API
-      
       - ${PWD}/backendChat/projects:/backendChat/projects
       - ${PWD}/backendChat/questionnaires:/backendChat/questionnaires
+      - ./.env:/.env  # 👈 mount into root
 
       
     networks:
