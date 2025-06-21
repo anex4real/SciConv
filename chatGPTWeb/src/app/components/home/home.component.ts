@@ -33,7 +33,7 @@ export class HomeComponent implements OnInit {
     protected readonly Array = Array;
     private fileToUpload: File | null = null;
     password: string = '';
-    isAuthenticated: boolean = false;
+    isAuthenticated: boolean = true;
 
     stages = Stage; // Expose the enum to the template
     stageSubject = new BehaviorSubject<Stage>(Stage.Start); // Default to Initial stage
@@ -499,13 +499,13 @@ export class HomeComponent implements OnInit {
 
     onFileChange(event: any) {
         const file = event.target.files[0];
-        if (file && (file.type === 'application/x-zip-compressed' || file.type === 'application/zip')) {
-            this.fileToUpload = file;
-        } else {
-            console.log(file.type)
-            console.error('Please select a zip file.');
+
+        if (!file) {
             this.fileToUpload = null;
+            return;
         }
+        this.fileToUpload = file;
+        console.log('Accepted file:', file.name);
     }
 
     onSubmit() {

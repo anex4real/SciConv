@@ -9,6 +9,7 @@ from packageExperiment.windows import writeWindowsFIle
 from settings import *
 import tempfile
 from datetime import datetime
+from werkzeug.utils import secure_filename
 import pytz
 
 # Specify your timezone (e.g., 'America/New_York', 'Europe/London', etc.)
@@ -41,100 +42,97 @@ def home():
 @app.route("/project/upload-project", methods=['POST'])
 @cross_origin()
 def upload_file():
-    current_dir = os.path.abspath(".")
-    print(current_dir)
-
     messagesToUser = []
     messagesToChat = []
 
     if 'file' not in request.files:
-        print("I can’t find your file")
         appendMessage(messagesToUser, contentShort="I can’t find your file", stage="Start")
         return makeResponse(messagesToUser, 201, True)
 
     file = request.files["file"]
 
     if file.filename == '':
-        print("I can’t select your file")
         appendMessage(messagesToUser, contentShort="I can’t select your file", stage="Start")
         return makeResponse(messagesToUser, 201, True)
 
     try:
-        if file and file.filename.endswith('.zip'):
+        filename = secure_filename(file.filename)
+        ext = os.path.splitext(filename)[1].lower()
+        now_str = datetime.now(timezone).strftime("%d%m_%H%M")
 
-            # Save the file temporarily
-            temp_path = os.path.join(PROJECTS_LOCATION, file.filename)
+        if ext == '.zip':
+            # Save zip temporarily
+            temp_path = os.path.join(PROJECTS_LOCATION, filename)
             file.save(temp_path)
 
             with zipfile.ZipFile(temp_path, 'r') as zip_ref:
-                # Check for folders inside the zip file
-                folder_names = set()
-                for member in zip_ref.namelist():
-                    if member.endswith('/'):  # Check if it's a folder
-                        folder_names.add(member.split('/')[0])
-                        projectUuid = list(folder_names)[0]
+                namelist = zip_ref.namelist()
+                top_levels = set(name.split('/')[0] for name in namelist if not name.startswith('__MACOSX'))
 
-                if not folder_names:
-                    print("I can’t select your folder")
-                    os.remove(temp_path)  # Clean up the temporary file
-                    appendMessage(messagesToUser, contentShort="I can’t select your folder", stage="Start")
-                    return makeResponse(messagesToUser, 201, True)
-
-
-            projectUuid =  re.sub(r'[^\w\s_-]', '', projectUuid)
-            projectLocation = os.path.join(PROJECTS_LOCATION, projectUuid)
-
-            if os.path.exists(projectLocation) and os.path.isdir(projectLocation):
-                number = datetime.now(timezone).strftime("%m%d_%H%M")
-                newProjectUuid = f"{projectUuid}_{number}"
-                projectLocation = os.path.join(PROJECTS_LOCATION, newProjectUuid)
-                print(f"ProjectLocation '{projectLocation}' has been changed.")
-                projectLocationRoot = os.path.join(PROJECTS_LOCATION, newProjectUuid, projectUuid)
-                projectLocationFiles = os.path.join(PROJECTS_LOCATION, newProjectUuid, "files")
-                projectUuid= newProjectUuid
-
+            if len(top_levels) == 1 and all(name.startswith(f"{list(top_levels)[0]}/") for name in namelist):
+                # One folder inside zip (use its name) + append timestamp
+                clean_name = re.sub(r'[^\w\s-]', '', list(top_levels)[0])
+                projectUuid = f"{clean_name}_{now_str}"
             else:
-                projectLocationRoot = os.path.join(PROJECTS_LOCATION, projectUuid, projectUuid)
-                projectLocationFiles = os.path.join(PROJECTS_LOCATION, projectUuid, "files")
+                # Multiple files/folders
+                projectUuid = re.sub(r'[^\w\s-]', '', os.path.splitext(filename)[0]) + "_" + now_str
 
+            projectLocation = os.path.join(PROJECTS_LOCATION, projectUuid)
+            projectFilesLocation = os.path.join(projectLocation, "files")
 
-            # Extract all files into the new project location
+            # Extract zip
             with zipfile.ZipFile(temp_path, 'r') as zip_ref:
                 zip_ref.extractall(projectLocation)
+            os.remove(temp_path)
 
-            os.remove(temp_path)  # Remove the zip file after extraction
-            os.rename(projectLocationRoot, projectLocationFiles)
-
-            message1 = {"role": "system",
-                        "jsonObject": False,
-                        "contentShort": None,
-                        "content": "I need to validate the variable 'projectUuid' for use in this function. "
-                                   "\nIf 'projectUuid' is a valid Docker tag name, respond with 'YES'."
-                                   "\nIf it's not valid, return an updated, valid version of 'projectUuid', take into account the following information."
-                                   "\nCurrent value: projectUuid = " + projectUuid +
-                                   ".\nYour response should be exactly one word, either 'YES' or the updated 'projectUuid' value."}
-
-            messagesToChat.append(message1)
-
-            gpt_result = callGPTModel(messagesToChat)
-
-            if gpt_result == "YES":
-                appendMessage(messagesToUser, content=projectUuid, stage="FindProjectFiles")
+            if len(top_levels) == 1:
+                extracted_root = os.path.join(projectLocation, list(top_levels)[0])
+                os.rename(extracted_root, projectFilesLocation)
             else:
-                newprojectLocation = os.path.join(PROJECTS_LOCATION, gpt_result)
-                os.rename(projectLocation, newprojectLocation)
-                appendMessage(messagesToUser, content=gpt_result, stage="FindProjectFiles")
-            return makeResponse(messagesToUser, 201, True)
+                os.makedirs(projectFilesLocation, exist_ok=True)
+                for item in os.listdir(projectLocation):
+                    src = os.path.join(projectLocation, item)
+                    if item != "files":
+                        os.rename(src, os.path.join(projectFilesLocation, item))
 
         else:
-            print("I need to have a zip file")
-            appendMessage(messagesToUser, contentShort="I need to have a zip file", stage="Start")
-            return makeResponse(messagesToUser, 201, True)
+            # Single file upload
+            name_no_ext = os.path.splitext(filename)[0]
+            projectUuid = f"{name_no_ext}_{now_str}"
+            projectLocation = os.path.join(PROJECTS_LOCATION, projectUuid)
+            projectFilesLocation = os.path.join(projectLocation, "files")
+            os.makedirs(projectFilesLocation, exist_ok=True)
+            file.save(os.path.join(projectFilesLocation, filename))
+
+        # Validate Docker tag name
+        message1 = {
+            "role": "system",
+            "jsonObject": False,
+            "contentShort": None,
+            "content": f"I need to validate the variable 'projectUuid' for use in this function. "
+                       f"\nIf 'projectUuid' is a valid Docker tag name, respond with 'YES'."
+                       f"\nIf it's not valid, return an updated, valid version of 'projectUuid'."
+                       f"\nCurrent value: projectUuid = {projectUuid}."
+                       f"\nYour response should be exactly one word, either 'YES' or the updated 'projectUuid' value."
+        }
+
+        messagesToChat.append(message1)
+        gpt_result = callGPTModel(messagesToChat)
+
+        if gpt_result == "YES":
+            appendMessage(messagesToUser, content=projectUuid, stage="FindProjectFiles")
+        else:
+            newProjectLocation = os.path.join(PROJECTS_LOCATION, gpt_result)
+            os.rename(projectLocation, newProjectLocation)
+            appendMessage(messagesToUser, content=gpt_result, stage="FindProjectFiles")
+
+        return makeResponse(messagesToUser, 201, True)
 
     except Exception as e:
-        print("Ups! There's an error:" + str(e))
-        appendMessage(messagesToUser, contentShort="Ups! There's an error:" + str(e), stage="Start")
+        print("Ups! There's an error:", str(e))
+        appendMessage(messagesToUser, contentShort="Ups! There's an error: " + str(e), stage="Start")
         return makeResponse(messagesToUser, 201, True)
+
 
 
 @app.route("/project/find_files", methods=['POST'])

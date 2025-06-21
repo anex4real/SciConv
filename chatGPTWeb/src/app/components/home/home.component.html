@@ -1,11 +1,11 @@
-<div *ngIf="!isAuthenticated" class="login-container">
+<!--<div *ngIf="!isAuthenticated" class="login-container">
     <h2>Password </h2>
     <form (ngSubmit)="onSubmitpass()">
         <input type="password" id="password" [(ngModel)]="password" name="password" required>
         <button type="submit">Submit</button>
         <div *ngIf="errorMessage" style="color: red;">{{ errorMessage }}</div>
     </form>
-</div>
+</div>-->
 
 <div *ngIf="isAuthenticated">
     <!--<div class="chat-container" *ngIf="start">-->
@@ -63,18 +63,32 @@
         </div>
     </div>
 
-    <div class="chat-input" *ngIf="this.stageSubject.value==stages.Start">
-        <form (ngSubmit)="onSubmit()" #fileUploadForm="ngForm">
-            <input type="file" (change)="onFileChange($event)" accept=".zip"/>
-            <button  type="submit" [disabled]="isLoading">
-                <span *ngIf="!isLoading">Upload</span>
-                <span *ngIf="isLoading">
-                    <i class="fa fa-spinner fa-spin"></i> Loading...
-                    </span>
-            </button>
+    <div class="chat-input" *ngIf="this.stageSubject.value == stages.Start">
+        <div class="upload-container">
+            <!-- Info Message -->
+            <div class="info-message">
+                <p><strong>You can upload either:</strong></p>
+                <ul>
+                    <li>A single source file (e.g., <code>.py</code>, <code>.cpp</code>)</li>
+                    <li>A <code>.zip</code> file containing a project folder</li>
+                </ul>
+                <p>The system will automatically assign a project name based on your upload and the current date.</p>
+            </div>
 
-        </form>
+            <!-- Upload Form -->
+            <form class="upload-form" (ngSubmit)="onSubmit()" #fileUploadForm="ngForm">
+                <input type="file" (change)="onFileChange($event)">
+                <button type="submit" [disabled]="isLoading">
+                    <span *ngIf="!isLoading">Upload</span>
+                    <span *ngIf="isLoading">
+          <i class="fa fa-spinner fa-spin"></i> Loading...
+        </span>
+                </button>
+            </form>
+        </div>
     </div>
+
+
     <div class="chat-input" *ngIf="this.stageSubject.value==stages.Start">
 
         <!--<input [(ngModel)]="projectUuid" placeholder="Type your project location here..."/>-->

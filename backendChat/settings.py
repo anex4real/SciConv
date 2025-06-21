@@ -12,6 +12,18 @@ import docker
 import os
 from openai import OpenAI
 
+from dotenv import load_dotenv
+# Get the absolute path to the .env in the project root
+ROOT_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
+ENV_PATH = os.path.join(ROOT_DIR, '.env')
+
+# Check for .env file and load it, or raise an error
+if os.path.exists(ENV_PATH):
+    load_dotenv(dotenv_path=ENV_PATH)
+    print(f".env file loaded from: {ENV_PATH}")
+else:
+    raise FileNotFoundError(f"❌ .env file not found at: {ENV_PATH}")
+
 
 requestConfig = {
     "headers": {
@@ -120,8 +132,6 @@ def startDockerClient():
     sock.bind(('', 0))
 
     try:
-
-
         if os.path.exists('/home/ubuntu/my_docker.sock'):
             print("Using Docker socket: /home/ubuntu/my_docker.sock")
             client = docker.DockerClient(base_url='unix:///home/ubuntu/my_docker.sock')
@@ -148,6 +158,27 @@ def startDockerClient():
     port = sock.getsockname()[1]
     print("Selected Port: " + str(port))
     return {"dockerClient": client, "port": port}
+
+def startDockerClient1():
+    # Select an available port (optional and for your use)
+    sock = socket.socket()
+    sock.bind(('', 0))
+
+    try:
+        # On Windows with Docker Desktop, this is always the safest approach
+        print("Attempting to use Docker Desktop context via docker.from_env()...")
+        client = docker.from_env()
+        client.ping()  # Test connection
+        print("✅ Connected to Docker successfully.")
+
+    except docker.errors.DockerException as e:
+        print(f"❌ Failed to connect to Docker: {str(e)}")
+        raise Exception("Docker is not running or not accessible from this environment.")
+
+    port = sock.getsockname()[1]
+    print("Selected Port:", port)
+    return {"dockerClient": client, "port": port}
+
 
 
 def createNetworkIfNotExists(dockerClient, networkName):
@@ -310,18 +341,26 @@ def return_messages(requestData, messagesToUser):
 
     return requestData["messages"]
 
-def callGPTModel(messagesToChat, modelUsed="gpt-4-turbo"):
 
-    messagesToChat= convert_json_to_string(messagesToChat)
-    client = OpenAI()
+def callGPTModel(messagesToChat, modelUsed="gpt-4-turbo"):
+    messagesToChat = convert_json_to_string(messagesToChat)
+
+    openai_api_key = os.getenv("OPENAI_API_KEY")
+    if not openai_api_key:
+        raise EnvironmentError("Missing OPENAI_API_KEY in environment or .env file.")
+
+    client = OpenAI(api_key=openai_api_key)
+
     completion = client.chat.completions.create(
-        model=modelUsed,
         # #model="gpt-4o",
         # model="chatgpt-4o-latest",
-        messages=
-        messagesToChat,
+        # model="gpt-4-turbo",
+        model=modelUsed,
+        messages=messagesToChat,
     )
-    result= completion.choices[0].message.content
+
+
+    result = completion.choices[0].message.content
     print(result)
     return result
 

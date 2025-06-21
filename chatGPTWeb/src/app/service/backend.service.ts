@@ -21,6 +21,7 @@ export class BackendService {
         //const user: any = localStorage.getItem('user');
         //this.userSubject = new BehaviorSubject<User>(JSON.parse(user));
         //this.user = this.userSubject.asObservable();
+        console.log(this.baseUrl);
 
         this.getServerHome().subscribe((response: any) => {
             console.log(response)

@@ -5,6 +5,7 @@
   "license": "MIT",
   "scripts": {
     "ng": "ng",
+    "startdev": "ng serve --host 0.0.0.0 --configuration=development",
     "start": "ng serve --host 0.0.0.0 --configuration=production",
     "build": "ng build --configuration=production",
     "watch": "ng build --watch --configuration development",

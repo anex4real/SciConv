@@ -4,6 +4,14 @@
     align-items: center;
 }
 
+.info-message {
+    background-color: #f1f8ff;
+    border-left: 4px solid #007bff;
+    padding: 10px;
+    margin-bottom: 10px;
+    font-size: 14px;
+    color: #333;
+}
 
 
 .pt-3 {
