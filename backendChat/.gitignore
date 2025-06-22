@@ -14,5 +14,5 @@ __pycache__
 .idea
 
 projects/
-
+!projects_example/**/*.zip
 
