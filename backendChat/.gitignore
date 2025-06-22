@@ -13,9 +13,7 @@ venv
 __pycache__
 .idea
 
-projects/**/files/
-projects/**/*.zip
-projects/**/*.tar
+projects/
 
 
 !projects_example/cplus/**/*.zip
