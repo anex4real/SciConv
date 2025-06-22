@@ -16,7 +16,3 @@ __pycache__
 projects/
 
 
-!projects_example/cplus/**/*.zip
-!projects_example/java/**/*.zip
-!projects_example/python/**/*.zip
-
