@@ -17,3 +17,8 @@ projects/**/files/
 projects/**/*.zip
 projects/**/*.tar
 
+
+!projects_example/cplus/**/*.zip
+!projects_example/java/**/*.zip
+!projects_example/python/**/*.zip
+

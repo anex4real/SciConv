@@ -24,7 +24,6 @@ if os.path.exists(ENV_PATH):
 else:
     raise FileNotFoundError(f"❌ .env file not found at: {ENV_PATH}")
 
-
 requestConfig = {
     "headers": {
         "Accept": "application/zip",
@@ -37,7 +36,6 @@ requestConfigAcceptAll = {
     },
     "responseType": "arraybuffer",
 }
-
 
 def find_files(directory):
     files = []

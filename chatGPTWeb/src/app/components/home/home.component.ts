@@ -198,33 +198,41 @@ export class HomeComponent implements OnInit {
 
     findProjectFiles() {
         this.isLoading = true;
-        this.backend.findProjectFiles(this.projectUuid).subscribe((response: any) => {
-            this.isLoading = false;
-            this.messages.push(...response)
-            let responseLength = response.length
 
-            if (response[responseLength - 1].stage == "ParametersToUse") {
-                console.log(response[responseLength - 1]["content"]);
-                const {ExecutableFiles, ConfigurationFiles, ProjectUuid} = response[responseLength - 1]["content"];
-                this.executableFiles = ExecutableFiles;
-                this.configurationFiles = ConfigurationFiles;
-                this.projectUuid = ProjectUuid
+        this.backend.findProjectFiles(this.projectUuid).subscribe({
+            next: (response: any) => {
+                this.isLoading = false;
+                this.messages.push(...response);
+                const responseLength = response.length;
 
-                // Log the configuration and executable files for debugging
-                console.log('Configuration Files:', this.configurationFiles);
-                console.log('Executable Files:', this.executableFiles);
+                if (response[responseLength - 1].stage === "ParametersToUse") {
+                    console.log(response[responseLength - 1]["content"]);
+                    const { ExecutableFiles, ConfigurationFiles, ProjectUuid } = response[responseLength - 1]["content"];
+                    this.executableFiles = ExecutableFiles;
+                    this.configurationFiles = ConfigurationFiles;
+                    this.projectUuid = ProjectUuid;
 
+                    console.log('Configuration Files:', this.configurationFiles);
+                    console.log('Executable Files:', this.executableFiles);
+                }
+
+                if (this.executableFiles?.length === 1) {
+                    // Optional logic if only 1 executable file
+                }
+
+                this.changeStage(response[responseLength - 1].stage);
+            },
+            error: (err) => {
+                console.error("Error fetching project files:", err);
+                this.isLoading = false;
+                this.errorMessage = "Failed to find project files. Please check your connection or authentication.";
             }
-
-            if (this.executableFiles?.length == 1) {
-
-                //this.messageToAsk = "The file that you intent to run is " + this.executableFiles[0] + ". Can you confirm that this information is correct? Reply saying that you confirm or say the name of the file to run."
-                //this.stageAfterChat = this.stages.ResearchArtifact
-                //this.changeStage(this.stages.WaitChatInteraction)
-            }
-            this.changeStage(response[responseLength - 1].stage)
         });
     }
+
+
+
+
 
     parametersToUseFunc() {
         this.messages.push({
@@ -245,22 +253,32 @@ export class HomeComponent implements OnInit {
     parametersToUseConfirmation() {
         this.isLoading = true;
 
-        this.backend.parametersToUseConfirmation(this.projectUuid, this.messages).subscribe((response: any) => {
+        this.backend.parametersToUseConfirmation(this.projectUuid, this.messages).subscribe({
+            next: (response: any) => {
                 this.isLoading = false;
 
-                this.messages.push(...response)
-                let responseLength = response.length
+                this.messages.push(...response);
+                const responseLength = response.length;
+
                 if (response[responseLength - 1].stage) {
-                    if (response[responseLength - 1].stage == "ParametersToUse") {
-                        this.projectUuid = response[responseLength - 1].content
-                    } else if (response[responseLength - 1].stage == "FindConfigurations") {
-                        this.commandToRun = response[responseLength - 1].content
+                    if (response[responseLength - 1].stage === "ParametersToUse") {
+                        console.log("ParametersToUse");
+                        // this.projectUuid = response[responseLength - 1].content;
+                    } else if (response[responseLength - 1].stage === "FindConfigurations") {
+                        this.commandToRun = response[responseLength - 1].content;
                     }
-                    this.changeStage(response[responseLength - 1].stage)
+
+                    this.changeStage(response[responseLength - 1].stage);
                 }
+            },
+            error: (err) => {
+                console.error("Error in parametersToUseConfirmation:", err);
+                this.isLoading = false;
+                this.errorMessage = "Failed to confirm parameters. Please check your input or authentication.";
             }
-        )
+        });
     }
+
 
     findConfigurations() {
         this.messages.push({
@@ -269,22 +287,31 @@ export class HomeComponent implements OnInit {
             contentShort: "I will now infer all the necessary information to build the environment, which can take some time.",
             jsonObject: false
         });
+
         this.isLoading = true;
 
-        this.backend.findConfigurations(this.projectUuid, this.executableFiles, this.commandToRun).subscribe((response: any) => {
-            this.isLoading = false;
+        this.backend.findConfigurations(this.projectUuid, this.executableFiles, this.commandToRun).subscribe({
+            next: (response: any) => {
+                this.isLoading = false;
 
-            console.log(response);
-            this.messages.push(...response)
+                console.log(response);
+                this.messages.push(...response);
 
-            let responseLength = response.length
-            this.configurations = response[responseLength - 1].content
+                const responseLength = response.length;
+                this.configurations = response[responseLength - 1].content;
 
-            if (response[responseLength - 1].stage) {
-                this.changeStage(response[responseLength - 1].stage)
+                if (response[responseLength - 1].stage) {
+                    this.changeStage(response[responseLength - 1].stage);
+                }
+            },
+            error: (err) => {
+                console.error("Error in findConfigurations:", err);
+                this.isLoading = false;
+                this.errorMessage = "Failed to infer environment configuration. Please try again.";
             }
         });
     }
+
 
     findConfigurationsInteraction() {
         this.messages.push({
@@ -307,47 +334,69 @@ export class HomeComponent implements OnInit {
 
     findConfigurationsFunc(userMessage: any) {
         this.isLoading = true;
-        let myMessage = "Here are the configuration used: " +
+
+        const myMessage = "Here are the configuration used: " +
             JSON.stringify(this.configurations) +
             "The question is: Are they correct, or would you like to change anything? \n" +
             "The user action is: " + userMessage;
 
-        this.backend.findConfigurationsFunc(this.projectUuid, this.messages, myMessage).subscribe((response: any) => {
-            this.isLoading = false;
-            console.log(response);
-            this.messages.push(...response)
-            let responseLength = response.length
-            if (response[responseLength - 1].stage == "WaitChatInteraction") {
-                if (response[responseLength - 1].jsonObject == true) {
-                    this.configurations = response[responseLength - 1].content
-                }
-                this.examplesToAsk = "I want to change the execution parameters.\n " +
-                    "I want to change the project location.\n" +
-                    "I want to change the computing environment used (programming languages, dependencies).\n"
+        this.backend.findConfigurationsFunc(this.projectUuid, this.messages, myMessage).subscribe({
+            next: (response: any) => {
+                this.isLoading = false;
+                console.log(response);
+                this.messages.push(...response);
 
-                this.messageToAsk = "I used these settings. Are they correct, or would you like to change anything? \n" +
-                    JSON.stringify(this.configurations)
-                this.stageAfterChat = this.stages.BuildDockerFile
+                const responseLength = response.length;
+
+                if (response[responseLength - 1].stage === "WaitChatInteraction") {
+                    if (response[responseLength - 1].jsonObject === true) {
+                        this.configurations = response[responseLength - 1].content;
+                    }
+
+                    this.examplesToAsk = "I want to change the execution parameters.\n" +
+                        "I want to change the project location.\n" +
+                        "I want to change the computing environment used (programming languages, dependencies).\n";
+
+                    this.messageToAsk = "I used these settings. Are they correct, or would you like to change anything? \n" +
+                        JSON.stringify(this.configurations);
+
+                    this.stageAfterChat = this.stages.BuildDockerFile;
+                }
+
+                this.changeStage(response[responseLength - 1].stage);
+            },
+            error: (err) => {
+                console.error("Error in findConfigurationsFunc:", err);
+                this.isLoading = false;
+                this.errorMessage = "Failed to process configuration changes. Please try again.";
             }
-            this.changeStage(response[responseLength - 1].stage)
         });
     }
+
 
     buildDockerFile() {
         this.isLoading = true;
 
-        this.backend.BuildDockerFile(this.projectUuid, this.messages).subscribe((response: any) => {
-            this.isLoading = false;
+        this.backend.BuildDockerFile(this.projectUuid, this.messages).subscribe({
+            next: (response: any) => {
+                this.isLoading = false;
 
-            console.log(response);
-            this.messages.push(...response)
-            let responseLength = response.length
+                console.log(response);
+                this.messages.push(...response);
+                const responseLength = response.length;
 
-            if (response[responseLength - 1].stage) {
-                this.changeStage(response[responseLength - 1].stage)
+                if (response[responseLength - 1].stage) {
+                    this.changeStage(response[responseLength - 1].stage);
+                }
+            },
+            error: (err) => {
+                console.error("Error in buildDockerFile:", err);
+                this.isLoading = false;
+                this.errorMessage = "Failed to build Dockerfile. Please try again.";
             }
         });
     }
+
 
     buildDockerImage() {
         this.messages.push({
@@ -358,27 +407,37 @@ export class HomeComponent implements OnInit {
         });
 
         this.isLoading = true;
-        this.backend.BuildDockerImage(this.projectUuid, this.messages).subscribe((response: any) => {
-            this.isLoading = false;
 
-            console.log(response);
-            this.messages.push(...response)
-            let responseLength = response.length
+        this.backend.BuildDockerImage(this.projectUuid, this.messages).subscribe({
+            next: (response: any) => {
+                this.isLoading = false;
 
-            if (response[responseLength - 1].goBack) {
-                console.log("goback")
-                this.goBack = this.goBack - 1
-                if (this.goBack <= 0) {
-                    this.changeStage(this.stages.FindConfigurationsInteraction)
-                    this.goBack = this.GOBACKNUMBER
+                console.log(response);
+                this.messages.push(...response);
+                const responseLength = response.length;
+
+                if (response[responseLength - 1].goBack) {
+                    console.log("goback");
+                    this.goBack -= 1;
+
+                    if (this.goBack <= 0) {
+                        this.changeStage(this.stages.FindConfigurationsInteraction);
+                        this.goBack = this.GOBACKNUMBER;
+                    } else {
+                        this.auxFunction(response, responseLength);
+                    }
                 } else {
-                    this.auxFunction(response, responseLength)
+                    this.auxFunction(response, responseLength);
                 }
-            } else {
-                this.auxFunction(response, responseLength)
+            },
+            error: (err) => {
+                console.error("Error in buildDockerImage:", err);
+                this.isLoading = false;
+                this.errorMessage = "Failed to build Docker image. Please verify the Dockerfile or environment.";
             }
         });
     }
+
 
     auxFunction(response: any, responseLength: any) {
         if (response[responseLength - 1].stage == "RunContainer") {
@@ -398,31 +457,42 @@ export class HomeComponent implements OnInit {
             contentShort: "I will now run the experiment and provide you with the results as soon as possible.",
             jsonObject: false
         });
-        console.log("asasas" + this.commandToRun)
+
+        console.log("Command to run:", this.commandToRun);
         this.isLoading = true;
-        this.backend.RunContainer(this.projectUuid, this.dockerImageID, this.commandToRun, this.messages).subscribe((response: any) => {
-            this.isLoading = false;
 
-            console.log(response);
-            this.messages.push(...response)
-            let responseLength = response.length
-            if (!response[responseLength - 1].stage) {
-                const {logs, added_files, removed_files, modified_files} = response[responseLength - 1]["content"];
-                this.logs = logs;
-                this.added_files = added_files;
-                this.removed_files = removed_files
-                this.modified_files = modified_files
+        this.backend.RunContainer(this.projectUuid, this.dockerImageID, this.commandToRun, this.messages).subscribe({
+            next: (response: any) => {
+                this.isLoading = false;
 
-                this.messageToAsk = "Can you confirm whether the result of the execution is correct? " +
-                    "\nPlease respond by either confirming or identifying what might have caused this unexpected result and proposing a solution.\n"
-                this.stageAfterChat = this.stages.ResearchArtifact
-                this.changeStage(this.stages.WaitChatInteraction)
-            } else {
-                this.messageToAsk = undefined
-                this.changeStage(response[responseLength - 1].stage)
+                console.log(response);
+                this.messages.push(...response);
+                const responseLength = response.length;
+
+                if (!response[responseLength - 1].stage) {
+                    const { logs, added_files, removed_files, modified_files } = response[responseLength - 1]["content"];
+                    this.logs = logs;
+                    this.added_files = added_files;
+                    this.removed_files = removed_files;
+                    this.modified_files = modified_files;
+
+                    this.messageToAsk = "Can you confirm whether the result of the execution is correct? " +
+                        "\nPlease respond by either confirming or identifying what might have caused this unexpected result and proposing a solution.\n";
+                    this.stageAfterChat = this.stages.ResearchArtifact;
+                    this.changeStage(this.stages.WaitChatInteraction);
+                } else {
+                    this.messageToAsk = undefined;
+                    this.changeStage(response[responseLength - 1].stage);
+                }
+            },
+            error: (err) => {
+                console.error("Error in runContainer:", err);
+                this.isLoading = false;
+                this.errorMessage = "Failed to run container. Please review the command or image and try again.";
             }
         });
     }
+
 
     researchArtifact() {
         this.messages.push({
@@ -431,17 +501,27 @@ export class HomeComponent implements OnInit {
             contentShort: "I will now package all the experiment results into a zip folder and provide you with the result as soon as possible.\n",
             jsonObject: false
         });
-        this.isLoading = true;
-        this.backend.ResearchArtifact(this.projectUuid, this.dockerImageID, this.commandToRun, this.messages).subscribe((response: any) => {
-            this.isLoading = false;
 
-            console.log("response");
-            console.log(response);
-            this.messages.push(...response)
-            let responseLength = response.length
-            this.changeStage(response[responseLength - 1].stage)
+        this.isLoading = true;
+
+        this.backend.ResearchArtifact(this.projectUuid, this.dockerImageID, this.commandToRun, this.messages).subscribe({
+            next: (response: any) => {
+                this.isLoading = false;
+
+                console.log("response");
+                console.log(response);
+                this.messages.push(...response);
+                const responseLength = response.length;
+                this.changeStage(response[responseLength - 1].stage);
+            },
+            error: (err) => {
+                console.error("Error in researchArtifact:", err);
+                this.isLoading = false;
+                this.errorMessage = "Failed to generate the research artifact. Please try again.";
+            }
         });
     }
+
 
     waitChatInteraction(messageToAsk: any) {
         console.log("aqui")
@@ -473,28 +553,38 @@ export class HomeComponent implements OnInit {
     }
 
     chatInteraction() {
-
         if (this.stageAfterChat == undefined) {
-            console.error("forcei mudança")
-            this.stageAfterChat = this.stages.FindConfigurationsInteraction
+            console.error("forcei mudança");
+            this.stageAfterChat = this.stages.FindConfigurationsInteraction;
         }
+
         this.isLoading = true;
-        this.backend.ChatInteraction(this.projectUuid, this.messages, this.stageAfterChat).subscribe((response: any) => {
-            this.isLoading = false;
 
-            console.log(response);
-            this.messages.push(...response)
-            let responseLength = response.length
+        this.backend.ChatInteraction(this.projectUuid, this.messages, this.stageAfterChat).subscribe({
+            next: (response: any) => {
+                this.isLoading = false;
 
-            if (response[responseLength - 1].stage == this.stages.WaitChatInteraction) {
-                this.messageToAsk = "What might have caused this unexpected result? \n"
-                this.examplesToAsk = "I want to change the execution parameters.\n " +
-                    "I want to change the project location.\n" +
-                    "I want to change the computing environment used (programming languages, dependencies).\n"
+                console.log(response);
+                this.messages.push(...response);
+                const responseLength = response.length;
+
+                if (response[responseLength - 1].stage === this.stages.WaitChatInteraction) {
+                    this.messageToAsk = "What might have caused this unexpected result? \n";
+                    this.examplesToAsk = "I want to change the execution parameters.\n" +
+                        "I want to change the project location.\n" +
+                        "I want to change the computing environment used (programming languages, dependencies).\n";
+                }
+
+                this.changeStage(response[responseLength - 1].stage);
+            },
+            error: (err) => {
+                console.error("Error in chatInteraction:", err);
+                this.isLoading = false;
+                this.errorMessage = "Chat interaction failed. Please try again.";
             }
-            this.changeStage(response[responseLength - 1].stage)
         });
     }
+
 
 
     onFileChange(event: any) {
@@ -514,19 +604,25 @@ export class HomeComponent implements OnInit {
             formData.append('file', this.fileToUpload);
 
             this.isLoading = true;
-            this.backend.uploadProject(formData).subscribe((response: any) => {
-                this.isLoading = false;
+            this.backend.uploadProject(formData).subscribe({
+                next: (response: any) => {
+                    this.isLoading = false;
 
-                console.log("response");
-                console.log(response);
-                let responseLength = response.length
-                if (response[responseLength - 1].stage == "FindProjectFiles") {
-                    this.projectUuid = response[responseLength - 1].content
-
-                    this.changeStage(response[responseLength - 1].stage)
-                } else if (response[responseLength - 1].stage) {
-                    this.changeStage(response[responseLength - 1].stage)
-                    this.messages.push(...response)
+                    console.log("response");
+                    console.log(response);
+                    let responseLength = response.length;
+                    if (response[responseLength - 1].stage == "FindProjectFiles") {
+                        this.projectUuid = response[responseLength - 1].content;
+                        this.changeStage(response[responseLength - 1].stage);
+                    } else if (response[responseLength - 1].stage) {
+                        this.changeStage(response[responseLength - 1].stage);
+                        this.messages.push(...response);
+                    }
+                },
+                error: (err) => {
+                    console.error("Upload failed:", err);
+                    this.isLoading = false;  // 👈 this ensures the button is re-enabled
+                    this.errorMessage = "Upload failed. Please check your connection or authentication.";
                 }
             });
         }

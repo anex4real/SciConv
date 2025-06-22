@@ -2,7 +2,7 @@ import re
 import shutil
 import zipfile
 from copy import copy
-from flask import Flask, request
+from flask import Flask, request, jsonify
 from flask_cors import CORS, cross_origin
 from packageExperiment.linux import writeLinuxFile
 from packageExperiment.windows import writeWindowsFIle
@@ -11,6 +11,7 @@ import tempfile
 from datetime import datetime
 from werkzeug.utils import secure_filename
 import pytz
+from functools import wraps
 
 # Specify your timezone (e.g., 'America/New_York', 'Europe/London', etc.)
 timezone = pytz.timezone('Europe/London')
@@ -20,12 +21,25 @@ HOST_VOLUME_PATH = ""
 PROJECTS_LOCATION = 'projects'
 QUESTIONNAIRES_LOCATION = 'questionnaires'
 
+AUTH_TOKEN = "my-secret-token"
+
 app = Flask(__name__)
 cors = CORS(app, resources={r"/*": {"origins": "*"}})
 #cors = CORS(app, resources={r"/api/*": {"origins": "*"}})
 #CORS(app)  # This will allow CORS for all routes by default
 
 
+
+def require_auth(f):
+    @wraps(f)
+    def decorated(*args, **kwargs):
+        token = request.headers.get('Authorization')
+        if token != f"Bearer {AUTH_TOKEN}":
+            return jsonify({"message": "Unauthorized"}), 401
+
+        return f(*args, **kwargs)
+
+    return decorated
 
 @app.route("/", methods=['get'])
 @cross_origin()
@@ -41,6 +55,7 @@ def home():
 
 @app.route("/project/upload-project", methods=['POST'])
 @cross_origin()
+@require_auth
 def upload_file():
     messagesToUser = []
     messagesToChat = []
@@ -69,13 +84,15 @@ def upload_file():
                 namelist = zip_ref.namelist()
                 top_levels = set(name.split('/')[0] for name in namelist if not name.startswith('__MACOSX'))
 
-            if len(top_levels) == 1 and all(name.startswith(f"{list(top_levels)[0]}/") for name in namelist):
-                # One folder inside zip (use its name) + append timestamp
-                clean_name = re.sub(r'[^\w\s-]', '', list(top_levels)[0])
-                projectUuid = f"{clean_name}_{now_str}"
-            else:
-                # Multiple files/folders
-                projectUuid = re.sub(r'[^\w\s-]', '', os.path.splitext(filename)[0]) + "_" + now_str
+                if len(top_levels) == 1 and all(name.startswith(f"{list(top_levels)[0]}/") for name in namelist):
+                    # One folder inside zip (use its name) + append timestamp
+                    clean_name = re.sub(r'[^\w.-]', '', list(top_levels)[0]).lower()  # safe folder name
+                    projectUuid = f"{clean_name}_{now_str}"
+                else:
+                    # Multiple files/folders — use filename base, sanitized
+                    name_no_ext = os.path.splitext(filename)[0]
+                    clean_name = re.sub(r'[^\w.-]', '', name_no_ext).lower()  # safe file base name
+                    projectUuid = f"{clean_name}_{now_str}"
 
             projectLocation = os.path.join(PROJECTS_LOCATION, projectUuid)
             projectFilesLocation = os.path.join(projectLocation, "files")
@@ -97,7 +114,7 @@ def upload_file():
 
         else:
             # Single file upload
-            name_no_ext = os.path.splitext(filename)[0]
+            name_no_ext = re.sub(r'[^\w.-]', '', os.path.splitext(filename)[0]).lower()
             projectUuid = f"{name_no_ext}_{now_str}"
             projectLocation = os.path.join(PROJECTS_LOCATION, projectUuid)
             projectFilesLocation = os.path.join(projectLocation, "files")
@@ -137,6 +154,7 @@ def upload_file():
 
 @app.route("/project/find_files", methods=['POST'])
 @cross_origin()
+@require_auth
 def find_files_project():
     requestData = json.loads(request.data)
     messagesToUser = []
@@ -246,6 +264,7 @@ def find_files_project():
 
 @app.route('/project/<projectUuid>/parameters-to-use-confirmation', methods=['POST'])
 @cross_origin()
+@require_auth
 def parameters_to_use_confirmation(projectUuid):
     requestData = json.loads(request.data)
     messagesToUser = []
@@ -293,6 +312,7 @@ def parameters_to_use_confirmation(projectUuid):
 
 @app.route('/project/<projectUuid>/find-configurations', methods=['POST'])
 @cross_origin()
+@require_auth
 def find_configurations(projectUuid):
     directoryPath = f"projects/{projectUuid}/files"
     requestData = json.loads(request.data)
@@ -402,6 +422,7 @@ def find_configurations(projectUuid):
 
 @app.route('/project/<projectUuid>/find-configurations-change', methods=['POST'])
 @cross_origin()
+@require_auth
 def find_configurations_change(projectUuid):
     requestData = json.loads(request.data)
     messagesToUser = []
@@ -508,6 +529,7 @@ def find_configurations_change(projectUuid):
 
 @app.route("/project/<projectUuid>/build-docker-file-chat", methods=['POST'])
 @cross_origin()
+@require_auth
 def buildDockerFileChat(projectUuid):
     projectPath = 'projects/' + projectUuid + "/"
 
@@ -585,6 +607,7 @@ def buildDockerFileChat(projectUuid):
 
 @app.route('/project/<projectUuid>/chat-interation', methods=['POST'])
 @cross_origin()
+@require_auth
 def chat_interation(projectUuid):
     requestData = json.loads(request.data)
     messagesToUser = []
@@ -671,6 +694,7 @@ def chat_interation(projectUuid):
 
 @app.route("/project/<projectUuid>/build-docker-image-chat", methods=['POST'])
 @cross_origin()
+@require_auth
 def buildDockerImageChat(projectUuid):
     projectPath = 'projects/' + projectUuid + "/"
     requestData = json.loads(request.data)
@@ -746,6 +770,7 @@ def buildDockerImageChat(projectUuid):
 
 @app.route("/project/<projectUuid>/run-container-chat", methods=['POST'])
 @cross_origin()
+@require_auth
 def runDockerContainerChat(projectUuid):
     projectPath = f"/projects/{projectUuid}/"
     directoryPath = f"/projects/{projectUuid}/files"
@@ -906,6 +931,7 @@ def runDockerContainerChat(projectUuid):
 
 @app.route("/project/<projectUuid>/research-artifact-chat", methods=['POST'])
 @cross_origin()
+@require_auth
 def researchArtifactChat(projectUuid):
     projectPath = PROJECTS_LOCATION + "/" + projectUuid
     zipFilePath = f"{projectPath}.zip"
@@ -982,6 +1008,7 @@ def researchArtifactChat(projectUuid):
 
 @app.route("/<surveyId>/nasa", methods=['POST'])
 @cross_origin()
+@require_auth
 def nasa(surveyId):
     requestData = json.loads(request.data)
 

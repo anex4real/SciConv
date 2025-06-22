@@ -3,12 +3,16 @@ import {HttpRequest, HttpHandler, HttpEvent, HttpInterceptor} from '@angular/com
 import {Observable, throwError} from 'rxjs';
 import {catchError} from 'rxjs/operators';
 import {BackendService, AlertService} from '../service';
+import { Router } from '@angular/router';
+import { NgZone } from '@angular/core'; // import NgZone
+
 
 
 @Injectable()
 export class ErrorInterceptor implements HttpInterceptor {
-  constructor(public alertService: AlertService
-
+  constructor(public alertService: AlertService,
+              private router: Router,
+              private ngZone: NgZone // inject it
   ) {
   }
 
@@ -18,20 +22,24 @@ export class ErrorInterceptor implements HttpInterceptor {
   };
 
   intercept(request: HttpRequest<any>, next: HttpHandler): Observable<HttpEvent<any>> {
-    return next.handle(request).pipe(catchError(err => {
-      console.log('aqui')
-      if (err.status === 400 || err.status === 404|| err.status === 500) {
-        console.log(err)
-        this.alertService.error(err.error.message, this.options);
+    return next.handle(request).pipe(
+        catchError(err => {
+          console.log('HTTP error intercepted:', err);
 
-        // TODO descomentar isto
-        //this.userService.logout();
-      }
-      console.log(err)
+          if (err.status !== 200 && err.status !== 201) {
+            const message = err.error?.message || 'Unexpected error occurred';
+            this.alertService.error(message, this.options);
 
-      const error = err.error.message || err.statusText;
+            // Optional: log out the user or redirect
+            // this.userService.logout();
+            this.ngZone.run(() => {
+              this.router.navigate(['/']);
+            });
+          }
 
-      return throwError(error);
-    }));
+          const error = err.error?.message || err.statusText || 'Unknown error';
+          return throwError(() => error);
+        })
+    );
   }
 }
