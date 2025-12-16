@@ -1,0 +1,92 @@
+{
+  "metadata": {
+    "title": "",
+    "upload_type": "dataset",
+    "publication_date": "",
+    "description": "",
+    "creators": [
+      {
+        "name": "",
+        "affiliation": "",
+        "orcid": "",
+        "email": "",
+        "role": ""
+      }
+    ],
+
+    "contributors": [
+      {
+        "name": "",
+        "affiliation": "",
+        "orcid": "",
+        "email": "",
+        "role": ""
+      }
+    ],
+    "keywords": [],
+    "language": "",
+    "notes": "",
+
+    "related_identifiers": [
+      {
+        "identifier": "",
+        "relation": "",
+        "scheme": ""
+      }
+    ],
+
+    "communities": [
+      {
+        "identifier": ""
+      }
+    ],
+
+    "license": "",
+    "access_right": "",
+    "embargo_date": "",
+
+    "grants": [
+      {
+        "funder": "",
+        "grant_id": "",
+        "acronym": "",
+        "title": ""
+      }
+    ],
+    "subjects": [
+      {
+        "term": "",
+        "identifier": "",
+        "scheme": ""
+      }
+    ],
+
+    "resource_type": {
+      "type": "dataset",
+      "title": "Dataset"
+    },
+
+    "dates": [
+      {
+        "type": "",
+        "start": "",
+        "end": "",
+        "description": ""
+      }
+    ],
+
+    "locations": [
+      {
+        "place": "",
+        "description": "",
+        "lat": null,
+        "lon": null
+      }
+    ],
+
+    "imprint": {
+      "publisher": "",
+      "place": ""
+    }
+  }
+}
