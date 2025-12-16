@@ -1,5 +1,5 @@
 import {Component, EventEmitter, Input, Output} from '@angular/core';
-import {SurveyService} from "../../service/survey.service";
+import {SurveyService} from "../../service/survey/survey.service";
 import {ActivatedRoute} from "@angular/router";
 
 @Component({

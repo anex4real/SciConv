@@ -1,41 +1,11 @@
 import json
-import os
 from datetime import datetime
-import pytz
-
-# Specify your timezone (e.g., 'America/New_York', 'Europe/London', etc.)
-timezone = pytz.timezone('Europe/London')
-
-import flask
 import socket
 import docker
 import os
-from openai import OpenAI
+import config as cfg
+from helpers.index import makeResponse, appendMessage
 
-from dotenv import load_dotenv
-# Get the absolute path to the .env in the project root
-ROOT_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
-ENV_PATH = os.path.join(ROOT_DIR, '.env')
-
-# Check for .env file and load it, or raise an error
-if os.path.exists(ENV_PATH):
-    load_dotenv(dotenv_path=ENV_PATH)
-    print(f".env file loaded from: {ENV_PATH}")
-else:
-    raise FileNotFoundError(f"❌ .env file not found at: {ENV_PATH}")
-
-requestConfig = {
-    "headers": {
-        "Accept": "application/zip",
-    },
-    "responseType": "arraybuffer",
-}
-requestConfigAcceptAll = {
-    "headers": {
-        "Accept": "*/*",
-    },
-    "responseType": "arraybuffer",
-}
 
 def find_files(directory):
     files = []
@@ -79,41 +49,6 @@ def read_first_50_lines(file_path):
     except Exception as e:
         print(f"Error reading {file_path}: {e}")
     return lines
-
-
-def makeResponse(response=None, status=200, isJson=True):
-    if response is None:
-        response = {}
-    if isJson:
-        mimetype = 'application/json'
-        if type(response) != "List":
-            response = json.dumps(response)
-    else:
-        mimetype = flask.Response.default_mimetype
-
-    return flask.Response(response=response, status=status,
-                          mimetype=mimetype)
-
-
-def appendMessage(messages, content=None, contentShort=None, stage=None, role="assistant", jsonObject=False,
-                  examples=None, goBack=None):
-    message = {"role": role,
-               "jsonObject": jsonObject,
-               "contentShort": contentShort,
-               "content": content}
-
-    if stage is not None:
-        message["stage"] = stage
-
-    if examples is not None:
-        message["examples"] = examples
-
-    if goBack is not None:
-        message["goBack"] = goBack
-
-
-
-    messages.append(message)
 
 
 def fileIsAnImage(file):
@@ -177,8 +112,6 @@ def startDockerClient1():
     print("Selected Port:", port)
     return {"dockerClient": client, "port": port}
 
-
-
 def createNetworkIfNotExists(dockerClient, networkName):
     allNetworks = dockerClient.networks.list()
     thereIsNetwork = False
@@ -189,29 +122,6 @@ def createNetworkIfNotExists(dockerClient, networkName):
     if not thereIsNetwork:
         # dockerClient.networks.create("network1a", driver="bridge")
         dockerClient.networks.create(name=networkName)
-
-
-def convert_json_to_string(input_list):
-    converted_list = []
-
-    for message in input_list:
-        converted_message = {
-            'role': message['role'],
-            'content': None
-        }
-
-        # Convert content field
-        if not isinstance(message['content'], str):
-            try:
-                converted_message['content'] = json.dumps(message['content'])
-            except (TypeError, ValueError):
-                converted_message['content'] = str(message['content'])
-        else:
-            converted_message['content'] = message['content']
-
-        converted_list.append(converted_message)
-
-    return converted_list
 
 
 def saveDockerImage(myProjectFolder, dockerImageName, dockerTagId):
@@ -254,7 +164,6 @@ def saveDockerImage(myProjectFolder, dockerImageName, dockerTagId):
     except Exception as e:
         print(f"Error saving the image: {str(e)}")
         raise Exception("Error saving the Docker image.")
-
 
 def write_file(location, content):
     with open(location, 'w') as file:
@@ -305,7 +214,7 @@ def read_file(location):
 
 
 def write_messagesUser_to_file(messagesToUser, projectPath):
-    number = datetime.now(timezone).strftime("%y%m%d_%H%M")
+    number = datetime.now(cfg.timezone).strftime("%y%m%d_%H%M")
     file_path = os.path.join(projectPath, f"{number}.txt")
 
 
@@ -331,36 +240,6 @@ def return_commands_to_use(requestData, messagesToUser):
     commandToRun = requestData["commandToRun"]
     # commandToUse = "make && ./iubfc 13 0.5 ./Data/IMDBID.txt ./Data/IMDBEdge.txt 10000 ./Data/dataOut.txt"
     return commandToRun
-
-def return_messages(requestData, messagesToUser):
-    if "messages" not in requestData:
-        appendMessage(messagesToUser, contentShort='I can’t find the messages', stage="Start")
-        return makeResponse(messagesToUser)
-
-    return requestData["messages"]
-
-
-def callGPTModel(messagesToChat, modelUsed="gpt-4-turbo"):
-    messagesToChat = convert_json_to_string(messagesToChat)
-
-    openai_api_key = os.getenv("OPENAI_API_KEY")
-    if not openai_api_key:
-        raise EnvironmentError("Missing OPENAI_API_KEY in environment or .env file.")
-
-    client = OpenAI(api_key=openai_api_key)
-
-    completion = client.chat.completions.create(
-        # #model="gpt-4o",
-        # model="chatgpt-4o-latest",
-        # model="gpt-4-turbo",
-        model=modelUsed,
-        messages=messagesToChat,
-    )
-
-
-    result = completion.choices[0].message.content
-    print(result)
-    return result
 
 # @app.route('/project/<projectUuid>/parameters-to-use-confirmation', methods=['POST'])
 # @cross_origin()

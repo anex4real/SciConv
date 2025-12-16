@@ -1,0 +1,79 @@
+Build a Dockerfile for the project based on detected configuration
+---
+tags:
+  - Project
+
+consumes:
+  - application/json
+produces:
+  - application/json
+
+parameters:
+  - name: Authorization
+    in: header
+    required: true
+    type: string
+    default: "Bearer my-secret-token"
+    description: Bearer authentication token.
+
+  - name: projectUuid
+    in: path
+    required: true
+    type: string
+    description: Unique ID of the project for which the Dockerfile will be generated.
+
+  - name: body
+    in: body
+    required: true
+    description: >
+      JSON object containing the conversation history (messages) that includes
+      previously inferred programming languages, versions, and dependencies.
+      The system will use this to generate an appropriate Dockerfile.
+    schema:
+      type: object
+      required:
+        - messages
+      properties:
+        messages:
+          type: array
+          description: List of conversation messages used as context.
+          items:
+            type: object
+            properties:
+              role:
+                type: string
+                description: Role of the speaker (e.g., 'system', 'user', 'assistant').
+              content:
+                type: string
+                description: Message content.
+
+responses:
+  200:
+    description: >
+      Dockerfile generated and stored in the project folder. The response returns
+      the content of the Dockerfile (as string) or a JSON representation,
+      together with the next stage "BuildDockerImage".
+    schema:
+      type: array
+      items:
+        type: object
+        properties:
+          role:
+            type: string
+          jsonObject:
+            type: boolean
+          contentShort:
+            type: string
+          content:
+            description: >
+              The generated Dockerfile content (string), or a JSON object if the
+              model returned structured data.
+          stage:
+            type: string
+            description: Next stage in the workflow (typically "BuildDockerImage").
+
+  401:
+    description: Unauthorized – missing or invalid Bearer token.
+
+  500:
+    description: Unexpected error while generating or validating the Dockerfile.

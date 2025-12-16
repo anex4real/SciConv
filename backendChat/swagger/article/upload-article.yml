@@ -1,0 +1,68 @@
+Upload a research article for dataset citation analysis
+---
+tags:
+  - Article
+
+consumes:
+  - multipart/form-data
+produces:
+  - application/json
+
+parameters:
+  - name: Authorization
+    in: header
+    required: true
+    type: string
+    default: "Bearer my-secret-token"
+    description: Bearer authentication token.
+
+  - name: file
+    in: formData
+    required: true
+    type: file
+    description: >
+      PDF file containing the research article to be analyzed. The system will
+      extract text from the article and use an LLM to identify datasets that
+      appear to be created, collected, curated, or newly proposed by the
+      authors, and classify them according to whether they are properly
+      cited/referenced or not.
+
+responses:
+  200:
+    description: >
+      Article processed successfully. The response contains the datasets created
+      or proposed by the authors, classified into those with references and
+      those without references, wrapped in the standard messages format.
+    schema:
+      type: array
+      items:
+        type: object
+        properties:
+          role:
+            type: string
+          jsonObject:
+            type: boolean
+          contentShort:
+            type: string
+            description: Short human-readable summary of the result.
+          content:
+            description: >
+              Detailed result of the analysis. Typically a JSON object with the
+              following structure:
+              {
+                "author_datasets_with_references": ["Dataset A", "Dataset B"],
+                "author_datasets_without_references": ["Dataset C", "Dataset D"]
+              }
+          stage:
+            type: string
+            description: >
+              Workflow stage identifier (for example, "ArticleAnalysisCompleted").
+
+  400:
+    description: Bad request – no file provided or invalid file type.
+
+  401:
+    description: Unauthorized – missing or invalid Bearer token.
+
+  500:
+    description: Unexpected error while processing the article.

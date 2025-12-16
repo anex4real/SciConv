@@ -1,107 +1,148 @@
-<!--<div *ngIf="!isAuthenticated" class="login-container">
-    <h2>Password </h2>
-    <form (ngSubmit)="onSubmitpass()">
-        <input type="password" id="password" [(ngModel)]="password" name="password" required>
-        <button type="submit">Submit</button>
-        <div *ngIf="errorMessage" style="color: red;">{{ errorMessage }}</div>
-    </form>
-</div>-->
-
 <div *ngIf="isAuthenticated">
-    <!--<div class="chat-container" *ngIf="start">-->
-    <div *ngIf="messages.length > 0" class="chat-window">
-        <div *ngFor="let message of messages">
-            <div *ngIf="message.contentShort != undefined"
-                 [ngClass]="{'role-message': message.role === 'system', 'chat-message': message.role === 'assistant',
-             'without-content': message.contentShort === undefined}">
+    <ng-container *ngIf="state$ | async as s">
 
-                <strong *ngIf="message.role == 'system'; else elseBlock">researcher</strong>
-                <ng-template #elseBlock>
-                    <strong>{{ message.role }}</strong>
-                </ng-template>
+        <div *ngIf="s.messages.length > 0" class="chat-window">
+            <div *ngFor="let message of s.messages">
+                <div *ngIf="message.contentShort != undefined"
+                     [ngClass]="{
+               'role-message': message.role === 'system',
+               'chat-message': message.role === 'assistant',
+               'user-message': message.role === 'user',
+               'without-content': message.contentShort === undefined
+             }">
 
-                <div *ngIf="message.jsonObject">
-                    <ul>
-                        <li *ngFor="let key of objectKeys(message.contentShort)">
-                            <span class="json-key">{{ key }}:</span>
-                            <ng-container *ngIf="isObject(message.contentShort[key]); else showValue">
-                            </ng-container>
-                            <ng-template #showValue>
+                    <strong *ngIf="message.role == 'system'; else elseBlock">researcher</strong>
+                    <ng-template #elseBlock>
+                        <strong>{{ message.role }}</strong>
+                    </ng-template>
 
-                                <!-- Check if the value is not an array -->
-                                <ng-container *ngIf="!Array.isArray(message.contentShort[key])">
-                                    <span class="json-value">{{ message.contentShort[key] }}</span>
-                                </ng-container>
+                    <div *ngIf="message.jsonObject">
+                        <ul>
+                            <li *ngFor="let key of objectKeys(message.contentShort)">
+                                <span class="json-key">{{ key }}:</span>
+                                <ng-container *ngIf="isObject(message.contentShort[key]); else showValue"></ng-container>
 
-                                <!-- Check if the value is an array and use *ngFor to iterate -->
-                                <ng-container *ngIf="Array.isArray(message.contentShort[key])">
-                                    <span class="json-value"
-                                          *ngFor="let item of message.contentShort[key]">{{ item }}</span>
-                                </ng-container>
-                            </ng-template>
-                        </li>
-                    </ul>
-                </div>
-                <div style="white-space: pre-line;" *ngIf="!message.jsonObject">
-                    {{ message.contentShort }}
-                </div>
-                <!-- Expandable content -->
-                <div class="examples-message" *ngIf="isExamplesVisible(message)">
-                    <strong>Examples section</strong>
-                    <div style="white-space: pre-line;">
-                        {{ message.examples }}
+                                <ng-template #showValue>
+                                    <ng-container *ngIf="!Array.isArray(message.contentShort[key])">
+                                        <span class="json-value">{{ message.contentShort[key] }}</span>
+                                    </ng-container>
+
+                                    <ng-container *ngIf="Array.isArray(message.contentShort[key])">
+                                        <ul class="json-list">
+                                            <li class="json-value" *ngFor="let item of message.contentShort[key]">
+                                                {{ item }}
+                                            </li>
+                                        </ul>
+                                    </ng-container>
+
+                                </ng-template>
+                            </li>
+                        </ul>
                     </div>
-                </div>
-                <div *ngIf="message.examples" class="mt-1 mb-0">
-                    <!-- Link to toggle expand/collapse with CSS class -->
-                    <a href="#" (click)="toggleExamples(message); $event.preventDefault();" class="underline-link">
-                        {{ isExamplesVisible(message) ? 'Hide Examples' : 'Show Examples' }}
-                    </a>
+
+                    <div style="white-space: pre-line;" *ngIf="!message.jsonObject">
+                        {{ message.contentShort }}
+                    </div>
+
+                    <!-- Expandable content -->
+                    <div class="examples-message" *ngIf="isExamplesVisible(message)">
+                        <strong>Examples section</strong>
+                        <div style="white-space: pre-line;">
+                            {{ message.examples }}
+                        </div>
+                    </div>
+
+                    <div *ngIf="message.examples" class="mt-1 mb-0">
+                        <a href="#" (click)="toggleExamples(message); $event.preventDefault();" class="underline-link">
+                            {{ isExamplesVisible(message) ? 'Hide Examples' : 'Show Examples' }}
+                        </a>
+                    </div>
+
                 </div>
             </div>
-
         </div>
-    </div>
 
-    <div class="chat-input" *ngIf="this.stageSubject.value == stages.Start">
-        <div class="upload-container">
-            <!-- Info Message -->
-            <div class="info-message">
-                <p><strong>You can upload either:</strong></p>
-                <ul>
-                    <li>A single source file (e.g., <code>.py</code>, <code>.cpp</code>)</li>
-                    <li>A <code>.zip</code> file containing a project folder</li>
-                </ul>
-                <p>The system will automatically assign a project name based on your upload and the current date.</p>
+        <!-- Start screen controlled by AppStage -->
+        <ng-container *ngIf="appStage == appStages.Start">
+
+            <!-- Upload: Reproducibility Package -->
+            <div class="chat-input">
+                <div class="upload-container">
+                    <div class="info-message">
+                        <h2>Reproducibility Package Generation</h2>
+                        <p><strong>You can upload either:</strong></p>
+                        <ul>
+                            <li>A single source file (e.g., <code>.py</code>, <code>.cpp</code>)</li>
+                            <li>A <code>.zip</code> file containing a project folder</li>
+                        </ul>
+                        <p>The system will automatically assign a project name based on your upload and the current date.</p>
+                    </div>
+
+                    <form class="upload-form" (ngSubmit)="onSubmitRepro()" #fileUploadFormRepro="ngForm">
+                        <input type="file" (change)="onFileChangeRepro($event)">
+                        <button type="submit" [disabled]="s.isLoading">
+                            <span *ngIf="!s.isLoading">Upload</span>
+                            <span *ngIf="s.isLoading">
+                <i class="fa fa-spinner fa-spin"></i> Loading...
+              </span>
+                        </button>
+                    </form>
+                </div>
             </div>
 
-            <!-- Upload Form -->
-            <form class="upload-form" (ngSubmit)="onSubmit()" #fileUploadForm="ngForm">
-                <input type="file" (change)="onFileChange($event)">
-                <button type="submit" [disabled]="isLoading">
-                    <span *ngIf="!isLoading">Upload</span>
-                    <span *ngIf="isLoading">
+            <!-- Upload: Dataset analysis (PDF) -->
+            <div class="chat-input">
+                <div class="upload-container">
+                    <div class="info-message">
+                        <h2>Dataset analysis</h2>
+                        <p><strong>You can upload:</strong></p>
+                        <ul>
+                            <li>A scientific article in PDF format</li>
+                        </ul>
+                        <p>
+                            The system analyzes the article to identify datasets and data-containing artifacts used by the authors.
+                            It checks whether these datasets are properly referenced or linked.
+                        </p>
+                        <p>
+                            If a dataset is missing a reference or link, a FAIR-compliant dataset package is created with the required
+                            metadata. If a reference or link is provided, the dataset is validated for FAIR compliance and metadata
+                            completeness.
+                        </p>
+                    </div>
+
+                    <form class="upload-form" (ngSubmit)="onSubmitDataset()" #fileUploadFormPdf="ngForm">
+                        <input type="file" accept=".pdf" (change)="onFileChangePdf($event)">
+                        <button type="submit" [disabled]="s.isLoading">
+                            <span *ngIf="!s.isLoading">Upload</span>
+                            <span *ngIf="s.isLoading">
+                <i class="fa fa-spinner fa-spin"></i> Loading...
+              </span>
+                        </button>
+                    </form>
+                </div>
+            </div>
+
+        </ng-container>
+
+        <!-- Chat input (when not in App Start) -->
+        <div class="chat-input" *ngIf="appStage != appStages.Start">
+            <input [(ngModel)]="userMessage" placeholder="Type your message here..." (keydown.enter)="sendMessage()"/>
+            <button type="submit" [disabled]="s.isLoading" (click)="sendMessage()">
+                <span *ngIf="!s.isLoading">Send</span>
+                <span *ngIf="s.isLoading">
           <i class="fa fa-spinner fa-spin"></i> Loading...
         </span>
-                </button>
-            </form>
+            </button>
         </div>
-    </div>
 
+        <!-- Mostrar erro do workflow -->
+        <div *ngIf="s.errorMessage" style="color:red; margin-top: 8px;">
+            {{ s.errorMessage }}
+        </div>
 
-    <div class="chat-input" *ngIf="this.stageSubject.value==stages.Start">
-
-        <!--<input [(ngModel)]="projectUuid" placeholder="Type your project location here..."/>-->
-        <button (click)="changeStage(stages.ProjectLocation)">Use a previous project</button>
-    </div>
-
-    <div class="chat-input" *ngIf="this.stageSubject.value!=stages.Start">
-        <input [(ngModel)]="userMessage" placeholder="Type your message here..." (keydown.enter)="sendMessage()"/>
-        <button  type="submit" [disabled]="isLoading" (click)="sendMessage()">
-            <span *ngIf="!isLoading">Send</span>
-            <span *ngIf="isLoading">
-                    <i class="fa fa-spinner fa-spin"></i> Loading...
-                    </span>
+        <button type="button" (click)="goToAppStart()" [disabled]="s.isLoading">
+            Back to Start
         </button>
-    </div>
+
+    </ng-container>
 </div>

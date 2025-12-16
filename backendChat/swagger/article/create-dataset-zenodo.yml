@@ -1,0 +1,120 @@
+Create a new Zenodo dataset deposition with user-supplied metadata and files
+---
+tags:
+  - Article
+
+consumes:
+  - multipart/form-data
+produces:
+  - application/json
+
+parameters:
+  - name: Authorization
+    in: header
+    required: true
+    type: string
+    default: "Bearer my-secret-token"
+    description: >
+      Bearer authentication token for YOUR application (not Zenodo).
+
+  - name: zenodo_token
+    in: formData
+    required: true
+    type: string
+    description: >
+      The user's personal Zenodo API token.
+      This token determines *which Zenodo account* will receive the deposition.
+      The app does NOT use any global token; the upload is done per user.
+
+  - name: metadata
+    in: formData
+    required: true
+    type: string
+    description: >
+      JSON string containing the dataset metadata in Zenodo deposition format, e.g.:
+      {
+        "metadata": {
+          "title": "My Dataset",
+          "upload_type": "dataset",
+          "publication_date": "2024-02-01",
+          "version": "1.0",
+          "doi": "",
+          "description": "Dataset description...",
+          "creators": [
+            {
+              "name": "Lazaro Costa",
+              "affiliation": "University of Porto",
+              "orcid": "0000-0002-6317-8792",
+              "email": "lazaro@example.com",
+              "role": "corresponding author"
+            }
+          ],
+          "contributors": [],
+          "keywords": [],
+          "language": "en",
+          "notes": "",
+          "related_identifiers": [],
+          "communities": [],
+          "license": "cc-by-4.0",
+          "access_right": "open",
+          "grants": [],
+          "subjects": [],
+          "resource_type": { "type": "dataset", "title": "Dataset" },
+          "dates": [],
+          "locations": [],
+          "imprint": { "publisher": "", "place": "" }
+        }
+      }
+
+  - name: files
+    in: formData
+    required: true
+    type: file
+    description: >
+      One or more files to upload to Zenodo (ZIP, CSV, images, code, etc.).
+      Use "files[]" if uploading multiple files.
+
+responses:
+  200:
+    description: >
+      Dataset successfully created on Zenodo.  
+      Returns the full deposition JSON object from Zenodo,
+      including deposition ID, links, bucket URL, and metadata.
+    schema:
+      type: array
+      items:
+        type: object
+        properties:
+          role:
+            type: string
+          jsonObject:
+            type: boolean
+          contentShort:
+            type: string
+            description: A short summary of the Zenodo creation result.
+          content:
+            description: >
+              Full Zenodo deposition response, e.g.:
+              {
+                "id": 1234567,
+                "metadata": {...},
+                "links": {
+                  "bucket": "...",
+                  "self": "...",
+                  "html": "...",
+                  "publish": "..."
+                }
+              }
+          stage:
+            type: string
+            description: Workflow stage indicator.
+
+  400:
+    description: >
+      Bad request — token missing, metadata missing, or invalid JSON.
+
+  401:
+    description: Unauthorized — invalid Authorization header for this application.
+
+  500:
+    description: Unexpected server error while creating or uploading to Zenodo.

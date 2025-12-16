@@ -7,7 +7,7 @@ import {HomeComponent} from './components/home/home.component';
 import {FooterComponent} from './components/home/footer/footer.component';
 import {BackendService} from "./service";
 import {ErrorInterceptor} from "./_helpers/ErrorInterceptor";
-import {AlertModule} from "./_alert/alert.module";
+import {AlertModule} from "./service/_alert/alert.module";
 import {RoutingModule} from './routing/routing.module';
 
 import {HTTP_INTERCEPTORS, HttpClientModule} from '@angular/common/http';

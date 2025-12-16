@@ -1,0 +1,71 @@
+Validate and extract execution command from user interaction
+---
+tags:
+  - Project
+
+consumes:
+  - application/json
+produces:
+  - application/json
+
+parameters:
+  - name: Authorization
+    in: header
+    type: string
+    required: true
+    default: "Bearer my-secret-token"
+    description: Bearer authentication token.
+
+  - name: projectUuid
+    in: path
+    type: string
+    required: true
+    description: Unique ID of the project.
+
+  - name: body
+    in: body
+    required: true
+    description: >
+      The request body must contain the conversation messages exchanged so far.
+      The system will analyze the last message to determine if it contains a valid
+      Unix command for running the experiment.
+    schema:
+      type: object
+      required:
+        - messages
+      properties:
+        messages:
+          type: array
+          description: List of conversation messages.
+          items:
+            type: object
+            properties:
+              role:
+                type: string
+              content:
+                type: string
+
+responses:
+  200:
+    description: >
+      Returns either the next stage "ParametersToUse" when the command is invalid,
+      or returns a valid Unix command extracted from the conversation along with the next stage.
+    schema:
+      type: array
+      items:
+        type: object
+        properties:
+          role:
+            type: string
+          contentShort:
+            type: string
+          content:
+            type: string
+          stage:
+            type: string
+
+  401:
+    description: Unauthorized – missing or invalid Bearer token.
+
+  500:
+    description: Unexpected error during command validation.

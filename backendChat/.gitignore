@@ -16,3 +16,5 @@ __pycache__
 projects/
 !projects_example/**/*.zip
 
+.env.local
+

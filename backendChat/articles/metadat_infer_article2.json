@@ -1,0 +1,87 @@
+{
+  "metadata": {
+    "title": "the CT scan dataset",
+    "upload_type": "dataset",
+    "publication_date": "",
+    "version": "",
+    "doi": "",
+    "description": "A secondary dataset compiled from a partner clinic in Lisbon, the CT scan dataset includes 500 anonymized CT scans, each manually segmented by two independent radiologists. This dataset was used to explore multimodal deep learning strategies for medical image analysis in chest radiology.",
+    "creators": [
+      {
+        "name": "Dr. Ana Silva",
+        "affiliation": "Department of Biomedical Engineering, University of Porto, Portugal",
+        "orcid": "0000-0002-8745-1132",
+        "email": "ana.silva@up.pt",
+        "role": ""
+      },
+      {
+        "name": "Miguel Fernandes, MSc",
+        "affiliation": "Research Center for Medical Imaging, Hospital de Braga, Portugal",
+        "orcid": "0000-0003-5120-8871",
+        "email": "miguel.fernandes@hbraga.pt",
+        "role": ""
+      },
+      {
+        "name": "Dr. Laura Martins",
+        "affiliation": "Faculty of Engineering, Instituto Superior Técnico, Portugal",
+        "orcid": "",
+        "email": "laura.martins@tecnico.ulisboa.pt",
+        "role": ""
+      }
+    ],
+    "contributors": [],
+    "keywords": [
+      "CT scans",
+      "multimodal deep learning",
+      "chest imaging",
+      "medical image analysis",
+      "radiology"
+    ],
+    "language": "eng",
+    "notes": "",
+    "related_identifiers": [],
+    "communities": [],
+    "license": "",
+    "access_right": "open",
+    "embargo_date": "",
+    "grants": [
+      {
+        "funder": "FCT Portugal",
+        "grant_id": "PTDC/EEI-ESS/1234/2022",
+        "acronym": "MED-VISION",
+        "title": ""
+      },
+      {
+        "funder": "European Union Horizon 2020 Program",
+        "grant_id": "H2020-IMAGING-845923",
+        "acronym": "",
+        "title": ""
+      }
+    ],
+    "subjects": [],
+    "resource_type": {
+      "type": "dataset",
+      "title": "Dataset"
+    },
+    "dates": [
+      {
+        "type": "Data collection period",
+        "start": "2018",
+        "end": "2022",
+        "description": "Data collection period for the HospitalX -CXR Collection"
+      }
+    ],
+    "locations": [
+      {
+        "place": "Hospital de Braga and partner clinic in Lisbon, Portugal",
+        "description": "Locations where the CT scans and additional data were acquired.",
+        "lat": null,
+        "lon": null
+      }
+    ],
+    "imprint": {
+      "publisher": "",
+      "place": ""
+    }
+  }
+}

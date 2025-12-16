@@ -1,0 +1,75 @@
+Find and classify project files
+---
+tags:
+  - Project
+
+consumes:
+  - application/json
+produces:
+  - application/json
+
+parameters:
+  - name: Authorization
+    in: header
+    required: true
+    type: string
+    default: "Bearer my-secret-token"
+    description: Bearer authentication token required to access this endpoint.
+
+  - name: body
+    in: body
+    required: true
+    description: >
+      JSON payload containing the project UUID or an attempt to identify the project folder.
+      The system will either use this UUID or attempt to infer the correct project folder.
+    schema:
+      type: object
+      required:
+        - possibleProjectUuid
+      properties:
+        possibleProjectUuid:
+          type: string
+          description: >
+            Name of the project folder to check.  
+            If incorrect, the system will try to determine the correct folder.
+
+responses:
+  200:
+    description: >
+      Files successfully classified into executable and configuration files.
+      The response includes a stage and the project UUID.
+    schema:
+      type: array
+      items:
+        type: object
+        properties:
+          role:
+            type: string
+          jsonObject:
+            type: boolean
+          contentShort:
+            type: string
+          content:
+            type: object
+            properties:
+              ExecutableFiles:
+                type: array
+                items:
+                  type: string
+              ConfigurationFiles:
+                type: array
+                items:
+                  type: string
+              ProjectUuid:
+                type: string
+          stage:
+            type: string
+
+  401:
+    description: Unauthorized – missing or invalid Bearer token.
+
+  400:
+    description: Invalid request format or missing required fields.
+
+  500:
+    description: Unexpected server error.

@@ -1,0 +1,43 @@
+Analyze project files and detect language, versions, and dependencies
+---
+tags:
+  - Project
+
+parameters:
+  - name: Authorization
+    in: header
+    required: true
+    type: string
+    default: "Bearer my-secret-token"
+    description: Bearer auth token
+
+  - name: projectUuid
+    in: path
+    required: true
+    description: The UUID of the project folder
+    type: string
+
+  - name: body
+    in: body
+    required: true
+    description: JSON payload required for configuration detection
+    schema:
+      type: object
+      required:
+        - filenames
+        - commandToRun
+      properties:
+        filenames:
+          type: array
+          description: List of file paths inside the project
+          items:
+            type: string
+        commandToRun:
+          type: string
+          description: The command used to run the project inside Docker
+
+responses:
+  200:
+    description: Configuration detected successfully
+  400:
+    description: Missing parameters or invalid project directory

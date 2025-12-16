@@ -1,0 +1,89 @@
+Run the built Docker image inside a container using the provided execution command
+---
+tags:
+  - Project
+
+consumes:
+  - application/json
+produces:
+  - application/json
+
+parameters:
+  - name: Authorization
+    in: header
+    required: true
+    type: string
+    default: "Bearer my-secret-token"
+    description: Bearer authentication token.
+
+  - name: projectUuid
+    in: path
+    required: true
+    type: string
+    description: Unique ID of the project to run.
+
+  - name: body
+    in: body
+    required: true
+    description: >
+      JSON object containing the Docker image ID and the Unix command to run inside
+      the container. The command must reference files inside the /files directory.
+    schema:
+      type: object
+      required:
+        - dockerImageId
+        - commandToRun
+      properties:
+        dockerImageId:
+          type: string
+          description: >
+            Tag or ID of the previously built Docker image
+            (e.g., project123:20240917151400).
+        commandToRun:
+          type: string
+          description: >
+            Unix command executed inside the container
+            (e.g., "python main.py").
+        messages:
+          type: array
+          description: Optional message history used internally.
+          items:
+            type: object
+            properties:
+              role:
+                type: string
+              content:
+                type: string
+
+responses:
+  200:
+    description: >
+      The container executed successfully. Response contains logs and exit code.
+    schema:
+      type: array
+      items:
+        type: object
+        properties:
+          role:
+            type: string
+          content:
+            type: string
+            description: >
+              Container logs including stdout, stderr, and exit code.
+          stage:
+            type: string
+            example: "Completed"
+
+  400:
+    description: Missing parameters such as dockerImageId or commandToRun.
+
+  401:
+    description: Unauthorized – missing or invalid Bearer token.
+
+  500:
+    description: >
+      Error running the container. The system may classify the error and suggest
+      going back to:
+      - FindConfigurations  
+      - ProjectLocation  
+      - ParametersToUse  

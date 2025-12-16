@@ -1,0 +1,54 @@
+Submit NASA-TLX or related survey responses
+---
+tags:
+  - Survey
+
+consumes:
+  - application/json
+produces:
+  - application/json
+
+parameters:
+  - name: Authorization
+    in: header
+    type: string
+    required: true
+    default: "Bearer my-secret-token"
+    description: Bearer authentication token.
+
+  - name: surveyId
+    in: path
+    type: string
+    required: true
+    description: >
+      Unique survey identifier used to label the resulting JSON file.
+      Example: "nasa", "stress-test", "task-load".
+
+  - name: body
+    in: body
+    required: true
+    description: >
+      JSON payload containing the complete NASA-TLX (or other survey) responses.
+      The server writes this object directly to a JSON file with a timestamp.
+    schema:
+      type: object
+      additionalProperties: true
+      description: >
+        Any valid survey structure is accepted.
+
+responses:
+  200:
+    description: >
+      Survey stored successfully as a JSON file inside the questionnaires folder.
+    schema:
+      type: object
+      properties:
+        message:
+          type: string
+          example: "Survey stored successfully."
+
+  401:
+    description: Unauthorized – missing or invalid Bearer token.
+
+  500:
+    description: Unexpected error while writing the survey JSON file.

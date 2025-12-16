@@ -1,0 +1,71 @@
+Build a Docker image from the generated Dockerfile
+---
+tags:
+  - Project
+
+consumes:
+  - application/json
+produces:
+  - application/json
+
+parameters:
+  - name: Authorization
+    in: header
+    required: true
+    type: string
+    default: "Bearer my-secret-token"
+    description: Bearer authentication token.
+
+  - name: projectUuid
+    in: path
+    required: true
+    type: string
+    description: Unique ID of the project.
+
+  - name: body
+    in: body
+    required: true
+    description: >
+      JSON object containing previous conversation messages, including the
+      generated Dockerfile. The system will attempt to build the Docker image
+      using the Dockerfile located in the project folder.
+    schema:
+      type: object
+      properties:
+        messages:
+          type: array
+          description: Conversation history, used internally.
+          items:
+            type: object
+            properties:
+              role:
+                type: string
+              content:
+                type: string
+
+responses:
+  200:
+    description: >
+      Docker image successfully built. The response contains the image tag and
+      the next stage "RunContainer".
+    schema:
+      type: array
+      items:
+        type: object
+        properties:
+          role:
+            type: string
+          content:
+            type: string
+            description: Docker image tag, e.g., "project123:20240917151400".
+          stage:
+            type: string
+            description: Next stage in the workflow ("RunContainer").
+
+  401:
+    description: Unauthorized – missing or invalid Bearer token.
+
+  500:
+    description: >
+      Error building the Docker image. The response may suggest going back to
+      "FindConfigurations" or investigating the error message further.

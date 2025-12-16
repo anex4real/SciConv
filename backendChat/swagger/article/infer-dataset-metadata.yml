@@ -1,0 +1,102 @@
+Infer dataset-level metadata from a research article
+---
+tags:
+  - Article
+
+consumes:
+  - multipart/form-data
+produces:
+  - application/json
+
+parameters:
+  - name: Authorization
+    in: header
+    required: true
+    type: string
+    default: "Bearer my-secret-token"
+    description: Bearer authentication token.
+
+  - name: file
+    in: formData
+    required: true
+    type: file
+    description: >
+      PDF file containing the research article. The system will extract text
+      from the article and use an LLM to infer Zenodo-style metadata for a
+      specific dataset mentioned in the article.
+
+  - name: dataset_name
+    in: formData
+    required: true
+    type: string
+    description: >
+      Name of the dataset created/collected/curated by the authors in this article
+      for which metadata should be inferred (e.g. "HospitalX-CXR Collection").
+
+responses:
+  200:
+    description: >
+      Article processed successfully. The response contains inferred metadata
+      for the specified dataset, structured similarly to a Zenodo record
+      (identity, creators_contributors, content, relationships, rights,
+      coverage, funding, classification), wrapped in the standard messages format.
+    schema:
+      type: array
+      items:
+        type: object
+        properties:
+          role:
+            type: string
+          jsonObject:
+            type: boolean
+          contentShort:
+            type: string
+            description: Short human-readable summary of the inferred metadata.
+          content:
+            description: >
+              Detailed inferred metadata for the dataset. Typically a JSON object
+              with a structure like:
+              {
+                "record_id": null,
+                "conceptrecid": null,
+                "doi": "10.xxxx/xxxxx",
+                "doi_url": null,
+                "title": "HospitalX-CXR Collection",
+                "publication_date": "2024-01-15",
+                "access_right": "open",
+                "status": null,
+                "created": null,
+                "updated": null,
+                "links": {
+                  "html": null,
+                  "api": null,
+                  "files": null
+                },
+                "dataset_name": "HospitalX-CXR Collection",
+                "sections": {
+                  "identity": {
+                    "fields": {
+                      "title": { "present": true, "value": "HospitalX-CXR Collection" },
+                      "doi": { "present": false, "value": "" },
+                      "upload_type": { "present": true, "value": "dataset" },
+                      "resource_type_type": { "present": true, "value": "dataset" },
+                      "resource_type_title": { "present": true, "value": "Dataset" },
+                      "version": { "present": false, "value": "" },
+                      "publication_date": { "present": true, "value": "2024" }
+                    },
+                    "present": ["title", "upload_type", "resource_type_type", "resource_type_title", "publication_date"],
+                    "missing": ["doi", "version"]
+                  },
+                  "creators_contributors": { ... },
+                  "content": { ... },
+                  "relationships": { ... },
+                  "rights": { ... },
+                  "coverage": { ... },
+                  "funding": { ... },
+                  "classification": { ... }
+                }
+              }
+          stage:
+            type: string
+            description: >
+              Workflow stage identifier (for example, "DatasetMetadataInferenceCompleted").

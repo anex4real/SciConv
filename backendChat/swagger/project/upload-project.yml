@@ -1,0 +1,48 @@
+Upload a project file or archive
+---
+tags:
+  - Project
+
+consumes:
+  - multipart/form-data
+produces:
+  - application/json
+
+parameters:
+  - name: Authorization
+    in: header
+    required: true
+    type: string
+    default: "Bearer my-secret-token"
+    description: Bearer authentication token
+
+  - name: file
+    in: formData
+    required: true
+    type: file
+    description: >
+      Project file or ZIP archive containing the project.
+      ZIPs may contain a folder or multiple files; a sanitized project UUID
+      will be created automatically based on the uploaded name.
+
+responses:
+  201:
+    description: Project uploaded and processed successfully
+    schema:
+      type: array
+      items:
+        type: object
+        properties:
+          role:
+            type: string
+          content:
+            type: string
+          contentShort:
+            type: string
+          jsonObject:
+            type: boolean
+          stage:
+            type: string
+
+  500:
+    description: Unexpected error while processing the upload

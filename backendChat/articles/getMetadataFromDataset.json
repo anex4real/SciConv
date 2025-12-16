@@ -1,0 +1,41 @@
+{
+  "title": "Environment and Early Evolution of the 8 May 2009 Derecho-Producing Convective System",
+  "doi": "10.1175/2010mwr3413.1",
+  "publication_date": "2011-04-01",
+  "description": "This study documents the complex environment and early evolution of the remarkable derecho that traversed portions of the central United States on 8 May 2009. Central to this study is the comparison of the 8 May 2009 derecho environment to that of other mesoscale convective systems (MCSs) that occurred in the central United States during a similar time of year. Synoptic-scale forcing was weak and thermodynamic instability was limited during the development of the initial convection, but several mesoscale features of the environment appeared to contribute to initiation and upscale growth, including a mountain wave, a midlevel jet streak, a weak midlevel vorticity maximum, a \"Denver cyclone,\" and a region of upper-tropospheric inertial instability. The subsequent MCS developed in an environment with an unusually strong and deep low-level jet (LLJ), which transported exceptionally high amounts of low-level moisture northward very rapidly, destabilized the lower troposphere, and enhanced frontogenetical circulations that appeared to aid convective development. The thermodynamic environment ahead of the developing MCS contained unusually high precipitable water (PW) and very large midtropospheric lapse rates, compared to other central plains MCSs. Values of downdraft convective available potential energy (DCAPE), mean winds, and 0-6-km vertical wind shear were not as anomalously large as the PW, lapse rates, and LLJ. In fact, the DCAPE values were lower than the mean values in the comparison dataset. These results suggest that the factors contributing to updraft strength over a relatively confined area played a significant role in generating the strong outflow winds at the surface, by providing a large volume of hydrometeors to drive the downdrafts.",
+  "access_right": "open",
+  "creators": [
+    {
+      "name": "Coniglio, Michael C.",
+      "affiliation": null
+    },
+    {
+      "name": "Corfidi, Stephen F.",
+      "affiliation": null
+    },
+    {
+      "name": "Kain, John S.",
+      "affiliation": null
+    }
+  ],
+  "resource_type": {
+    "title": "Journal article",
+    "type": "publication",
+    "subtype": "article"
+  },
+  "license": {
+    "id": "cc-zero"
+  },
+  "relations": {
+    "version": [
+      {
+        "index": 0,
+        "is_last": true,
+        "parent": {
+          "pid_type": "recid",
+          "pid_value": "1234566"
+        }
+      }
+    ]
+  }
+}

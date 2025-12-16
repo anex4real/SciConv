@@ -1,0 +1,88 @@
+Interpret a user's message and determine the next workflow step
+---
+tags:
+  - Project
+
+consumes:
+  - application/json
+produces:
+  - application/json
+
+parameters:
+  - name: Authorization
+    in: header
+    type: string
+    required: true
+    default: "Bearer my-secret-token"
+    description: Bearer authentication token.
+
+  - name: projectUuid
+    in: path
+    type: string
+    required: true
+    description: Unique ID of the project.
+
+  - name: body
+    in: body
+    required: true
+    description: >
+      JSON payload containing:
+      - nextStep: A stage name the system expects to move to.
+      - messages: The conversation history used to infer context.
+    schema:
+      type: object
+      required:
+        - nextStep
+        - messages
+      properties:
+        nextStep:
+          type: string
+          description: >
+            The stage the system expects to proceed with
+            (e.g., "BuildDockerFile", "FindConfigurations").
+        messages:
+          type: array
+          description: >
+            Conversation history; the last message is analyzed to determine user intent.
+          items:
+            type: object
+            properties:
+              role:
+                type: string
+              content:
+                type: string
+
+responses:
+  200:
+    description: >
+      Returns a single-word response indicating the next stage:
+      - "CHANGE": User proposes modifications
+      - "<NextStep>": User agrees (positive)
+      - "WaitChatInteraction": User disagrees without proposing changes
+      Or, if CHANGE is chosen, the response includes the determined stage:
+      - "FindConfigurationsInteraction"
+      - "ProjectLocation"
+      - "ParametersToUse"
+    schema:
+      type: array
+      items:
+        type: object
+        properties:
+          role:
+            type: string
+          content:
+            type: string
+            description: Single-word stage or instruction.
+          stage:
+            type: string
+            description: >
+              Identified next workflow stage.
+
+  400:
+    description: nextStep missing from request.
+
+  401:
+    description: Unauthorized – missing or invalid Bearer token.
+
+  500:
+    description: Error while evaluating user message.

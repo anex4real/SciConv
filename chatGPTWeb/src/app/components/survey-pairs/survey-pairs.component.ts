@@ -1,5 +1,5 @@
 import {Component, Input} from '@angular/core';
-import {SurveyService} from "../../service/survey.service";
+import {SurveyService} from "../../service/survey/survey.service";
 
 @Component({
   selector: 'app-survey-pairs',

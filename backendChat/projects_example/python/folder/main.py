@@ -1,63 +1,24 @@
-import subprocess
-import sys
+# example.py
+# Uses 3 dependencies: pandas, numpy, and tabulate
+# Prints a simple result directly to the console
 
-# Install required packages if not already installed
-def install_and_import(package, import_name=None):
-    import_name = import_name or package
-    try:
-        __import__(import_name)
-    except ImportError:
-        subprocess.check_call([sys.executable, "-m", "pip", "install", package])
+import pandas as pd
+import numpy as np
+from tabulate import tabulate
 
-# Required external libraries
-install_and_import("requests")
-install_and_import("beautifulsoup4", "bs4")
-install_and_import("matplotlib")
+# Data stored locally (no web requests)
+data = [
+    {"id": 1, "name": "Alice", "age": 25},
+    {"id": 2, "name": "Bob", "age": 30},
+    {"id": 3, "name": "Charlie", "age": 22},
+]
 
-# Now safely import them
-import requests
-from bs4 import BeautifulSoup
-import matplotlib.pyplot as plt
-from collections import Counter
+# Create DataFrame
+df = pd.DataFrame(data)
 
-def main():
-    # ✅ A real URL with rich content
-    url = "https://en.wikipedia.org/wiki/Python_(programming_language)"
-    try:
-        response = requests.get(url)
-        response.raise_for_status()
-    except Exception as e:
-        print("Failed to fetch the webpage:", e)
-        return
+# Add a computed column using numpy
+df["score"] = np.random.randint(60, 100, size=len(df))
 
-    # Parse visible text from the page
-    soup = BeautifulSoup(response.text, 'html.parser')
-    for script_or_style in soup(["script", "style"]):
-        script_or_style.decompose()
-    text = soup.get_text().lower()
-    words = [word for word in text.split() if word.isalpha()]
-    counter = Counter(words)
-    top_words = counter.most_common(10)
-
-    if not top_words:
-        print("No words found on the page.")
-        return
-
-    # ✅ Print results to the console
-    print("\nTop 10 Most Common Words on the Wikipedia Page:")
-    for word, count in top_words:
-        print(f"{word}: {count}")
-
-    # Plot results
-    labels, values = zip(*top_words)
-    plt.figure(figsize=(10, 6))
-    plt.bar(labels, values)
-    plt.title("Top 10 Most Common Words on Wikipedia - Python (Programming Language)")
-    plt.xlabel("Words")
-    plt.ylabel("Frequency")
-    plt.xticks(rotation=45)
-    plt.tight_layout()
-    plt.show()
-
-if __name__ == "__main__":
-    main()
+# Print a simple text result — not a UI table
+for _, row in df.iterrows():
+    print(f"ID: {row['id']}, Name: {row['name']}, Age: {row['age']}, Score: {row['score']}")

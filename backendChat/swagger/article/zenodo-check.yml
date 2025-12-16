@@ -1,0 +1,98 @@
+Check metadata completeness of a Zenodo record
+---
+tags:
+  - Article
+
+consumes:
+  - application/json
+produces:
+  - application/json
+
+parameters:
+  - name: Authorization
+    in: header
+    required: true
+    type: string
+    default: "Bearer my-secret-token"
+    description: Bearer authentication token.
+
+  - name: body
+    in: body
+    required: true
+    description: >
+      JSON payload containing the Zenodo identifier. The identifier can be a Zenodo
+      record URL (e.g. https://zenodo.org/records/1234567), a DOI
+      (e.g. 10.5281/zenodo.1234567), or a raw Zenodo record ID (e.g. "1234567").
+    schema:
+      type: object
+      required:
+        - identifier
+      properties:
+        identifier:
+          type: string
+          example: "https://zenodo.org/records/1234567"
+
+responses:
+  200:
+    description: >
+      Zenodo record processed successfully. The response contains a summary of the
+      metadata fields that are present or missing, grouped by logical sections
+      (identity, creators_contributors, content, relationships, rights, coverage,
+      funding, classification), wrapped in the standard messages format.
+    schema:
+      type: array
+      items:
+        type: object
+        properties:
+          role:
+            type: string
+          jsonObject:
+            type: boolean
+          contentShort:
+            type: string
+            description: Short human-readable summary of the metadata status.
+          content:
+            description: >
+              Detailed metadata completeness report. Typically a JSON object with
+              the following structure:
+              {
+                "record_id": "1234567",
+                "doi": "10.5281/zenodo.1234567",
+                "title": "My Dataset",
+                "sections": {
+                  "identity": {
+                    "fields": {
+                      "title": { "present": true, "value": "My Dataset" },
+                      "doi": { "present": true, "value": "10.5281/zenodo.1234567" },
+                      "upload_type": { "present": true, "value": "dataset" },
+                      "resource_type": { "present": true, "value": "dataset" },
+                      "version": { "present": false, "value": null }
+                    }
+                  },
+                  "creators_contributors": {
+                    "fields": {
+                      "creators": { "present": true, "value": [ ... ] },
+                      "contributors": { "present": false, "value": null }
+                    }
+                  },
+                  "content": { ... },
+                  "relationships": { ... },
+                  "rights": { ... },
+                  "coverage": { ... },
+                  "funding": { ... },
+                  "classification": { ... }
+                }
+              }
+          stage:
+            type: string
+            description: >
+              Workflow stage identifier (for example, "ZenodoMetadataCheckCompleted").
+
+  400:
+    description: Bad request – missing or invalid 'identifier' field in the request body.
+
+  401:
+    description: Unauthorized – missing or invalid Bearer token.
+
+  500:
+    description: Unexpected error while querying Zenodo or processing the metadata.

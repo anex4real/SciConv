@@ -1,0 +1,91 @@
+Handle changes to project configuration (PL, versions, dependencies)
+---
+tags:
+  - Project
+
+consumes:
+  - application/json
+produces:
+  - application/json
+
+parameters:
+  - name: Authorization
+    in: header
+    type: string
+    required: true
+    default: "Bearer my-secret-token"
+    description: Bearer authentication token.
+
+  - name: projectUuid
+    in: path
+    type: string
+    required: true
+    description: Unique ID of the project.
+
+  - name: body
+    in: body
+    required: true
+    description: >
+      The request body must contain the user's latest message about the
+      configuration. The system will interpret whether the user accepts the
+      current configuration, wants to wait, or wants to change programming
+      language / versions / dependencies.
+    schema:
+      type: object
+      required:
+        - myMessage
+      properties:
+        myMessage:
+          type: string
+          description: >
+            Free-text message from the user describing acceptance or requested
+            changes to the configuration (e.g., dependency versions, languages).
+
+responses:
+  200:
+    description: >
+      Returns the next stage or an updated configuration object, depending on
+      the user's intent.
+    schema:
+      type: array
+      items:
+        type: object
+        properties:
+          role:
+            type: string
+          jsonObject:
+            type: boolean
+          contentShort:
+            type: string
+          content:
+            oneOf:
+              - type: string
+                description: >
+                  Single-word response indicating the next stage
+                  (e.g., "BuildDockerFile", "WaitChatInteraction").
+              - type: object
+                description: >
+                  Updated configuration JSON with programming language and
+                  dependencies.
+                properties:
+                  PL:
+                    type: array
+                    items:
+                      type: string
+                  PLVersion:
+                    type: string
+                  Dependencies:
+                    type: array
+                    items:
+                      type: string
+          stage:
+            type: string
+            description: >
+              Next stage of the workflow, such as "BuildDockerFile" or
+              "WaitChatInteraction".
+
+  401:
+    description: Unauthorized – missing or invalid Bearer token.
+
+  500:
+    description: Unexpected error while processing configuration changes.

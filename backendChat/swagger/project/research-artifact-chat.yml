@@ -1,0 +1,91 @@
+Generate the final research artifact (ZIP + Docker image + execution scripts)
+---
+tags:
+  - Project
+
+consumes:
+  - application/json
+produces:
+  - application/json
+
+parameters:
+  - name: Authorization
+    in: header
+    required: true
+    type: string
+    default: "Bearer my-secret-token"
+    description: Bearer authentication token.
+
+  - name: projectUuid
+    in: path
+    required: true
+    type: string
+    description: Unique ID of the project.
+
+  - name: body
+    in: body
+    required: true
+    description: >
+      JSON payload containing:
+      - dockerImageId: The built Docker image tag
+      - commandToRun: Command used to execute the experiment
+      - messages: Full message history for logging
+    schema:
+      type: object
+      required:
+        - dockerImageId
+        - commandToRun
+        - messages
+      properties:
+        dockerImageId:
+          type: string
+          description: >
+            Tag or ID of the Docker image that was successfully built earlier.
+        commandToRun:
+          type: string
+          description: >
+            Command used to run the project experiment inside the container.
+        messages:
+          type: array
+          description: >
+            Complete conversation log; used to generate metadata in the artifact.
+          items:
+            type: object
+            properties:
+              role:
+                type: string
+              content:
+                type: string
+              contentShort:
+                type: string
+              stage:
+                type: string
+
+responses:
+  200:
+    description: >
+      Research artifact successfully generated.  
+      The response contains the path of the generated ZIP file.
+    schema:
+      type: array
+      items:
+        type: object
+        properties:
+          role:
+            type: string
+          contentShort:
+            type: string
+            description: Path of the generated research artifact ZIP file.
+          stage:
+            type: string
+            example: "Completed"
+
+  400:
+    description: Missing dockerImageId or commandToRun.
+
+  401:
+    description: Unauthorized – missing or invalid Bearer token.
+
+  500:
+    description: >
+      Error generating the research artifact, packaging files, or exporting Docker image.
