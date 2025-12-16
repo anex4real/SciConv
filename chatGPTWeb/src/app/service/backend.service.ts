@@ -36,20 +36,6 @@ export class BackendService {
     }
 
 
-    /*    public async chat(message: string): Promise<string> {
-            try {
-
-                // Use chatgpt.query method with optional parameters
-                const response = await this.chatgpt.query(message, {temperature: 0.8, max_tokens: 32});
-                // Return the response text
-                return response.text;
-            } catch (error) {
-                // Handle any errors
-                console.error(error);
-                return 'Something went wrong.';
-            }
-        }*/
-
     private password = 'lazaro2024'; // Replace with your desired password
 
     // Method to validate the password
@@ -148,4 +134,45 @@ export class BackendService {
         return this.http.post(`${this.baseUrl}/project/upload-project`, formData,
             {headers: this.headers});
     }
+
+    findInformationArticle(formData: FormData) {
+        return this.http.post(`${this.baseUrl}/article/upload-file`, formData,
+            {headers: this.headers});
+    }
+    // Decide next step based on user's message (infer vs improve + dataset name)
+    datasetChooseNextStep( messages: Message[]) {
+        return this.http.post(
+            `${this.baseUrl}/article/choose-next-step`,
+            { messages },
+            { headers: this.headers }
+        );
+    }
+
+// Infer metadata for a NON-referenced dataset (user provides datasetName)
+    datasetInferMetadata(projectUuid: string, datasetName: string, messages: Message[]) {
+        return this.http.post(
+            `${this.baseUrl}/article/${projectUuid}/infer-metadata`,
+            { datasetName, messages },
+            { headers: this.headers }
+        );
+    }
+
+// Improve metadata for a REFERENCED dataset (user provides datasetName)
+    datasetImproveMetadata(projectUuid: string, datasetName: string, messages: Message[]) {
+        return this.http.post(
+            `${this.baseUrl}/article/${projectUuid}/improve-metadata`,
+            { datasetName, messages },
+            { headers: this.headers }
+        );
+    }
+
+// Optional: generic chat interaction for article workflow (if you need it)
+    articleChatInteraction(projectUuid: string, messages: Message[]) {
+        return this.http.post(
+            `${this.baseUrl}/article/${projectUuid}/chat-interaction`,
+            { messages },
+            { headers: this.headers }
+        );
+    }
+
 }
