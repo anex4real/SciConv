@@ -102,6 +102,16 @@
 
 }
 
+.json-object {
+    white-space: pre-wrap;
+    word-break: break-word;
+    margin: 6px 0 12px 0;
+    padding: 8px;
+    border-radius: 6px;
+    background: rgba(0,0,0,0.05);
+    font-size: 12px;
+}
+
 
 
 .json-key {
