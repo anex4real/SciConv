@@ -21,6 +21,7 @@ parameters:
     in: formData
     required: true
     type: string
+    default: "1PHuwqoCl5CHLBXYxtT1qWRKK17a3tCdHxnqxp0gD72vLiLbXh7wVkgQCrIE"
     description: >
       The user's personal Zenodo API token.
       This token determines *which Zenodo account* will receive the deposition.
@@ -30,42 +31,133 @@ parameters:
     in: formData
     required: true
     type: string
-    description: >
-      JSON string containing the dataset metadata in Zenodo deposition format, e.g.:
+    default: |
       {
         "metadata": {
-          "title": "My Dataset",
           "upload_type": "dataset",
-          "publication_date": "2024-02-01",
-          "version": "1.0",
-          "doi": "",
-          "description": "Dataset description...",
+          "publication_date": "2025-12-22",
+          "title": "Example Dataset: Coastal Temperature Measurements (2018–2024)",
           "creators": [
             {
-              "name": "Lazaro Costa",
-              "affiliation": "University of Porto",
-              "orcid": "0000-0002-6317-8792",
-              "email": "lazaro@example.com",
-              "role": "corresponding author"
+              "name": "Doe, Jane",
+              "affiliation": "Example University",
+              "orcid": "0000-0002-1694-233X",
+              "gnd": ""
             }
           ],
-          "contributors": [],
-          "keywords": [],
-          "language": "en",
-          "notes": "",
-          "related_identifiers": [],
-          "communities": [],
-          "license": "cc-by-4.0",
+          "contributors": [
+            {
+              "name": "Smith, John",
+              "type": "DataCurator",
+              "affiliation": "Example Data Center",
+              "orcid": "",
+              "gnd": ""
+            }
+          ],
+          "description": "<p>This dataset contains hourly coastal sea-surface temperature measurements from three sensor stations collected between 2018 and 2024. Data are provided as CSV files with accompanying README documentation and quality-control flags.</p>",
           "access_right": "open",
-          "grants": [],
-          "subjects": [],
-          "resource_type": { "type": "dataset", "title": "Dataset" },
-          "dates": [],
-          "locations": [],
-          "imprint": { "publisher": "", "place": "" }
+          "license": "cc-by-4.0",
+          "embargo_date": "",
+          "access_conditions": "",
+          "doi": "",
+          "preserve_doi": false,
+          "keywords": [
+            "sea surface temperature",
+            "coastal monitoring",
+            "oceanography",
+            "time series"
+          ],
+          "notes": "<p>Quality control applied: outlier removal using median absolute deviation and sensor drift correction.</p>",
+          "references": [
+            "Doe J (2024). Coastal monitoring methods. Example Publisher. DOI:10.1234/example.ref1",
+            "Smith J (2023). Temperature sensor calibration. Example Publisher. DOI:10.1234/example.ref2"
+          ],
+          "related_identifiers": [
+            {
+              "identifier": "10.1234/example.software",
+              "relation": "isDocumentedBy",
+              "resource_type": "software"
+            },
+            {
+              "identifier": "https://example.org/project-page",
+              "relation": "isSupplementTo",
+              "resource_type": "other"
+            }
+          ],
+          "communities": [
+            {
+              "identifier": "ecfunded"
+            }
+          ],
+          "grants": [
+            {
+              "id": "10.13039/501100000780::283595"
+            }
+          ],
+          "journal": {
+            "title": "",
+            "volume": "",
+            "issue": "",
+            "pages": ""
+          },
+          "conference": {
+            "title": "20th International Conference on Coastal Observations",
+            "acronym": "ICCO24",
+            "dates": "14-18 October 2024",
+            "place": "Amsterdam, The Netherlands",
+            "url": "https://example.org/icco24",
+            "session": "VI",
+            "session_part": "1"
+          },
+          "imprint": {
+            "publisher": "",
+            "isbn": "",
+            "place": ""
+          },
+          "part_of": {
+            "title": "",
+            "pages": ""
+          },
+          "thesis": {
+            "supervisors": [],
+            "university": ""
+          },
+          "subjects": [
+            {
+              "term": "Oceanography",
+              "identifier": "http://id.loc.gov/authorities/subjects/sh85093990",
+              "scheme": "url"
+            }
+          ],
+          "version": "1.0.0",
+          "language": "eng",
+          "locations": [
+            {
+              "lat": 34.0257,
+              "lon": -118.7804,
+              "place": "Los Angeles, USA",
+              "description": "Station LA-01 (nearshore buoy)."
+            },
+            {
+              "lat": 37.7749,
+              "lon": -122.4194,
+              "place": "San Francisco, USA",
+              "description": "Station SF-02 (pier-mounted sensor)."
+            }
+          ],
+          "dates": [
+            {
+              "start": "2018-03-21",
+              "end": "2024-03-25",
+              "type": "Collected",
+              "description": "Primary measurement collection period."
+            }
+          ],
+          "method": "<p>Sea-surface temperature was recorded hourly using calibrated thermistor sensors. Data were transmitted via cellular telemetry, aggregated daily, and validated using automated QC rules and manual spot checks.</p>"
         }
       }
-
+    description: >
+      JSON string containing the dataset metadata in Zenodo deposition format
   - name: files
     in: formData
     required: true

@@ -1,6 +1,7 @@
 # routes/article.py
 from __future__ import annotations
 
+import os
 import re
 import json
 from flask import Blueprint
@@ -8,8 +9,9 @@ from flasgger import swag_from
 from flask_cors import cross_origin
 from auth import require_auth
 from helpers.article.articleHelper import check_zenodo_metadata, create_zenodo_deposition_with_files, \
-    _extract_text_from_pdf, _split_body_and_references, provideDatasetNameAndAction, _normalize_article, \
-    handle_dataset_list_edit, respond_define_next_step
+    _extract_text_from_pdf, _split_body_and_references, _normalize_article, \
+    handle_dataset_list_edit, respond_define_next_step, _parse_referenced_entry_with_gpt_fallback, \
+    run_fuji_fair_assessment
 from flask import request
 from helpers.index import makeResponse, appendMessage, callGPTModel, _extract_json_safe
 
@@ -309,8 +311,18 @@ def choose_next_step():
     messages = request_data.get("messages", [])
     messagesToUser = []
 
+    article_uuid = (request_data.get("article_uuid") or "").strip()
+    #TODO
+
+    article_uuid="12345678"
+
     if not messages:
-        provideDatasetNameAndAction(messagesToUser)
+        respond_define_next_step(
+            messagesToUser,
+            referencedDatasets=[],
+            nonReferencedDatasets=[],
+            summary_prefix="No previous conversation found. Please choose a next step."
+        )
         return makeResponse(messagesToUser, 200, True)
 
     # -------- 1) Get dataset lists from previous assistant jsonObject message --------
@@ -336,12 +348,27 @@ def choose_next_step():
     user_text = str(user_text).strip()
 
     if not user_text:
-        provideDatasetNameAndAction(messagesToUser)
+        respond_define_next_step(
+            messagesToUser,
+            referencedDatasets=referencedDatasets,
+            nonReferencedDatasets=nonReferencedDatasets,
+            summary_prefix="I didn't receive a command. Please choose one of the options below."
+        )
         return makeResponse(messagesToUser, 200, True)
 
     # -------- 3) If user wants to edit the lists (add/update/delete), handle it here --------
-    edit_keywords = ["add", "update", "delete", "remove", "edit"]
-    if any(k in user_text.lower() for k in edit_keywords):
+    EDIT_PATTERN = re.compile(
+        r"\b("
+        r"add(?:s|ed|ing)?|"
+        r"update(?:s|d|ing)?|"
+        r"delete(?:s|d|ing)?|"
+        r"remove(?:s|d|ing)?|"
+        r"edit(?:s|ed|ing)?"
+        r")\b",
+        re.IGNORECASE
+    )
+
+    if EDIT_PATTERN.search(user_text):
         referencedDatasets, nonReferencedDatasets = handle_dataset_list_edit(
             user_text,
             referencedDatasets,
@@ -349,9 +376,14 @@ def choose_next_step():
             messagesToUser
         )
 
-        # return updated lists in the SAME structure client expects
-        respond_define_next_step(referencedDatasets, nonReferencedDatasets, prefix="Updated dataset lists.")
+        respond_define_next_step(
+            messagesToUser,
+            referencedDatasets,
+            nonReferencedDatasets,
+            summary_prefix="Updated dataset lists."
+        )
         return makeResponse(messagesToUser, 200, True)
+
 
     # -------- 4) Use GPT ONLY to extract action + dataset_name (infer/improve) --------
     system_prompt = {
@@ -370,7 +402,10 @@ def choose_next_step():
         "content": f'User message:\n{user_text}\n\nReturn ONLY JSON.'
     }
 
-    raw = callGPTModel([system_prompt, user_prompt])
+    raw='{"action":"improve","dataset_name":"Reproducibility package of a curated dataset of 18 computational experiments"}'
+    #TODO TO BE deleted
+    #raw = callGPTModel([system_prompt, user_prompt])
+
     parsed = _extract_json_safe(raw) or {}
 
     action = str(parsed.get("action") or "unknown").strip().lower().replace("%", "")
@@ -387,18 +422,20 @@ def choose_next_step():
         )
         return makeResponse(messagesToUser, 200, True)
 
-    # -------- 5) If improve: fetch reference_or_link from referencedDatasets (earlier message) --------
+    # -------- 5) If improve: fetch reference_or_link + Zenodo metadata + F-UJI --------
     reference_or_link = ""
+    zenodo_metadata = None
+    fuji_error = ""
+    fuji_result = ""
 
     if action == "improve":
         target = _normalize_article(dataset_name)
 
+        # Find ref
         for s in referencedDatasets:
             if not isinstance(s, str):
                 continue
-            parts = s.split("|", 1)
-            name = parts[0].strip() if parts else ""
-            ref = parts[1].strip() if len(parts) > 1 else ""
+            name, ref = _parse_referenced_entry_with_gpt_fallback(s)
             if _normalize_article(name) == target:
                 reference_or_link = ref
                 break
@@ -414,15 +451,49 @@ def choose_next_step():
             )
             return makeResponse(messagesToUser, 200, True)
 
-    next_stage = "InferDatasetMetadata" if action == "infer" else "ImproveDatasetMetadata"
+        # Fetch Zenodo metadata
+        try:
+            zenodo_metadata = check_zenodo_metadata(reference_or_link)
+        except Exception as e:
+            appendMessage(
+                messagesToUser,
+                role="assistant",
+                contentShort=f"I found the reference but couldn't fetch Zenodo metadata: {str(e)}",
+                content=f"I found the reference but couldn't fetch Zenodo metadata: {str(e)}",
+                stage="DefineNextStepInteraction",
+                jsonObject=False
+            )
+            return makeResponse(messagesToUser, 200, True)
 
-    # -------- 6) Return EXACT payload format in one message --------
+
+        # We do NOT hard-fail if article_uuid is missing or F-UJI fails.
+        if article_uuid:
+            try:
+                fuji_result = run_fuji_fair_assessment(article_uuid=article_uuid, doi=reference_or_link)
+                fuji_path = os.path.join("articles", article_uuid, "fuji_result.json")
+            except Exception as e:
+                fuji_error = str(e)
+                fuji_path = os.path.join("articles", article_uuid, "fuji_result.json")
+        else:
+            fuji_error = "Missing article_uuid in request body (required to save F-UJI result under articles/<uuid>/)."
+
+    # -------- 6) Return payload --------
+    #TODO alterar
+    #next_stage = "InferDatasetMetadata" if action == "infer" else "ImproveDatasetMetadata"
+    next_stage = "DefineNextStepInteraction"
+
+
     payload = {
         "action": action,
-        "dataset_name": dataset_name
+        "fuji_result": fuji_result
     }
+
     if action == "improve":
         payload["reference_or_link"] = reference_or_link
+        payload["zenodo_metadata"] = zenodo_metadata
+
+        if fuji_error:
+            payload["fuji_error"] = fuji_error
 
     appendMessage(
         messagesToUser,
@@ -434,6 +505,7 @@ def choose_next_step():
     )
 
     return makeResponse(messagesToUser, 200, True)
+
 
 @article_bp.route("/article/infer-dataset-metadata", methods=['POST'])
 @cross_origin()

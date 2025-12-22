@@ -1,0 +1,91 @@
+{
+  "doi": "https://doi.org/10.5281/zenodo.15166258",
+  "maturity_fair": 2.25,
+  "score_percent_fair": 80.77,
+  "score_by_element": {
+    "A": {
+      "earned": 6.0,
+      "total": 7.0,
+      "missing": 1.0,
+      "percent": 85.71
+    },
+    "A1": {
+      "earned": 2.0,
+      "total": 3.0,
+      "missing": 1.0,
+      "percent": 66.67
+    },
+    "A1.1": {
+      "percent": 100.0
+    },
+    "A1.2": {
+      "percent": 100.0
+    },
+    "F": {
+      "earned": 6.0,
+      "total": 7.0,
+      "missing": 1.0,
+      "percent": 85.71
+    },
+    "F1": {
+      "percent": 100.0
+    },
+    "F2": {
+      "earned": 1.0,
+      "total": 2.0,
+      "missing": 1.0,
+      "percent": 50.0
+    },
+    "F3": {
+      "percent": 100.0
+    },
+    "F4": {
+      "percent": 100.0
+    },
+    "FAIR": {
+      "earned": 21.0,
+      "total": 26.0,
+      "missing": 5.0,
+      "percent": 80.77
+    },
+    "I": {
+      "earned": 4.0,
+      "total": 6.0,
+      "missing": 2.0,
+      "percent": 66.67
+    },
+    "I1": {
+      "percent": 100.0
+    },
+    "I2": {
+      "earned": 0.0,
+      "total": 2.0,
+      "missing": 2.0,
+      "percent": 0.0
+    },
+    "I3": {
+      "percent": 100.0
+    },
+    "R": {
+      "earned": 5.0,
+      "total": 6.0,
+      "missing": 1.0,
+      "percent": 83.33
+    },
+    "R1": {
+      "earned": 1.0,
+      "total": 2.0,
+      "missing": 1.0,
+      "percent": 50.0
+    },
+    "R1.1": {
+      "percent": 100.0
+    },
+    "R1.2": {
+      "percent": 100.0
+    },
+    "R1.3": {
+      "percent": 100.0
+    }
+  }
+}

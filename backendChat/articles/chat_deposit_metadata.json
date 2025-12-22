@@ -1,0 +1,231 @@
+{
+  "upload_type": {
+    "type": "string",
+    "required": true,
+    "enum": [
+      "publication",
+      "poster",
+      "presentation",
+      "dataset",
+      "image",
+      "video",
+      "software",
+      "lesson",
+      "physicalobject",
+      "other"
+    ]
+  },
+
+  "publication_type": {
+    "type": "string",
+    "required_if": { "upload_type": "publication" }
+  },
+
+  "image_type": {
+    "type": "string",
+    "required_if": { "upload_type": "image" },
+    "enum": ["figure", "plot", "drawing", "diagram", "photo", "other"]
+  },
+
+  "publication_date": {
+    "type": "string",
+    "format": "date",
+    "required": true,
+    "default": "today"
+  },
+
+  "title": {
+    "type": "string",
+    "required": true
+  },
+
+  "creators": {
+    "type": "array",
+    "required": true,
+    "items": {
+      "name": "string",
+      "affiliation": "string?",
+      "orcid": "string?",
+      "gnd": "string?"
+    }
+  },
+
+  "contributors": {
+    "type": "array",
+    "required": false,
+    "items": {
+      "name": "string",
+      "type": "string",
+      "affiliation": "string?",
+      "orcid": "string?",
+      "gnd": "string?"
+    }
+  },
+
+  "description": {
+    "type": "string",
+    "required": true,
+    "html_allowed": true
+  },
+
+  "access_right": {
+    "type": "string",
+    "required": true,
+    "enum": ["open", "embargoed", "restricted", "closed"],
+    "default": "open"
+  },
+
+  "license": {
+    "type": "string",
+    "required_if": {
+      "access_right": ["open", "embargoed"]
+    }
+  },
+
+  "embargo_date": {
+    "type": "string",
+    "format": "date",
+    "required_if": { "access_right": "embargoed" }
+  },
+
+  "access_conditions": {
+    "type": "string",
+    "html_allowed": true,
+    "required_if": { "access_right": "restricted" }
+  },
+
+  "doi": {
+    "type": "string",
+    "required": false
+  },
+
+  "preserve_doi": {
+    "type": ["boolean", "object"],
+    "required": false
+  },
+
+  "keywords": {
+    "type": "array",
+    "items": "string",
+    "required": false
+  },
+
+  "notes": {
+    "type": "string",
+    "html_allowed": true,
+    "required": false
+  },
+
+  "references": {
+    "type": "array",
+    "items": "string",
+    "required": false
+  },
+
+  "related_identifiers": {
+    "type": "array",
+    "required": false,
+    "items": {
+      "identifier": "string",
+      "relation": "string",
+      "resource_type": "string?"
+    }
+  },
+
+  "communities": {
+    "type": "array",
+    "required": false,
+    "items": {
+      "identifier": "string"
+    }
+  },
+
+  "grants": {
+    "type": "array",
+    "required": false,
+    "items": {
+      "id": "string"
+    }
+  },
+
+  "journal": {
+    "title": "string?",
+    "volume": "string?",
+    "issue": "string?",
+    "pages": "string?"
+  },
+
+  "conference": {
+    "title": "string?",
+    "acronym": "string?",
+    "dates": "string?",
+    "place": "string?",
+    "url": "string?",
+    "session": "string?",
+    "session_part": "string?"
+  },
+
+  "imprint": {
+    "publisher": "string?",
+    "isbn": "string?",
+    "place": "string?"
+  },
+
+  "part_of": {
+    "title": "string?",
+    "pages": "string?"
+  },
+
+  "thesis": {
+    "supervisors": "array?",
+    "university": "string?"
+  },
+
+  "subjects": {
+    "type": "array",
+    "required": false,
+    "items": {
+      "term": "string",
+      "identifier": "string",
+      "scheme": "string"
+    }
+  },
+
+  "version": {
+    "type": "string",
+    "required": false
+  },
+
+  "language": {
+    "type": "string",
+    "required": false
+  },
+
+  "locations": {
+    "type": "array",
+    "required": false,
+    "items": {
+      "lat": "number?",
+      "lon": "number?",
+      "place": "string",
+      "description": "string?"
+    }
+  },
+
+  "dates": {
+    "type": "array",
+    "required": false,
+    "items": {
+      "start": "string?",
+      "end": "string?",
+      "type": "string",
+      "description": "string?"
+    }
+  },
+
+  "method": {
+    "type": "string",
+    "html_allowed": true,
+    "required": false
+  }
+}

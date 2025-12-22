@@ -137,10 +137,8 @@ export class DatasetAnalysisService {
     private performActionBasedOnStage(stage: DataStages) {
         switch (stage) {
             case DataStages.FindInformation:
-                // nada (só acontece após upload)
                 break;
-
-                this.defineNextStepInteraction();
+            case DataStages.DefineNextStepInteraction:
                 break;
 
             case DataStages.InferDatasetMetadata:
@@ -202,7 +200,7 @@ export class DatasetAnalysisService {
         });
     }
 
-
+//todo TOBE delete show after improve infer action
     private askDatasetName(action: 'infer' | 'improve') {
         const label = action === 'infer' ? 'NON-referenced' : 'referenced';
 
@@ -258,7 +256,7 @@ export class DatasetAnalysisService {
 
                     // If backend says we’re back at DefineNextStepInteraction, show your important message
                     if (last.stage === DataStages.DefineNextStepInteraction) {
-                        this.defineNextStepInteraction();
+                        //this.defineNextStepInteraction();
                         return;
                     }
 

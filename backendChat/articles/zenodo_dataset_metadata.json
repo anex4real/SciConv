@@ -4,25 +4,26 @@
     "upload_type": "dataset",
     "publication_date": "",
     "description": "",
+
     "creators": [
       {
-        "name": "",
+        "name": "Family name, Given names",
         "affiliation": "",
         "orcid": "",
-        "email": "",
-        "role": ""
+        "gnd": ""
       }
     ],
 
     "contributors": [
       {
-        "name": "",
+        "name": "Family name, Given names",
+        "type": "Editor",
         "affiliation": "",
         "orcid": "",
-        "email": "",
-        "role": ""
+        "gnd": ""
       }
     ],
+
     "keywords": [],
     "language": "",
     "notes": "",
@@ -31,7 +32,7 @@
       {
         "identifier": "",
         "relation": "",
-        "scheme": ""
+        "resource_type": "dataset"
       }
     ],
 
@@ -47,12 +48,10 @@
 
     "grants": [
       {
-        "funder": "",
-        "grant_id": "",
-        "acronym": "",
-        "title": ""
+        "id": ""
       }
     ],
+
     "subjects": [
       {
         "term": "",
@@ -60,11 +59,6 @@
         "scheme": ""
       }
     ],
-
-    "resource_type": {
-      "type": "dataset",
-      "title": "Dataset"
-    },
 
     "dates": [
       {

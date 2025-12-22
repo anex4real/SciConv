@@ -13,7 +13,7 @@ from helpers.project.projectHelper import startDockerClient
 from helpers.index import makeResponse
 
 app = Flask(__name__)
-CORS(app, resources={r"/*": {"origins": "*"}})
+CORS(app, resources={r"/*": {"origins": "*"}}, supports_credentials=False)
 swagger = Swagger(app)
 
 @app.route("/", methods=['GET'])

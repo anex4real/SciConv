@@ -20,7 +20,9 @@
                         <ul>
                             <li *ngFor="let key of objectKeys(message.contentShort)">
                                 <span class="json-key">{{ key }}:</span>
-                                <ng-container *ngIf="isObject(message.contentShort[key]); else showValue"></ng-container>
+                                <ng-container *ngIf="isObject(message.contentShort[key]); else showValue">
+                                    <pre class="json-object">{{ message.contentShort[key] | json }}</pre>
+                                </ng-container>
 
                                 <ng-template #showValue>
                                     <ng-container *ngIf="!Array.isArray(message.contentShort[key])">
