@@ -1,0 +1,144 @@
+Edit an existing Zenodo dataset deposition (metadata and files)
+---
+tags:
+  - Article
+
+consumes:
+  - multipart/form-data
+
+produces:
+  - application/json
+
+parameters:
+  - name: Authorization
+    in: header
+    required: true
+    type: string
+    default: "Bearer my-secret-token"
+    description: >
+      Bearer authentication token for YOUR application (not Zenodo).
+
+  - name: article_uuid
+    in: path
+    required: true
+    type: string
+    default: "12345678"
+    description: >
+      Internal article UUID used by the application to associate files,
+      FAIR assessments, and workflow state.
+
+  - name: deposition_id
+    in: path
+    required: true
+    type: integer
+    default: "18017497"
+    format: int64
+    description: >
+      Zenodo deposition ID to edit.  
+      If the deposition is already published, a new version draft will be created automatically.
+
+  - name: zenodo_token
+    in: formData
+    required: false
+    type: string
+    description: >
+      User's personal Zenodo API token.
+      This determines which Zenodo account owns the deposition.
+
+  - name: metadata
+    in: formData
+    required: true
+    type: string
+    description: >
+      JSON string with the updated dataset metadata.
+      MUST contain a top-level "metadata" object compatible with Zenodo's deposition schema.
+
+      Example:
+      {
+        "metadata": {
+          "upload_type": "dataset",
+          "title": "Updated dataset title",
+          "publication_date": "2025-12-28",
+          "creators": [
+            {
+              "name": "Doe, Jane",
+              "affiliation": "Example University",
+              "orcid": "0000-0002-1694-233X"
+            }
+          ],
+          "description": "<p>Updated description</p>",
+          "access_right": "open",
+          "license": "cc-by-4.0"
+        }
+      }
+
+  - name: replace_files
+    in: formData
+    required: false
+    type: boolean
+    default: false
+    description: >
+      If true, all existing files in the deposition will be deleted before
+      uploading the new files.
+
+  - name: files
+    in: formData
+    required: false
+    type: file
+    description: >
+      One or more files to upload to Zenodo.
+      Use "files[]" for multiple files.
+      If omitted, only metadata will be updated.
+
+responses:
+  200:
+    description: >
+      Deposition successfully edited.
+      If the original deposition was published, this may be a NEW VERSION draft.
+    schema:
+      type: object
+      properties:
+        article_uuid:
+          type: string
+          description: Application-level article UUID.
+
+        deposition_id:
+          type: integer
+          description: >
+            ID of the edited deposition.
+            IMPORTANT: this may differ from the original ID if a new version was created.
+
+        deposition:
+          type: object
+          description: Full Zenodo deposition JSON.
+          properties:
+            id:
+              type: integer
+            metadata:
+              type: object
+            files:
+              type: array
+              items:
+                type: object
+            links:
+              type: object
+
+  400:
+    description: >
+      Bad request — missing zenodo_token, metadata, or invalid JSON.
+
+  401:
+    description: >
+      Unauthorized — invalid Authorization header for this application.
+
+  404:
+    description: >
+      Deposition not found or user does not have permission to edit it.
+
+  409:
+    description: >
+      Conflict — deposition is being processed by Zenodo (e.g. integration in progress).
+
+  500:
+    description: >
+      Internal server error while editing the Zenodo deposition.

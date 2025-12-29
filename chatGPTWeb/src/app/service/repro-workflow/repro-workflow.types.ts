@@ -1,5 +1,6 @@
 // src/app/service/repro-workflow/repro-workflow.types.ts
 import { Message } from "../../interface/interfaces";
+import {ZenodoMetadataView} from "../dataset-analysis/dataset-analysis.types";
 
 export enum ReproStages {
     ProjectLocation = 'ProjectLocation',

@@ -2,9 +2,8 @@ from __future__ import annotations
 import json
 import os
 import re
-from typing import Tuple
+from typing import Tuple, Any, Dict, List, Optional, Union, IO
 import requests
-from typing import List, Union, IO
 from PyPDF2 import PdfReader
 from werkzeug.datastructures import FileStorage
 from helpers.index import appendMessage, callGPTModel, _extract_json_safe
@@ -12,13 +11,13 @@ from helpers.index import appendMessage, callGPTModel, _extract_json_safe
 ZENODO_API_BASE = "https://zenodo.org/api"
 BASE = "https://www.f-uji.net"
 
-def _normalize_article(s: str) -> str:
-    return re.sub(r"\s+", " ", re.sub(r"[^a-z0-9]+", " ", (s or "").lower())).strip()
-
 ZENODO_REF_PATTERN = re.compile(
     r"(10\.5281\/zenodo\.\d+|https?:\/\/(?:www\.)?zenodo\.org\/records\/\d+|https?:\/\/doi\.org\/10\.5281\/zenodo\.\d+)",
     re.IGNORECASE
 )
+
+def _normalize_article(s: str) -> str:
+    return re.sub(r"\s+", " ", re.sub(r"[^a-z0-9]+", " ", (s or "").lower())).strip()
 
 def _parse_referenced_entry(entry: str) -> Tuple[str, str]:
     entry = (entry or "").strip()
@@ -503,12 +502,6 @@ def _extract_zenodo_identifier(input_str: str):
     # 5) Nothing usable found
     return {"record_id": None, "doi": None}
 
-import os
-import json
-import requests
-from typing import Any, Dict
-
-
 def run_fuji_fair_assessment(article_uuid: str, doi: str) -> dict:
     """
     Run a F-UJI FAIR assessment for a given DOI, save full JSON, and also
@@ -571,6 +564,7 @@ def run_fuji_fair_assessment(article_uuid: str, doi: str) -> dict:
     if "application/json" not in content_type:
         raise RuntimeError(f"F-UJI export did not return JSON (content-type={content_type})")
 
+
     fuji_result: Dict[str, Any] = r2.json()
 
     # ---------- Save full result ----------
@@ -597,28 +591,94 @@ def run_fuji_fair_assessment(article_uuid: str, doi: str) -> dict:
         except Exception:
             return float(default)
 
+    # ---------- Extract WARNING messages grouped by FAIR dimension ----------
+    warnings_by_dimension = {
+        "findable": [],
+        "accessible": [],
+        "interoperable": [],
+        "reusable": [],
+    }
+
+    # Skip dimensions that are already perfect (100%)
+    skip_dims = set()
+    if _num(score_percent.get("F")) == 100:
+        skip_dims.add("findable")
+    if _num(score_percent.get("A")) == 100:
+        skip_dims.add("accessible")
+    if _num(score_percent.get("I")) == 100:
+        skip_dims.add("interoperable")
+    if _num(score_percent.get("R")) == 100:
+        skip_dims.add("reusable")
+
+    results = fuji_result.get("results", []) or []
+
+    for metric in results:
+        metric_id = (metric.get("metric_identifier") or "").strip()
+
+        if metric_id.startswith("FsF-F"):
+            category = "findable"
+        elif metric_id.startswith("FsF-A"):
+            category = "accessible"
+        elif metric_id.startswith("FsF-I"):
+            category = "interoperable"
+        elif metric_id.startswith("FsF-R"):
+            category = "reusable"
+        else:
+            continue
+
+        # 🚫 Skip warnings if this dimension has 100%
+        if category in skip_dims:
+            continue
+
+        debug_lines = metric.get("test_debug", []) or []
+        for line in debug_lines:
+            if isinstance(line, str) and line.startswith("WARNING:"):
+                cleaned = line[len("WARNING:"):].strip()
+                warnings_by_dimension[category].append(
+                    f"{metric_id}: {cleaned}"
+                )
+
+    # Remove duplicates, keep order
+    def _dedupe(seq):
+        seen = set()
+        out = []
+        for x in seq:
+            if x not in seen:
+                seen.add(x)
+                out.append(x)
+        return out
+
+    for k in warnings_by_dimension:
+        warnings_by_dimension[k] = _dedupe(warnings_by_dimension[k])
+
+    def _num(x, default=0.0) -> float:
+        try:
+            if x is None:
+                return float(default)
+            return float(x)
+        except Exception:
+            return float(default)
+
     # -------- PER-ELEMENT SCORES --------
     score_by_element = {}
 
+    ALLOWED_KEYS = {"A", "F", "I", "R", "FAIR"}
+
     # Union of all keys that appear anywhere
     all_keys = set(score_earned) | set(score_total) | set(score_percent)
-
     for key in sorted(all_keys):
+        if key not in ALLOWED_KEYS:
+            continue
         earned = _num(score_earned.get(key))
         total = _num(score_total.get(key))
         percent = _num(score_percent.get(key))
 
-        if percent== 100:
-            score_by_element[key] = {
-                "percent": percent
-            }
-        else:
-            score_by_element[key] = {
-                "earned": earned,
-                "total": total,
-                "missing": max(total - earned, 0),
-                "percent": percent
-            }
+
+        score_by_element[key] = {
+            "earned": earned,
+            "total": total,
+            "missing": max(total - earned, 0),
+            "percent": percent}
 
     # -------- FINAL SUMMARY --------
     fuji_summary = {
@@ -627,7 +687,8 @@ def run_fuji_fair_assessment(article_uuid: str, doi: str) -> dict:
         "score_percent_fair": _num(score_percent.get("FAIR")),
 
         # Full per-element breakdown (THIS is what you asked for)
-        "score_by_element": score_by_element
+        "score_by_element": score_by_element,
+        "warnings_by_dimension": warnings_by_dimension
     }
 
     # ---------- Save summary ----------
@@ -637,11 +698,8 @@ def run_fuji_fair_assessment(article_uuid: str, doi: str) -> dict:
 
     # Return both (you can choose to return only summary if you prefer)
     return {
-        "doi": doi,
         "fuji_summary": fuji_summary,
-        #"fuji_result": fuji_result
     }
-
 
 def _zenodo_fetch_by_id(record_id: str, token: str | None = None):
     url = f"{ZENODO_API_BASE}/records/{record_id}"
@@ -664,17 +722,12 @@ def _zenodo_fetch_by_doi(doi: str, token: str | None = None):
         raise ValueError(f"No Zenodo record found for DOI {doi}")
     return hits[0]
 
-def check_zenodo_metadata(identifier: str, api_token: str | None = None) -> dict:
+def check_zenodo_metadata(identifier: str, article_uuid: str, api_token: str | None = None) -> dict:
     """
-    Fetch a Zenodo record by DOI / URL / ID and normalize it into the same
-    JSON structure that can be used as a deposition payload, i.e.:
-
-        {
-          "metadata": { ... }
-        }
-
-    This lets you reuse existing records as templates for new uploads.
+    Fetch a Zenodo record by DOI / URL / ID, normalize metadata,
+    and save it under articles/<article_uuid>/zenodo_metadata.json
     """
+
     parsed = _extract_zenodo_identifier(identifier)
 
     # If no token passed, try via ENV (needed only for private/drafts)
@@ -687,6 +740,14 @@ def check_zenodo_metadata(identifier: str, api_token: str | None = None) -> dict
         record = _zenodo_fetch_by_doi(parsed["doi"], api_token)
 
     metadata = record.get("metadata", {}) or {}
+
+    # ---------- SAVE METADATA ----------
+    base_dir = os.path.join("articles", article_uuid)
+    os.makedirs(base_dir, exist_ok=True)
+
+    metadata_path = os.path.join(base_dir, "zenodo_metadata.json")
+    with open(metadata_path, "w", encoding="utf-8") as f:
+        json.dump(metadata, f, indent=2, ensure_ascii=False)
 
     return metadata
 
@@ -717,7 +778,6 @@ def create_zenodo_deposition_with_files(llm_data: dict, files: List[FileStorage]
     deposition = resp.json()
 
     url = f"https://zenodo.org/api/deposit/depositions/{deposition.get('id')}"
-    headers = {"Content-Type": "application/json", "Authorization": f"Bearer {token}"}
 
     resp = requests.put(url, data=json.dumps(llm_data), headers=headers)
     resp.raise_for_status()
@@ -743,12 +803,208 @@ def create_zenodo_deposition_with_files(llm_data: dict, files: List[FileStorage]
         put_resp.raise_for_status()
 
     # If you want to publish automatically, you could POST:
-    # publish_url = f"{ZENODO_API_BASE}/deposit/depositions/{deposition['id']}/actions/publish"
-    # pub_resp = requests.post(publish_url, params=params, timeout=30)
-    # pub_resp.raise_for_status()
-    # deposition = pub_resp.json()
+    #publish_url = f"{ZENODO_API_BASE}/deposit/depositions/{deposition['id']}/actions/publish"
+    #pub_resp = requests.post(publish_url, headers=headers, timeout=30)
+    #pub_resp.raise_for_status()
+    #deposition = pub_resp.json()
 
     return deposition
+
+def upsert_zenodo_deposition_metadata_and_files(
+    deposition_id: int,
+    llm_data: dict,
+    files: List[FileStorage],
+    *,
+    zenodo_token: str,
+    replace_files: bool = False,
+    publish: bool = False,
+) -> dict:
+    """
+    Behavior:
+      - If files is empty:
+          - If deposition is DRAFT (state='inprogress'): update metadata on SAME deposition.
+          - If deposition is PUBLISHED (state='done'): raise (cannot edit published); caller should request new version.
+      - If files exist:
+          - If an inprogress draft exists: discard it (optional safety)
+          - Create new version draft from the PUBLISHED deposition (state='done')
+          - Update metadata + (optionally replace files) + upload files to draft
+          - Optionally publish draft (creates version 2/3/4 ... under same concept)
+
+    Returns:
+      Updated deposition JSON (draft or published depending on publish flag).
+    """
+
+    if not zenodo_token:
+        raise RuntimeError("zenodo_token is required")
+
+    headers = {
+        "Content-Type": "application/json",
+        "Authorization": f"Bearer {zenodo_token}",
+    }
+
+    def _get(url: str) -> dict:
+        r = requests.get(url, headers=headers, timeout=60)
+        r.raise_for_status()
+        return r.json()
+
+    def _post(url: str) -> dict:
+        r = requests.post(url, headers=headers, timeout=60)
+        r.raise_for_status()
+        return r.json()
+
+    def _delete(url: str) -> None:
+        r = requests.delete(url, headers=headers, timeout=60)
+        r.raise_for_status()
+
+    def _get_dep(dep_id: int) -> dict:
+        return _get(f"{ZENODO_API_BASE}/deposit/depositions/{dep_id}")
+
+    def _put_json(url: str, payload: dict) -> dict:
+        r = requests.put(url, headers=headers, json=payload, timeout=60)
+        r.raise_for_status()
+        return r.json()
+
+    # -----------------------------------------
+    # 0) Load deposition
+    # -----------------------------------------
+    dep = _get_dep(deposition_id)
+    state = (dep.get("state") or "").lower()
+
+    has_files = bool(files and len(files) > 0)
+
+    # -----------------------------------------
+    # A) METADATA ONLY
+    #   - done  -> actions/edit then PUT metadata (same deposition)
+    #   - inprogress -> PUT metadata (same deposition)
+    # -----------------------------------------
+    if not has_files:
+        if state == "done":
+            # Open an edit session (Zenodo will turn it into an editable draft)
+            edited = _post(f"{ZENODO_API_BASE}/deposit/depositions/{deposition_id}/actions/edit")
+
+            # Use returned resource (or refetch) because state/links may change
+            dep = edited if isinstance(edited, dict) and edited.get("id") else _get_dep(deposition_id)
+            state = (dep.get("state") or "").lower()
+
+            if state != "inprogress":
+                raise RuntimeError(
+                    f"actions/edit did not create an editable draft. "
+                    f"Deposition id={deposition_id} state='{dep.get('state')}'."
+                )
+
+            dep_self_url = (dep.get("links") or {}).get(
+                "self") or f"{ZENODO_API_BASE}/deposit/depositions/{deposition_id}"
+            return _put_json(dep_self_url, llm_data)
+
+        if state == "inprogress":
+            dep_self_url = (dep.get("links") or {}).get(
+                "self") or f"{ZENODO_API_BASE}/deposit/depositions/{deposition_id}"
+            return _put_json(dep_self_url, llm_data)
+
+        raise RuntimeError(
+            "Metadata-only update requested, but deposition is not editable.\n"
+            f"Deposition id={deposition_id} has state='{dep.get('state')}'."
+        )
+
+    # -----------------------------------------
+    # B) FILE UPLOAD -> MUST create a new version
+    #   - done       -> actions/newversion
+    #   - inprogress -> discard it, then actions/newversion on the PUBLISHED deposition
+    # -----------------------------------------
+
+    # If current is an inprogress draft, discard it first (as you requested)
+    if state == "inprogress":
+        _post(f"{ZENODO_API_BASE}/deposit/depositions/{deposition_id}/actions/discard")
+
+        # After discard, we need to start from the published deposition.
+        # If the caller gave us the draft id, Zenodo usually provides "links.latest"
+        # pointing to the latest *published* record/deposition.
+        # Best practice: re-fetch the discarded id's parent via links.latest (if available),
+        # otherwise the caller should pass the published id.
+        dep_after_discard = _get_dep(deposition_id)
+
+        latest_link = (dep_after_discard.get("links") or {}).get("latest")
+        if not latest_link:
+            raise RuntimeError(
+                "You provided an inprogress deposition id and it was discarded, "
+                "but Zenodo did not provide links.latest to resolve the published record. "
+                "Please call this with the PUBLISHED deposition id (state='done')."
+            )
+
+        latest_record = _get(latest_link)  # records API
+        published_id = latest_record.get("id")
+        if not published_id:
+            raise RuntimeError("Could not resolve published deposition id from links.latest after discard.")
+
+        deposition_id = int(published_id)
+        dep = _get_dep(deposition_id)
+        state = (dep.get("state") or "").lower()
+
+    # Now we must be on a published deposition
+    if state != "done":
+        raise RuntimeError(
+            "To upload files as a new version, you must start from a PUBLISHED deposition (state='done').\n"
+            f"Got state='{dep.get('state')}' for id={deposition_id}."
+        )
+
+    # Create new version draft under the same concept (version 2/3/4...)
+    newv = _post(f"{ZENODO_API_BASE}/deposit/depositions/{deposition_id}/actions/newversion")
+    latest_draft_link = (newv.get("links") or {}).get("latest_draft")
+    if not latest_draft_link:
+        raise RuntimeError("Zenodo did not return links.latest_draft after newversion")
+
+    draft = _get(latest_draft_link)
+    draft_id = int(draft["id"])
+    draft_self_url = (draft.get("links") or {}).get("self") or f"{ZENODO_API_BASE}/deposit/depositions/{draft_id}"
+
+    # Update metadata on the draft (then continue with replace_files/upload/publish using draft_id)
+    draft = _put_json(draft_self_url, llm_data)
+
+    # ... continue with:
+    # - optional delete files on /deposit/depositions/{draft_id}/files/{file_id}
+    # - upload to draft["links"]["bucket"]
+    # - publish draft_id if desired
+
+    # Optionally delete existing draft files
+    if replace_files:
+        for existing in (draft.get("files") or []):
+            file_id = existing.get("id")
+            if not file_id:
+                continue
+            del_url = f"{ZENODO_API_BASE}/deposit/depositions/{draft_id}/files/{file_id}"
+            _delete(del_url)
+        draft = _get_dep(draft_id)
+
+    # Upload files to draft bucket
+    bucket_url = (draft.get("links") or {}).get("bucket")
+    if not bucket_url:
+        raise RuntimeError("No bucket URL found in draft deposition links")
+
+    for f in files:
+        if not f or not f.filename:
+            continue
+        try:
+            f.stream.seek(0)
+        except Exception:
+            pass
+
+        upload_url = f"{bucket_url}/{f.filename}"
+        put_resp = requests.put(
+            upload_url,
+            params={"access_token": zenodo_token},
+            data=f.stream,
+            timeout=300,
+        )
+        put_resp.raise_for_status()
+
+    draft = _get_dep(draft_id)
+
+    # Optionally publish
+    if publish:
+        pub_url = f"{ZENODO_API_BASE}/deposit/depositions/{draft_id}/actions/publish"
+        return _post(pub_url)
+
+    return draft
 
 def _extract_text_from_pdf(pdf_source: Union[str, os.PathLike, IO[bytes]]) -> str:
     close_file = False

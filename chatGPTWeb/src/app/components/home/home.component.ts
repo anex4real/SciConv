@@ -5,13 +5,24 @@ import { ReproWorkflowService } from '../../service/repro-workflow/repro-workflo
 import { DatasetAnalysisService } from '../../service/dataset-analysis/dataset-analysis.service';
 
 import { ReproStages, ReproState } from '../../service/repro-workflow/repro-workflow.types';
-import { DataStages, DataState } from '../../service/dataset-analysis/dataset-analysis.types';
+import { DataStages, DataState,  } from '../../service/dataset-analysis/dataset-analysis.types';
+
 
 enum AppStage {
     Start = 'Start',
     Repro = 'Repro',
     Dataset = 'Dataset'
 }
+
+/** JSON keys that should NOT be displayed as labels */
+const HIDDEN_JSON_KEYS: readonly string[] = [
+    'fuji_summary',
+    'zenodo_metadata'
+];
+
+const HIDDEN_ROW_KEYS: readonly string[] = [
+    'action'
+];
 
 @Component({
     selector: 'app-home',
@@ -50,6 +61,19 @@ export class HomeComponent {
     ) {
         // default (Start screen only needs isLoading/error/messages, so any state works)
         this.state$ = this.workflow.state$;
+    }
+
+    isDataState(s: ReproState | DataState): s is DataState {
+        return (s as DataState).articleUuid !== undefined;
+    }
+
+    /** Helper for template */
+    shouldDisplayKey(key: string): boolean {
+        return !HIDDEN_JSON_KEYS.includes(key);
+    }
+
+    shouldDisplayRow(key: string): boolean {
+        return !HIDDEN_ROW_KEYS.includes(key);
     }
 
     /** Helpers do template (json rendering) */
@@ -142,4 +166,60 @@ export class HomeComponent {
             this.analysis.reset?.();
         }
     }
+
+    fairLabel(k: string): string {
+        switch (k) {
+            case 'F': return 'Findable';
+            case 'A': return 'Accessible';
+            case 'I': return 'Interoperable';
+            case 'R': return 'Reusable';
+            case 'FAIR': return 'FAIR';
+            default: return k;
+        }
+    }
+
+    getFairRows(scoreByElement: any): Array<{ key: string; label: string; earned: any; total: any; percent: any; missing: any }> {
+        if (!scoreByElement || typeof scoreByElement !== 'object') return [];
+        const order = ['F', 'A', 'I', 'R', 'FAIR'];
+        return order
+            .filter(k => scoreByElement[k])
+            .map(k => ({
+                key: k,
+                label: this.fairLabel(k),
+                earned: scoreByElement[k]?.earned,
+                total: scoreByElement[k]?.total,
+                percent: scoreByElement[k]?.percent,
+                missing: scoreByElement[k]?.missing
+            }));
+    }
+
+    hasFujiSummary(obj: any): boolean {
+        return !!obj?.score_by_element;
+    }
+
+    warningDimsOrder(): string[] {
+        return ['findable', 'accessible', 'interoperable', 'reusable'];
+    }
+
+    warningDimLabel(dim: string): string {
+        switch (dim) {
+            case 'findable': return 'Findable';
+            case 'accessible': return 'Accessible';
+            case 'interoperable': return 'Interoperable';
+            case 'reusable': return 'Reusable';
+            default: return dim;
+        }
+    }
+    maturityLabel(value: number | null | undefined): string {
+        if (value == null) return 'Unknown';
+
+        if (value < 0.5) return 'Incomplete';
+        if (value >= 0.5 && value < 1.5) return 'Initial';
+        if (value >= 1.5 && value < 2.5) return 'Moderate';
+        if (value > 2.5 && value <= 3) return 'Advanced';
+
+        return 'Unknown';
+    }
+
+
 }

@@ -1,7 +1,6 @@
 {
-  "doi": "https://doi.org/10.5281/zenodo.15166258",
   "maturity_fair": 2.25,
-  "score_percent_fair": 80.77,
+  "score_percent_fair": 84.62,
   "score_by_element": {
     "A": {
       "earned": 6.0,
@@ -9,44 +8,17 @@
       "missing": 1.0,
       "percent": 85.71
     },
-    "A1": {
-      "earned": 2.0,
-      "total": 3.0,
-      "missing": 1.0,
-      "percent": 66.67
-    },
-    "A1.1": {
-      "percent": 100.0
-    },
-    "A1.2": {
-      "percent": 100.0
-    },
     "F": {
-      "earned": 6.0,
+      "earned": 7.0,
       "total": 7.0,
-      "missing": 1.0,
-      "percent": 85.71
-    },
-    "F1": {
-      "percent": 100.0
-    },
-    "F2": {
-      "earned": 1.0,
-      "total": 2.0,
-      "missing": 1.0,
-      "percent": 50.0
-    },
-    "F3": {
-      "percent": 100.0
-    },
-    "F4": {
+      "missing": 0.0,
       "percent": 100.0
     },
     "FAIR": {
-      "earned": 21.0,
+      "earned": 22.0,
       "total": 26.0,
-      "missing": 5.0,
-      "percent": 80.77
+      "missing": 4.0,
+      "percent": 84.62
     },
     "I": {
       "earned": 4.0,
@@ -54,38 +26,25 @@
       "missing": 2.0,
       "percent": 66.67
     },
-    "I1": {
-      "percent": 100.0
-    },
-    "I2": {
-      "earned": 0.0,
-      "total": 2.0,
-      "missing": 2.0,
-      "percent": 0.0
-    },
-    "I3": {
-      "percent": 100.0
-    },
     "R": {
       "earned": 5.0,
       "total": 6.0,
       "missing": 1.0,
       "percent": 83.33
-    },
-    "R1": {
-      "earned": 1.0,
-      "total": 2.0,
-      "missing": 1.0,
-      "percent": 50.0
-    },
-    "R1.1": {
-      "percent": 100.0
-    },
-    "R1.2": {
-      "percent": 100.0
-    },
-    "R1.3": {
-      "percent": 100.0
     }
+  },
+  "warnings_by_dimension": {
+    "findable": [],
+    "accessible": [
+      "FsF-A1-01M: Access condition looks like license, therefore the following is ignored -: https://creativecommons.org/licenses/by/4.0/legalcode",
+      "FsF-A1-01M: NO access information is available in metadata",
+      "FsF-A1-01M: Unable to determine the access level"
+    ],
+    "interoperable": [
+      "FsF-I2-01M: NO known vocabulary namespace URI is found which is listed in  the LOD registry"
+    ],
+    "reusable": [
+      "FsF-R1.2-01M: Formal provenance metadata is unavailable"
+    ]
   }
 }

@@ -18,29 +18,142 @@
 
                     <div *ngIf="message.jsonObject">
                         <ul>
-                            <li *ngFor="let key of objectKeys(message.contentShort)">
-                                <span class="json-key">{{ key }}:</span>
-                                <ng-container *ngIf="isObject(message.contentShort[key]); else showValue">
-                                    <pre class="json-object">{{ message.contentShort[key] | json }}</pre>
-                                </ng-container>
 
-                                <ng-template #showValue>
-                                    <ng-container *ngIf="!Array.isArray(message.contentShort[key])">
-                                        <span class="json-value">{{ message.contentShort[key] }}</span>
+                            <!-- FIX: ngFor must be on a container (can't combine with *ngIf on same element) -->
+                            <ng-container *ngFor="let key of objectKeys(message.contentShort)">
+
+                                <!-- Row visibility -->
+                                <li *ngIf="shouldDisplayRow(key)">
+
+                                    <!-- Label visibility (hide label but keep content) -->
+                                    <span class="json-key" *ngIf="shouldDisplayKey(key)">
+                                      {{ key }}:
+                                    </span>
+
+                                    <!-- Object vs primitive/array -->
+                                    <ng-container *ngIf="isObject(message.contentShort[key]); else showValue">
+
+                                        <!-- Special FAIR rendering -->
+                                        <ng-container *ngIf="key === 'fuji_summary' && hasFujiSummary(message.contentShort[key]);
+                                        else checkZenodo">
+
+                                            <div class="fair-summary">
+                                                <div class="fair-header">
+                                                    <div><strong>FAIR score:</strong> {{ message.contentShort[key]?.score_percent_fair }}%</div>
+                                                    <div>
+                                                        <strong>Maturity:</strong>
+                                                        {{ message.contentShort[key]?.maturity_fair }}
+                                                        ({{ maturityLabel(message.contentShort[key]?.maturity_fair) }})
+                                                    </div>
+                                                </div>
+
+                                                <table class="fair-table">
+                                                    <thead>
+                                                    <tr>
+                                                        <th>Dimension</th>
+                                                        <th>Score earned</th>
+                                                        <th>Missing</th>
+                                                        <th>Percent</th>
+                                                    </tr>
+                                                    </thead>
+                                                    <tbody>
+                                                    <tr *ngFor="let row of getFairRows(message.contentShort[key]?.score_by_element)">
+                                                        <td>{{ row.label }}</td>
+                                                        <td>{{ row.earned }} of {{ row.total }}</td>
+                                                        <td>{{ row.missing }}</td>
+                                                        <td>{{ row.percent }}%</td>
+                                                    </tr>
+                                                    </tbody>
+                                                </table>
+                                            </div>
+
+                                            <!-- WARNINGS BY DIMENSION -->
+                                            <div class="fair-warnings" *ngIf="message.contentShort[key]?.warnings_by_dimension as wbd">
+
+                                                    <h3 class="mt-2">Warnings</h3>
+
+                                                <div *ngFor="let dim of warningDimsOrder()">
+                                                    <div *ngIf="wbd?.[dim]?.length">
+
+                                                        <div class="fair-warn-title">
+                                                            <strong>{{ warningDimLabel(dim) }}</strong>
+                                                            <span>({{ wbd[dim].length }})</span>
+                                                        </div>
+
+                                                        <ul class="fair-warn-list">
+                                                            <li *ngFor="let warn of wbd[dim]">{{ warn }}</li>
+                                                        </ul>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </ng-container>
+
+                                        <!-- Special ZENODO rendering -->
+                                        <ng-template #checkZenodo>
+                                            <ng-container
+                                                    *ngIf="(key === 'zenodo_metadata' || key === 'zenodo_metadata_template' || key === 'zenodoMetadata')
+                                                     && isDataState(s)
+                                                     && s.zenodoMetadataView as zm;
+                                                     else genericObject">
+                                                <div>
+                                                </div>
+                                                <div class="zenodo-summary">
+                                                    <div><h3>Zenodo Metadata</h3></div>
+                                                    <div><strong>Title:</strong> {{ zm.title }}</div>
+                                                    <div><strong>DOI:</strong> {{ zm.doi || '-' }}</div>
+                                                    <div><strong>Upload type:</strong> {{ zm.uploadType }}</div>
+                                                    <div><strong>Access:</strong> {{ zm.accessRight }} <span *ngIf="zm.license">({{ zm.license }})</span></div>
+                                                    <div><strong>Publication date:</strong> {{ zm.publicationDate || '-' }}</div>
+
+                                                    <div class="mt-2" *ngIf="zm.creators?.length">
+                                                        <strong>Creators</strong>
+                                                        <ul>
+                                                            <li *ngFor="let c of zm.creators">
+                                                                {{ c.name }}
+                                                                <span *ngIf="c.affiliation"> — {{ c.affiliation }}</span>
+                                                                <span *ngIf="c.orcid"> ({{ c.orcid }})</span>
+                                                            </li>
+                                                        </ul>
+                                                    </div>
+
+                                                    <div class="mt-2" *ngIf="zm.keywords?.length">
+                                                        <strong>Keywords</strong>: {{ zm.keywords?.join(', ') || '-' }}
+                                                    </div>
+
+                                                    <div class="mt-2" *ngIf="zm.description">
+                                                        <strong>Description</strong>
+                                                        <div [innerHTML]="zm.description"></div>
+                                                    </div>
+                                                </div>
+                                            </ng-container>
+                                        </ng-template>
+
+                                        <!-- Default object rendering -->
+                                        <ng-template #genericObject>
+                                            <span>Default object rendering </span>
+                                            <pre class="json-object">{{ message.contentShort[key] | json }}</pre>
+                                        </ng-template>
                                     </ng-container>
 
-                                    <ng-container *ngIf="Array.isArray(message.contentShort[key])">
-                                        <ul class="json-list">
-                                            <li class="json-value" *ngFor="let item of message.contentShort[key]">
-                                                {{ item }}
-                                            </li>
-                                        </ul>
-                                    </ng-container>
+                                    <!-- Primitive/array rendering -->
+                                    <ng-template #showValue>
+                                        <ng-container *ngIf="!Array.isArray(message.contentShort[key]); else showArray">
+                                            <span class="json-value">{{ message.contentShort[key] }}</span>
+                                        </ng-container>
 
-                                </ng-template>
-                            </li>
+                                        <ng-template #showArray>
+                                            <ul class="json-list">
+                                                <li class="json-value" *ngFor="let item of message.contentShort[key]">
+                                                    {{ item }}
+                                                </li>
+                                            </ul>
+                                        </ng-template>
+                                    </ng-template>
+                                </li>
+                            </ng-container>
                         </ul>
                     </div>
+
 
                     <div style="white-space: pre-line;" *ngIf="!message.jsonObject">
                         {{ message.contentShort }}
@@ -59,7 +172,6 @@
                             {{ isExamplesVisible(message) ? 'Hide Examples' : 'Show Examples' }}
                         </a>
                     </div>
-
                 </div>
             </div>
         </div>

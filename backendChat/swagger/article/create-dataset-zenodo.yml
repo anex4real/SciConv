@@ -17,11 +17,17 @@ parameters:
     description: >
       Bearer authentication token for YOUR application (not Zenodo).
 
+  - name: article_uuid
+    in: path
+    required: true
+    default: "12345678"
+    type: string
+    description: UUID of the article session/folder used by the application.
+
   - name: zenodo_token
     in: formData
-    required: true
+    required: false
     type: string
-    default: "1PHuwqoCl5CHLBXYxtT1qWRKK17a3tCdHxnqxp0gD72vLiLbXh7wVkgQCrIE"
     description: >
       The user's personal Zenodo API token.
       This token determines *which Zenodo account* will receive the deposition.

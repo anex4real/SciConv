@@ -135,14 +135,14 @@ export class BackendService {
             {headers: this.headers});
     }
 
-    findInformationArticle(formData: FormData) {
+    uploadArticleFindInformation(formData: FormData) {
         return this.http.post(`${this.baseUrl}/article/upload-file`, formData,
             {headers: this.headers});
     }
     // Decide next step based on user's message (infer vs improve + dataset name)
-    datasetChooseNextStep( messages: Message[]) {
+    datasetChooseNextStep(projectUuid: string, messages: Message[]) {
         return this.http.post(
-            `${this.baseUrl}/article/choose-next-step`,
+            `${this.baseUrl}/article/${projectUuid}/choose-next-step`,
             { messages },
             { headers: this.headers }
         );

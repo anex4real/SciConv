@@ -4,7 +4,7 @@ import { BehaviorSubject } from 'rxjs';
 
 import { BackendService } from '../backend.service';
 import { Message } from '../../interface/interfaces';
-import { DataState, DataStages } from './dataset-analysis.types';
+import {DataState, DataStages, ZenodoMetadataView} from './dataset-analysis.types';
 
 @Injectable({ providedIn: 'root' })
 export class DatasetAnalysisService {
@@ -14,6 +14,7 @@ export class DatasetAnalysisService {
         role: 'user',
         messages: [],
         articleUuid: '',
+        zenodoMetadataView: undefined,
 
         referencedDatasets: [],
         nonReferencedDatasets: [],
@@ -58,12 +59,26 @@ export class DatasetAnalysisService {
     findInformationArticle(formData: FormData) {
         this.patch({ isLoading: true, errorMessage: undefined });
 
-        this.backend.findInformationArticle(formData).subscribe({
+        this.backend.uploadArticleFindInformation(formData).subscribe({
             next: (response: any) => {
                 this.patch({ isLoading: false });
-                this.pushMessages(...response);
 
-                const last = response?.[response.length - 1];
+// backend returns: { article_uuid, messages }
+                const articleUuid = response?.article_uuid;
+                if (articleUuid) this.patch({ articleUuid });
+
+                const msgs = response?.messages ?? [];
+                this.pushMessages(...msgs);
+
+                const last = msgs?.[msgs.length - 1];
+                const c = last?.contentShort ?? last?.content;
+
+                if (c?.zenodo_metadata) {
+                    this.patch({ zenodoMetadataView: this.buildZenodoMetadataView(c.zenodo_metadata) });
+                }
+
+
+
 
                 // Se o backend incluir articleUuid e listas de datasets no "content"
                 // Ajusta se o teu backend usar outras keys.
@@ -235,13 +250,17 @@ export class DatasetAnalysisService {
     private chooseNextStepOnBackend() {
         this.patch({ isLoading: true, errorMessage: undefined });
 
-        this.backend.datasetChooseNextStep(this.state.messages).subscribe({
+        this.backend.datasetChooseNextStep(this.state.articleUuid,this.state.messages).subscribe({
             next: (response: any) => {
                 this.patch({ isLoading: false });
                 this.pushMessages(...response);
 
                 const last = response?.[response.length - 1];
-                const c = last?.content;
+                const c = last?.contentShort ?? last?.content;
+                if (c?.zenodo_metadata) {
+                    this.patch({ zenodoMetadataView: this.buildZenodoMetadataView(c.zenodo_metadata) });
+                }
+
 
                 //  Update lists if backend returned them (edit flow)
                 if (c?.referencedDatasets) this.patch({ referencedDatasets: c.referencedDatasets });
@@ -283,7 +302,13 @@ export class DatasetAnalysisService {
                 this.pushMessages(...response);
 
                 const last = response?.[response.length - 1];
+                const c = last?.contentShort ?? last?.content;
+                if (c?.zenodo_metadata) {
+                    this.patch({ zenodoMetadataView: this.buildZenodoMetadataView(c.zenodo_metadata) });
+                }
+
                 if (last?.stage) this.changeStage(last.stage);
+
             },
             error: () => {
                 this.patch({
@@ -303,7 +328,14 @@ export class DatasetAnalysisService {
                 this.pushMessages(...response);
 
                 const last = response?.[response.length - 1];
+                const c = last?.contentShort ?? last?.content;
+                if (c?.zenodo_metadata) {
+                    this.patch({ zenodoMetadataView: this.buildZenodoMetadataView(c.zenodo_metadata) });
+                }
+
+
                 if (last?.stage) this.changeStage(last.stage);
+
             },
             error: () => {
                 this.patch({
@@ -324,6 +356,11 @@ export class DatasetAnalysisService {
                 this.pushMessages(...response);
 
                 const last = response?.[response.length - 1];
+                const c = last?.contentShort ?? last?.content;
+                if (c?.zenodo_metadata) {
+                    this.patch({ zenodoMetadataView: this.buildZenodoMetadataView(c.zenodo_metadata) });
+                }
+
                 if (last?.stage) this.changeStage(last.stage);
             },
             error: () => {
@@ -337,5 +374,81 @@ export class DatasetAnalysisService {
 
     reset() {
         this.stateSubject.next(this.initialState);
+    }
+
+    private buildZenodoMetadataView(raw: any): any /* ZenodoMetadataView */ {
+        // raw can be {metadata:{...}} or just {...}
+        const m = raw?.metadata ?? raw ?? {};
+
+        return {
+            title: m.title ?? '',
+            doi: m.doi ?? '',
+            publicationDate: m.publication_date ?? m.publicationDate ?? '',
+
+            uploadType: m.upload_type ?? m.uploadType ?? '',
+            publicationType: m.publication_type ?? '',
+            imageType: m.image_type ?? '',
+
+            accessRight: m.access_right ?? '',
+            license: m.license?.id ?? m.license ?? '',
+            embargoDate: m.embargo_date ?? '',
+            accessConditions: m.access_conditions ?? '',
+
+            version: m.version ?? '',
+            language: m.language ?? '',
+
+            creators: (m.creators ?? []).map((c: any) => ({
+                name: c.name,
+                affiliation: c.affiliation,
+                orcid: c.orcid,
+                gnd: c.gnd
+            })),
+
+            contributors: (m.contributors ?? []).map((c: any) => ({
+                name: c.name,
+                type: c.type,
+                affiliation: c.affiliation,
+                orcid: c.orcid,
+                gnd: c.gnd
+            })),
+
+            keywords: m.keywords ?? [],
+            references: m.references ?? [],
+            relatedIdentifiers: (m.related_identifiers ?? []).map((r: any) => ({
+                identifier: r.identifier,
+                relation: r.relation,
+                resource_type: r.resource_type
+            })),
+            communities: (m.communities ?? []).map((x: any) => x.identifier ?? x),
+            grants: (m.grants ?? []).map((x: any) => x.id ?? x),
+
+            description: m.description ?? '',
+
+            notes: m.notes ?? '',
+            method: m.method ?? '',
+            subjects: (m.subjects ?? []).map((s: any) => ({
+                term: s.term,
+                identifier: s.identifier,
+                scheme: s.scheme
+            })),
+            locations: (m.locations ?? []).map((l: any) => ({
+                place: l.place,
+                description: l.description,
+                lat: l.lat,
+                lon: l.lon
+            })),
+            dates: (m.dates ?? []).map((d: any) => ({
+                type: d.type,
+                start: d.start,
+                end: d.end,
+                description: d.description
+            })),
+
+            journal: m.journal ?? undefined,
+            conference: m.conference ?? undefined,
+            imprint: m.imprint ?? undefined,
+            partOf: m.part_of ?? undefined,
+            thesis: m.thesis ?? undefined,
+        };
     }
 }

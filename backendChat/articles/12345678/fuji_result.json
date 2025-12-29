@@ -10,8 +10,8 @@
     "normalized_object_identifier": "10.5281/zenodo.15166258"
   },
   "resolved_url": "https://zenodo.org/records/15166258",
-  "start_timestamp": "2025-12-22T23:30:02Z",
-  "end_timestamp": "2025-12-22T23:30:16Z",
+  "start_timestamp": "2025-12-29T16:10:37Z",
+  "end_timestamp": "2025-12-29T16:10:48Z",
   "metric_specification": "https://doi.org/10.5281/zenodo.6461229",
   "metric_version": "metrics_v0.8",
   "software_version": "3.5.0",
@@ -19,14 +19,14 @@
   "summary": {
     "score_earned": {
       "A": 6,
-      "F": 6,
+      "F": 7,
       "I": 4,
       "R": 5,
       "A1": 2,
       "A1.1": 2,
       "A1.2": 2,
       "F1": 2,
-      "F2": 1,
+      "F2": 2,
       "F3": 1,
       "F4": 2,
       "I1": 2,
@@ -36,7 +36,7 @@
       "R1.1": 1,
       "R1.2": 1,
       "R1.3": 2,
-      "FAIR": 21
+      "FAIR": 22
     },
     "score_total": {
       "A": 7,
@@ -61,14 +61,14 @@
     },
     "score_percent": {
       "A": 85.71,
-      "F": 85.71,
+      "F": 100,
       "I": 66.67,
       "R": 83.33,
       "A1": 66.67,
       "A1.1": 100,
       "A1.2": 100,
       "F1": 100,
-      "F2": 50,
+      "F2": 100,
       "F3": 100,
       "F4": 100,
       "I1": 100,
@@ -78,7 +78,7 @@
       "R1.1": 100,
       "R1.2": 100,
       "R1.3": 100,
-      "FAIR": 80.77
+      "FAIR": 84.62
     },
     "status_total": {
       "A1": 2,
@@ -131,7 +131,7 @@
       "A1.1": 3,
       "A1.2": 3,
       "F1": 3,
-      "F2": 2,
+      "F2": 3,
       "F3": 3,
       "F4": 3,
       "I1": 3,
@@ -154,42 +154,22 @@
             "target": "metadata"
           },
           {
+            "guid": "https://zenodo.org/records/15166258/files/Reprozip-E2-BaiandZhao.rpz",
+            "guid_scheme": "url",
+            "target": "data"
+          },
+          {
             "guid": "https://zenodo.org/records/15166258/files/Reprozip-E16-Spinellis.rpz",
             "guid_scheme": "url",
             "target": "data"
           },
           {
-            "guid": "https://zenodo.org/records/15166258/files/CodeOcean-E15-Cai.zip",
+            "guid": "https://zenodo.org/records/15166258/files/CodeOcean-E5-Zhou.zip",
             "guid_scheme": "url",
             "target": "data"
           },
           {
             "guid": "https://zenodo.org/records/15166258/files/CodeOcean-E10-Lin.zip",
-            "guid_scheme": "url",
-            "target": "data"
-          },
-          {
-            "guid": "https://zenodo.org/records/15166258/files/Reprozip-E13-Hai.rpz",
-            "guid_scheme": "url",
-            "target": "data"
-          },
-          {
-            "guid": "https://zenodo.org/records/15166258/files/Reprozip-E18-Fronchetti.rpz",
-            "guid_scheme": "url",
-            "target": "data"
-          },
-          {
-            "guid": "https://zenodo.org/records/15166258/files/Reprozip-E4-Sun.rpz",
-            "guid_scheme": "url",
-            "target": "data"
-          },
-          {
-            "guid": "https://zenodo.org/records/15166258/files/CodeOcean-E2-Bai%20and%20Zhao.zip",
-            "guid_scheme": "url",
-            "target": "data"
-          },
-          {
-            "guid": "https://zenodo.org/records/15166258/files/CodeOcean-E5-Zhou.zip",
             "guid_scheme": "url",
             "target": "data"
           },
@@ -200,6 +180,26 @@
           },
           {
             "guid": "https://zenodo.org/records/15166258/files/Reprozip-E6-Chen.rpz",
+            "guid_scheme": "url",
+            "target": "data"
+          },
+          {
+            "guid": "https://zenodo.org/records/15166258/files/PTU-E12-Collins.zip",
+            "guid_scheme": "url",
+            "target": "data"
+          },
+          {
+            "guid": "https://zenodo.org/records/15166258/files/PTU-E9-Jehn.zip",
+            "guid_scheme": "url",
+            "target": "data"
+          },
+          {
+            "guid": "https://zenodo.org/records/15166258/files/Reprozip-E13-Hai.rpz",
+            "guid_scheme": "url",
+            "target": "data"
+          },
+          {
+            "guid": "https://zenodo.org/records/15166258/files/Reprozip-E18-Fronchetti.rpz",
             "guid_scheme": "url",
             "target": "data"
           }
@@ -446,21 +446,21 @@
             }
           ],
           "metric_test_score": {
-            "earned": 0,
+            "earned": 1,
             "total": 1
           },
-          "metric_test_maturity": 0,
-          "metric_test_status": "fail"
+          "metric_test_maturity": 3,
+          "metric_test_status": "pass"
         }
       },
       "test_status": "pass",
       "score": {
-        "earned": 1,
+        "earned": 2,
         "total": 2
       },
-      "maturity": 2,
+      "maturity": 3,
       "output": {
-        "core_metadata_status": "partial metadata",
+        "core_metadata_status": "all metadata",
         "core_metadata_found": {
           "object_identifier": [
             "https://doi.org/10.5281/zenodo.15166258",
@@ -490,6 +490,9 @@
             "CreativeWork",
             "http://schema.org/WebPage",
             "PhysicalObject"
+          ],
+          "keywords": [
+            "new"
           ]
         },
         "core_metadata_source": [
@@ -580,8 +583,8 @@
         "INFO: RDF Graph seems to contain schema.org metadata elements",
         "INFO: Detected main entity found in RDF graph seems not to be a creative work type",
         "INFO: Trying to get some core domain agnostic (DCAT, DC, schema.org) metadata from RDF graph",
-        "INFO: Found some core domain agnostic (DCAT, DC, schema.org) metadata from RDF graph -: {'object_identifier': ['oai:zenodo.org:15166258', 'https://zenodo.org/doi/10.5281/zenodo.15166258'], 'title': 'Reproducibility package of a curated dataset of 18 computational experiments', 'summary': 'Overview\\n\\nThis repository provides a curated dataset designed to address the critical need for standardized benchmarks in evaluating reproducibility tools. By encompassing a diverse collection of computational experiments across multiple scientific disciplines, this dataset facilitates the assessment of existing reproducibility tools while identifying areas for improvement.\\n\\nDataset Composition\\n\\nThe dataset previously published includes 18 curated experiments (E1–E18) that successfully reproduced results using at least one reproducibility tool. These experiments span various research domains, reflecting the complexity and diversity of modern computational research:\\n\\n\\n\\nComputer Science: Experiments sourced from IEEE/ACM ICSE 2022 and VLDB 2021, covering topics such as software engineering, database management, and artificial intelligence.\\n\\nLife Sciences: Climate change studies.\\n\\nHealth Sciences: Medical research.\\n\\nSocial Sciences & Humanities: Economics and interdisciplinary computational research.\\n\\n\\nEach experiment is carefully documented, providing:\\n\\n\\n\\nThe original source code and data (where available).\\n\\nMetadata including programming languages, project size, and dependencies.\\n\\nExecution instructions to facilitate reproducibility.\\n\\n\\nPurpose & Applications\\n\\nThis dataset serves as a benchmarking resource for researchers, developers, and tool creators working on reproducibility in computational science. It enables:\\n\\n\\n\\nComparative evaluation of reproducibility tools by testing real-world computational experiments.\\n\\nAssessment of limitations in current platforms regarding dependency management, execution consistency, and software environment variability.\\n\\nAdvancement of reproducibility standards by promoting transparency, reliability, and cross-disciplinary collaboration.\\n\\n\\nReproducibility Tools Evaluated\\n\\nThe dataset has been used to assess the capabilities of eight major reproducibility tools and our approach, including:\\n\\n\\n\\nBinder (No package available)\\n\\nCode Ocean\\n\\nFLINC\\n\\nPTU\\n\\nOur (SciRep)\\n\\nReproZip\\n\\nRenkuLab (No package available)\\n\\nSciunit\\n\\nWhole Tale\\n\\n\\nThe results highlight key challenges in modern computational reproducibility, including insufficient documentation, evolving software dependencies, and the need for more adaptable solutions.', 'publication_date': '2025-04-08', 'publisher': ['Zenodo'], 'creator': ['Lázaro Costa', 'Susana Barbosa', 'Jácome Cunha'], 'license': 'https://creativecommons.org/licenses/by/4.0/legalcode', 'object_type': ['CreativeWork']}",
-        "SUCCESS: Found Schema.org metadata through content negotiation-: dict_keys(['object_identifier', 'title', 'summary', 'publication_date', 'publisher', 'creator', 'license', 'object_type'])",
+        "INFO: Found some core domain agnostic (DCAT, DC, schema.org) metadata from RDF graph -: {'object_identifier': ['oai:zenodo.org:15166258', 'https://zenodo.org/doi/10.5281/zenodo.15166258'], 'title': 'Reproducibility package of a curated dataset of 18 computational experiments', 'summary': 'Overview\\n\\nThis repository provides a curated dataset designed to address the critical need for standardized benchmarks in evaluating reproducibility tools. By encompassing a diverse collection of computational experiments across multiple scientific disciplines, this dataset facilitates the assessment of existing reproducibility tools while identifying areas for improvement.\\n\\nDataset Composition\\n\\nThe dataset previously published includes 18 curated experiments (E1–E18) that successfully reproduced results using at least one reproducibility tool. These experiments span various research domains, reflecting the complexity and diversity of modern computational research:\\n\\n\\n\\nComputer Science: Experiments sourced from IEEE/ACM ICSE 2022 and VLDB 2021, covering topics such as software engineering, database management, and artificial intelligence.\\n\\nLife Sciences: Climate change studies.\\n\\nHealth Sciences: Medical research.\\n\\nSocial Sciences & Humanities: Economics and interdisciplinary computational research.\\n\\n\\nEach experiment is carefully documented, providing:\\n\\n\\n\\nThe original source code and data (where available).\\n\\nMetadata including programming languages, project size, and dependencies.\\n\\nExecution instructions to facilitate reproducibility.\\n\\n\\nPurpose & Applications\\n\\nThis dataset serves as a benchmarking resource for researchers, developers, and tool creators working on reproducibility in computational science. It enables:\\n\\n\\n\\nComparative evaluation of reproducibility tools by testing real-world computational experiments.\\n\\nAssessment of limitations in current platforms regarding dependency management, execution consistency, and software environment variability.\\n\\nAdvancement of reproducibility standards by promoting transparency, reliability, and cross-disciplinary collaboration.\\n\\n\\nReproducibility Tools Evaluated\\n\\nThe dataset has been used to assess the capabilities of eight major reproducibility tools and our approach, including:\\n\\n\\n\\nBinder (No package available)\\n\\nCode Ocean\\n\\nFLINC\\n\\nPTU\\n\\nOur (SciRep)\\n\\nReproZip\\n\\nRenkuLab (No package available)\\n\\nSciunit\\n\\nWhole Tale\\n\\n\\nThe results highlight key challenges in modern computational reproducibility, including insufficient documentation, evolving software dependencies, and the need for more adaptable solutions.', 'publication_date': '2025-04-08', 'publisher': ['Zenodo'], 'keywords': ['new'], 'creator': ['Lázaro Costa', 'Susana Barbosa', 'Jácome Cunha'], 'license': 'https://creativecommons.org/licenses/by/4.0/legalcode', 'object_type': ['CreativeWork']}",
+        "SUCCESS: Found Schema.org metadata through content negotiation-: dict_keys(['object_identifier', 'title', 'summary', 'publication_date', 'publisher', 'keywords', 'creator', 'license', 'object_type'])",
         "INFO: Trying to retrieve schema.org JSON-LD metadata through content negotiation from URL -: https://zenodo.org/records/15166258",
         "INFO: Retrieving page -: https://zenodo.org/records/15166258 as application/ld+json",
         "INFO: Content negotiation on https://zenodo.org/records/15166258 accept=application/ld+json, status=200",
@@ -609,7 +612,7 @@
         "INFO: Retrieving page -: https://doi.org/10.5281/zenodo.15166258 as application/vnd.datacite.datacite+json",
         "INFO: Content negotiation on https://doi.org/10.5281/zenodo.15166258 accept=application/vnd.datacite.datacite+json, status=200",
         "INFO: Creating Cached response content",
-        "SUCCESS: Found Datacite metadata -: dict_keys(['object_identifier', 'object_type', 'creator', 'creator_first', 'creator_last', 'publisher', 'title', 'publication_date', 'license', 'summary', 'related_resources', 'datacite_client', 'submitted_date', 'access_level'])",
+        "SUCCESS: Found Datacite metadata -: dict_keys(['object_identifier', 'object_type', 'creator', 'creator_first', 'creator_last', 'publisher', 'title', 'keywords', 'publication_date', 'license', 'summary', 'related_resources', 'datacite_client', 'submitted_date', 'access_level'])",
         "INFO: Found typed link or signposting link but will ignore (can't handle) mime type -:application/zip",
         "INFO: Found typed link or signposting link but will ignore (can't handle) mime type -:application/zip",
         "INFO: Found typed link or signposting link but will ignore (can't handle) mime type -:application/zip",
@@ -627,8 +630,8 @@
         "INFO: Found typed link or signposting link but will ignore (can't handle) mime type -:application/zip",
         "INFO: Found typed link or signposting link but will ignore (can't handle) mime type -:application/zip",
         "INFO: Found typed link or signposting link but will ignore (can't handle) mime type -:application/zip",
-        "INFO: Found typed link or signposting link but will ignore (can't handle) mime type -:application/octet-stream",
         "INFO: Found typed link or signposting link but will ignore (can't handle) mime type -:application/zip",
+        "INFO: Found typed link or signposting link but will ignore (can't handle) mime type -:application/octet-stream",
         "INFO: Found typed link or signposting link but will ignore (can't handle) mime type -:application/zip",
         "INFO: Found typed link or signposting link but will ignore (can't handle) mime type -:application/zip",
         "INFO: Found typed link or signposting link but will ignore (can't handle) mime type -:application/zip",
@@ -694,7 +697,7 @@
         "INFO: Testing if any metadata has been made available via common web standards",
         "SUCCESS: Found required core citation metadata elements -: ['creator', 'title', 'object_identifier', 'publication_date', 'publisher', 'object_type']",
         "INFO: Will exclusively consider community specific metadata properties which are specified in metrics -: {'name': ['creator', 'title', 'object_identifier', 'publication_date', 'publisher', 'object_type', 'summary', 'keywords']}",
-        "WARNING: Not all required core descriptive metadata elements exist, missing -: ['keywords']"
+        "SUCCESS: Found required core descriptive metadata elements -: ['creator', 'title', 'object_identifier', 'publication_date', 'publisher', 'object_type', 'summary', 'keywords']"
       ]
     },
     {
@@ -736,12 +739,6 @@
         "object_content_identifier_included": [
           {
             "content_identifier_included": {
-              "url": "https://zenodo.org/records/15166258/files/CodeOcean-E2-Bai%20and%20Zhao.zip",
-              "scheme": null
-            }
-          },
-          {
-            "content_identifier_included": {
               "url": "https://zenodo.org/records/15166258/files/CodeOcean-E5-Zhou.zip",
               "scheme": null
             }
@@ -755,12 +752,6 @@
           {
             "content_identifier_included": {
               "url": "https://zenodo.org/records/15166258/files/PTU-E6-Chen.zip",
-              "scheme": null
-            }
-          },
-          {
-            "content_identifier_included": {
-              "url": "https://zenodo.org/records/15166258/files/CodeOcean-E15-Cai.zip",
               "scheme": null
             }
           },
@@ -796,12 +787,6 @@
           },
           {
             "content_identifier_included": {
-              "url": "https://zenodo.org/records/15166258/files/Reprozip-E13-Hai.rpz",
-              "scheme": null
-            }
-          },
-          {
-            "content_identifier_included": {
               "url": "https://zenodo.org/records/15166258/files/Sciunit-E10-Lin.zip",
               "scheme": null
             }
@@ -814,6 +799,30 @@
           },
           {
             "content_identifier_included": {
+              "url": "https://zenodo.org/records/15166258/files/FLINC-E10-Lin.zip",
+              "scheme": null
+            }
+          },
+          {
+            "content_identifier_included": {
+              "url": "https://zenodo.org/records/15166258/files/CodeOcean-E2-Bai%20and%20Zhao.zip",
+              "scheme": null
+            }
+          },
+          {
+            "content_identifier_included": {
+              "url": "https://zenodo.org/records/15166258/files/CodeOcean-E15-Cai.zip",
+              "scheme": null
+            }
+          },
+          {
+            "content_identifier_included": {
+              "url": "https://zenodo.org/records/15166258/files/Reprozip-E13-Hai.rpz",
+              "scheme": null
+            }
+          },
+          {
+            "content_identifier_included": {
               "url": "https://zenodo.org/records/15166258/files/CodeOcean-E11-Santucci.zip",
               "scheme": null
             }
@@ -821,6 +830,156 @@
           {
             "content_identifier_included": {
               "url": "https://zenodo.org/records/15166258/files/PTU-E2-Bai%20and%20Zhao.zip",
+              "scheme": null
+            }
+          },
+          {
+            "content_identifier_included": {
+              "url": "https://zenodo.org/records/15166258/files/Sciunit-E5-Zhou.zip",
+              "scheme": null
+            }
+          },
+          {
+            "content_identifier_included": {
+              "url": "https://zenodo.org/records/15166258/files/Sciunit-E6-Chen.zip",
+              "scheme": null
+            }
+          },
+          {
+            "content_identifier_included": {
+              "url": "https://zenodo.org/records/15166258/files/FLINC-E16-Dritsa.zip",
+              "scheme": null
+            }
+          },
+          {
+            "content_identifier_included": {
+              "url": "https://zenodo.org/records/15166258/files/CodeOcean-E8-Xie.zip",
+              "scheme": null
+            }
+          },
+          {
+            "content_identifier_included": {
+              "url": "https://zenodo.org/records/15166258/files/PTU-E3-Chauhan.zip",
+              "scheme": null
+            }
+          },
+          {
+            "content_identifier_included": {
+              "url": "https://zenodo.org/records/15166258/files/Reprozip-E2-BaiandZhao.rpz",
+              "scheme": null
+            }
+          },
+          {
+            "content_identifier_included": {
+              "url": "https://zenodo.org/records/15166258/files/Sciunit-E7-Kukucka.zip",
+              "scheme": null
+            }
+          },
+          {
+            "content_identifier_included": {
+              "url": "https://zenodo.org/records/15166258/files/PTU-E10-Lin.zip",
+              "scheme": null
+            }
+          },
+          {
+            "content_identifier_included": {
+              "url": "https://zenodo.org/records/15166258/files/Reprozip-E12-Collins.rpz",
+              "scheme": null
+            }
+          },
+          {
+            "content_identifier_included": {
+              "url": "https://zenodo.org/records/15166258/files/PTU-E13-Hai.zip",
+              "scheme": null
+            }
+          },
+          {
+            "content_identifier_included": {
+              "url": "https://zenodo.org/records/15166258/files/Sciunit-E4-Sun.zip",
+              "scheme": null
+            }
+          },
+          {
+            "content_identifier_included": {
+              "url": "https://zenodo.org/records/15166258/files/Reprozip-E15-Cai.rpz",
+              "scheme": null
+            }
+          },
+          {
+            "content_identifier_included": {
+              "url": "https://zenodo.org/records/15166258/files/Reprozip-E10-Lin.rpz",
+              "scheme": null
+            }
+          },
+          {
+            "content_identifier_included": {
+              "url": "https://zenodo.org/records/15166258/files/Reprozip-E9-Jehn.rpz",
+              "scheme": null
+            }
+          },
+          {
+            "content_identifier_included": {
+              "url": "https://zenodo.org/records/15166258/files/Sciunit-E8-Xie.zip",
+              "scheme": null
+            }
+          },
+          {
+            "content_identifier_included": {
+              "url": "https://zenodo.org/records/15166258/files/Sciunit-E13-Hai.zip",
+              "scheme": null
+            }
+          },
+          {
+            "content_identifier_included": {
+              "url": "https://zenodo.org/records/15166258/files/SciRep-E4-Sun.zip",
+              "scheme": null
+            }
+          },
+          {
+            "content_identifier_included": {
+              "url": "https://zenodo.org/records/15166258/files/SciRep-E5-Zhou.zip",
+              "scheme": null
+            }
+          },
+          {
+            "content_identifier_included": {
+              "url": "https://zenodo.org/records/15166258/files/SciRep-E17-Almas.zip",
+              "scheme": null
+            }
+          },
+          {
+            "content_identifier_included": {
+              "url": "https://zenodo.org/records/15166258/files/SciRep-E13-Hai.zip",
+              "scheme": null
+            }
+          },
+          {
+            "content_identifier_included": {
+              "url": "https://zenodo.org/records/15166258/files/Reprozip-E8-Xie.rpz",
+              "scheme": null
+            }
+          },
+          {
+            "content_identifier_included": {
+              "url": "https://zenodo.org/records/15166258/files/Reprozip-E1-Adam.rpz",
+              "scheme": null
+            }
+          },
+          {
+            "content_identifier_included": {
+              "url": "https://zenodo.org/records/15166258/files/SciRep-E10-Lin.zip",
+              "scheme": null
+            }
+          },
+          {
+            "content_identifier_included": {
+              "url": "https://zenodo.org/records/15166258/files/SciRep-E9-Jehn.zip",
+              "scheme": null
+            }
+          },
+          {
+            "content_identifier_included": {
+              "url": "https://zenodo.org/records/15166258/files/SciRep-E18-Fronchetti.zip",
               "scheme": null
             }
           },
@@ -850,25 +1009,7 @@
           },
           {
             "content_identifier_included": {
-              "url": "https://zenodo.org/records/15166258/files/FLINC-E10-Lin.zip",
-              "scheme": null
-            }
-          },
-          {
-            "content_identifier_included": {
               "url": "https://zenodo.org/records/15166258/files/CodeOcean-E18-Fronchetti.zip",
-              "scheme": null
-            }
-          },
-          {
-            "content_identifier_included": {
-              "url": "https://zenodo.org/records/15166258/files/FLINC-E16-Dritsa.zip",
-              "scheme": null
-            }
-          },
-          {
-            "content_identifier_included": {
-              "url": "https://zenodo.org/records/15166258/files/CodeOcean-E8-Xie.zip",
               "scheme": null
             }
           },
@@ -898,18 +1039,6 @@
           },
           {
             "content_identifier_included": {
-              "url": "https://zenodo.org/records/15166258/files/PTU-E3-Chauhan.zip",
-              "scheme": null
-            }
-          },
-          {
-            "content_identifier_included": {
-              "url": "https://zenodo.org/records/15166258/files/Reprozip-E2-BaiandZhao.rpz",
-              "scheme": null
-            }
-          },
-          {
-            "content_identifier_included": {
               "url": "https://zenodo.org/records/15166258/files/Reprozip-E3-Chauhan.rpz",
               "scheme": null
             }
@@ -928,36 +1057,6 @@
           },
           {
             "content_identifier_included": {
-              "url": "https://zenodo.org/records/15166258/files/Reprozip-E8-Xie.rpz",
-              "scheme": null
-            }
-          },
-          {
-            "content_identifier_included": {
-              "url": "https://zenodo.org/records/15166258/files/Reprozip-E1-Adam.rpz",
-              "scheme": null
-            }
-          },
-          {
-            "content_identifier_included": {
-              "url": "https://zenodo.org/records/15166258/files/Sciunit-E7-Kukucka.zip",
-              "scheme": null
-            }
-          },
-          {
-            "content_identifier_included": {
-              "url": "https://zenodo.org/records/15166258/files/PTU-E10-Lin.zip",
-              "scheme": null
-            }
-          },
-          {
-            "content_identifier_included": {
-              "url": "https://zenodo.org/records/15166258/files/Reprozip-E12-Collins.rpz",
-              "scheme": null
-            }
-          },
-          {
-            "content_identifier_included": {
               "url": "https://zenodo.org/records/15166258/files/PTU-E16-Spinellis.zip",
               "scheme": null
             }
@@ -971,12 +1070,6 @@
           {
             "content_identifier_included": {
               "url": "https://zenodo.org/records/15166258/files/PTU-E11-Santucci.zip",
-              "scheme": null
-            }
-          },
-          {
-            "content_identifier_included": {
-              "url": "https://zenodo.org/records/15166258/files/PTU-E13-Hai.zip",
               "scheme": null
             }
           },
@@ -1006,18 +1099,6 @@
           },
           {
             "content_identifier_included": {
-              "url": "https://zenodo.org/records/15166258/files/Sciunit-E4-Sun.zip",
-              "scheme": null
-            }
-          },
-          {
-            "content_identifier_included": {
-              "url": "https://zenodo.org/records/15166258/files/Reprozip-E15-Cai.rpz",
-              "scheme": null
-            }
-          },
-          {
-            "content_identifier_included": {
               "url": "https://zenodo.org/records/15166258/files/Reprozip-E11-Santucci.rpz",
               "scheme": null
             }
@@ -1037,36 +1118,6 @@
           {
             "content_identifier_included": {
               "url": "https://zenodo.org/records/15166258/files/Reprozip-E17-Almas.rpz",
-              "scheme": null
-            }
-          },
-          {
-            "content_identifier_included": {
-              "url": "https://zenodo.org/records/15166258/files/Reprozip-E10-Lin.rpz",
-              "scheme": null
-            }
-          },
-          {
-            "content_identifier_included": {
-              "url": "https://zenodo.org/records/15166258/files/Reprozip-E9-Jehn.rpz",
-              "scheme": null
-            }
-          },
-          {
-            "content_identifier_included": {
-              "url": "https://zenodo.org/records/15166258/files/Sciunit-E8-Xie.zip",
-              "scheme": null
-            }
-          },
-          {
-            "content_identifier_included": {
-              "url": "https://zenodo.org/records/15166258/files/Sciunit-E5-Zhou.zip",
-              "scheme": null
-            }
-          },
-          {
-            "content_identifier_included": {
-              "url": "https://zenodo.org/records/15166258/files/Sciunit-E6-Chen.zip",
               "scheme": null
             }
           },
@@ -1102,12 +1153,6 @@
           },
           {
             "content_identifier_included": {
-              "url": "https://zenodo.org/records/15166258/files/Sciunit-E13-Hai.zip",
-              "scheme": null
-            }
-          },
-          {
-            "content_identifier_included": {
               "url": "https://zenodo.org/records/15166258/files/Sciunit-E15-Cai.zip",
               "scheme": null
             }
@@ -1127,12 +1172,6 @@
           {
             "content_identifier_included": {
               "url": "https://zenodo.org/records/15166258/files/SciRep-E3-Chauhan.zip",
-              "scheme": null
-            }
-          },
-          {
-            "content_identifier_included": {
-              "url": "https://zenodo.org/records/15166258/files/SciRep-E4-Sun.zip",
               "scheme": null
             }
           },
@@ -1162,18 +1201,6 @@
           },
           {
             "content_identifier_included": {
-              "url": "https://zenodo.org/records/15166258/files/SciRep-E5-Zhou.zip",
-              "scheme": null
-            }
-          },
-          {
-            "content_identifier_included": {
-              "url": "https://zenodo.org/records/15166258/files/SciRep-E17-Almas.zip",
-              "scheme": null
-            }
-          },
-          {
-            "content_identifier_included": {
               "url": "https://zenodo.org/records/15166258/files/SciRep-E6-Chen.zip",
               "scheme": null
             }
@@ -1187,30 +1214,6 @@
           {
             "content_identifier_included": {
               "url": "https://zenodo.org/records/15166258/files/SciRep-E8-Xie.zip",
-              "scheme": null
-            }
-          },
-          {
-            "content_identifier_included": {
-              "url": "https://zenodo.org/records/15166258/files/SciRep-E13-Hai.zip",
-              "scheme": null
-            }
-          },
-          {
-            "content_identifier_included": {
-              "url": "https://zenodo.org/records/15166258/files/SciRep-E10-Lin.zip",
-              "scheme": null
-            }
-          },
-          {
-            "content_identifier_included": {
-              "url": "https://zenodo.org/records/15166258/files/SciRep-E9-Jehn.zip",
-              "scheme": null
-            }
-          },
-          {
-            "content_identifier_included": {
-              "url": "https://zenodo.org/records/15166258/files/SciRep-E18-Fronchetti.zip",
               "scheme": null
             }
           }
@@ -1353,49 +1356,25 @@
           {
             "format": null,
             "method": "url",
+            "resolved_url": "https://zenodo.org/records/15166258/files/Reprozip-E2-BaiandZhao.rpz",
+            "target": "data"
+          },
+          {
+            "format": null,
+            "method": "url",
             "resolved_url": "https://zenodo.org/records/15166258/files/Reprozip-E16-Spinellis.rpz",
             "target": "data"
           },
           {
             "format": null,
             "method": "url",
-            "resolved_url": "https://zenodo.org/records/15166258/files/CodeOcean-E15-Cai.zip",
+            "resolved_url": "https://zenodo.org/records/15166258/files/CodeOcean-E5-Zhou.zip",
             "target": "data"
           },
           {
             "format": null,
             "method": "url",
             "resolved_url": "https://zenodo.org/records/15166258/files/CodeOcean-E10-Lin.zip",
-            "target": "data"
-          },
-          {
-            "format": null,
-            "method": "url",
-            "resolved_url": "https://zenodo.org/records/15166258/files/Reprozip-E13-Hai.rpz",
-            "target": "data"
-          },
-          {
-            "format": null,
-            "method": "url",
-            "resolved_url": "https://zenodo.org/records/15166258/files/Reprozip-E18-Fronchetti.rpz",
-            "target": "data"
-          },
-          {
-            "format": null,
-            "method": "url",
-            "resolved_url": "https://zenodo.org/records/15166258/files/Reprozip-E4-Sun.rpz",
-            "target": "data"
-          },
-          {
-            "format": null,
-            "method": "url",
-            "resolved_url": "https://zenodo.org/records/15166258/files/CodeOcean-E2-Bai%20and%20Zhao.zip",
-            "target": "data"
-          },
-          {
-            "format": null,
-            "method": "url",
-            "resolved_url": "https://zenodo.org/records/15166258/files/CodeOcean-E5-Zhou.zip",
             "target": "data"
           },
           {
@@ -1408,6 +1387,30 @@
             "format": null,
             "method": "url",
             "resolved_url": "https://zenodo.org/records/15166258/files/Reprozip-E6-Chen.rpz",
+            "target": "data"
+          },
+          {
+            "format": null,
+            "method": "url",
+            "resolved_url": "https://zenodo.org/records/15166258/files/PTU-E12-Collins.zip",
+            "target": "data"
+          },
+          {
+            "format": null,
+            "method": "url",
+            "resolved_url": "https://zenodo.org/records/15166258/files/PTU-E9-Jehn.zip",
+            "target": "data"
+          },
+          {
+            "format": null,
+            "method": "url",
+            "resolved_url": "https://zenodo.org/records/15166258/files/Reprozip-E13-Hai.rpz",
+            "target": "data"
+          },
+          {
+            "format": null,
+            "method": "url",
+            "resolved_url": "https://zenodo.org/records/15166258/files/Reprozip-E18-Fronchetti.rpz",
             "target": "data"
           }
         ]
@@ -1496,7 +1499,7 @@
           {
             "protocol_type": "https",
             "auth_method": null,
-            "found_in": "https://zenodo.org/records/15166258/files/Reprozip-E16-Spinellis.rpz",
+            "found_in": "https://zenodo.org/records/15166258/files/Reprozip-E2-BaiandZhao.rpz",
             "target": "data"
           }
         ]
@@ -1572,7 +1575,7 @@
           {
             "protocol_type": "https",
             "auth_method": "TLS, BASIC",
-            "found_in": "https://zenodo.org/records/15166258/files/Reprozip-E16-Spinellis.rpz",
+            "found_in": "https://zenodo.org/records/15166258/files/Reprozip-E2-BaiandZhao.rpz",
             "target": "data"
           }
         ]
@@ -1915,26 +1918,6 @@
           },
           {
             "descriptor": "file type",
-            "descriptor_value": "application/zip",
-            "matches_content": true
-          },
-          {
-            "descriptor": "file type",
-            "descriptor_value": "application/zip",
-            "matches_content": true
-          },
-          {
-            "descriptor": "file type",
-            "descriptor_value": "application/octet-stream",
-            "matches_content": true
-          },
-          {
-            "descriptor": "file type",
-            "descriptor_value": "application/octet-stream",
-            "matches_content": true
-          },
-          {
-            "descriptor": "file type",
             "descriptor_value": "application/octet-stream",
             "matches_content": true
           },
@@ -1951,6 +1934,26 @@
           {
             "descriptor": "file type",
             "descriptor_value": "application/zip",
+            "matches_content": true
+          },
+          {
+            "descriptor": "file type",
+            "descriptor_value": "application/octet-stream",
+            "matches_content": true
+          },
+          {
+            "descriptor": "file type",
+            "descriptor_value": "application/zip",
+            "matches_content": true
+          },
+          {
+            "descriptor": "file type",
+            "descriptor_value": "application/zip",
+            "matches_content": true
+          },
+          {
+            "descriptor": "file type",
+            "descriptor_value": "application/octet-stream",
             "matches_content": true
           },
           {
@@ -1963,36 +1966,36 @@
       "test_debug": [
         "SUCCESS: Valid resource type (e.g. subtype of schema.org/CreativeWork, DCMI Type  or DataCite resourceType) specified -: ['creativework', 'webpage', 'physicalobject']",
         "ERROR: The evaluated resource does not identify itself as a “dataset” but as ['creativework', 'webpage', 'physicalobject'], so F-UJI may not be the right tool for this type of resource",
+        "INFO: NO info about file size available in given metadata for -: https://zenodo.org/records/15166258/files/Reprozip-E2-BaiandZhao.rpz",
+        "INFO: NO info about data service endpoint available in given metadata for -: https://zenodo.org/records/15166258/files/Reprozip-E2-BaiandZhao.rpz",
+        "INFO: Sucessfully verified content type from downloaded file -: (expected: application/octet-stream, found: via tika ['application/octet-stream', 'application/x-tar', 'application/x-sharedlib', 'application/x-sqlite3', 'text/plain', 'application/gzip', 'text/x-yaml', 'application/tar', 'application/sharedlib', 'application/sqlite3', 'text/yaml'] or via header application/octet-stream)",
         "INFO: NO info about file size available in given metadata for -: https://zenodo.org/records/15166258/files/Reprozip-E16-Spinellis.rpz",
         "INFO: NO info about data service endpoint available in given metadata for -: https://zenodo.org/records/15166258/files/Reprozip-E16-Spinellis.rpz",
         "INFO: Sucessfully verified content type from downloaded file -: (expected: application/octet-stream, found: via tika ['application/octet-stream', 'application/x-tar', 'application/x-sharedlib', 'application/x-sqlite3', 'text/plain', 'application/gzip', 'text/x-yaml', 'application/tar', 'application/sharedlib', 'application/sqlite3', 'text/yaml'] or via header application/octet-stream)",
-        "INFO: NO info about file size available in given metadata for -: https://zenodo.org/records/15166258/files/CodeOcean-E15-Cai.zip",
-        "INFO: NO info about data service endpoint available in given metadata for -: https://zenodo.org/records/15166258/files/CodeOcean-E15-Cai.zip",
-        "INFO: Sucessfully verified content type from downloaded file -: (expected: application/zip, found: via tika ['text/x-web-markdown', 'application/json', 'text/x-rsrc', 'application/zip', 'text/plain', 'text/csv', 'text/web-markdown', 'text/rsrc'] or via header application/octet-stream)",
-        "INFO: NO info about file size available in given metadata for -: https://zenodo.org/records/15166258/files/CodeOcean-E10-Lin.zip",
-        "INFO: NO info about data service endpoint available in given metadata for -: https://zenodo.org/records/15166258/files/CodeOcean-E10-Lin.zip",
-        "INFO: Sucessfully verified content type from downloaded file -: (expected: application/zip, found: via tika ['text/x-web-markdown', 'application/json', 'application/zip', 'text/plain', 'text/x-python', 'text/web-markdown', 'text/python'] or via header application/octet-stream)",
-        "INFO: NO info about file size available in given metadata for -: https://zenodo.org/records/15166258/files/Reprozip-E13-Hai.rpz",
-        "INFO: NO info about data service endpoint available in given metadata for -: https://zenodo.org/records/15166258/files/Reprozip-E13-Hai.rpz",
-        "INFO: Sucessfully verified content type from downloaded file -: (expected: application/octet-stream, found: via tika ['application/octet-stream', 'application/x-tar', 'text/troff', 'application/x-sharedlib', 'application/gzip', 'text/x-python', 'application/tar', 'application/sharedlib', 'text/python'] or via header application/octet-stream)",
-        "INFO: NO info about file size available in given metadata for -: https://zenodo.org/records/15166258/files/Reprozip-E18-Fronchetti.rpz",
-        "INFO: NO info about data service endpoint available in given metadata for -: https://zenodo.org/records/15166258/files/Reprozip-E18-Fronchetti.rpz",
-        "INFO: Sucessfully verified content type from downloaded file -: (expected: application/octet-stream, found: via tika ['application/octet-stream', 'application/x-tar', 'text/troff', 'text/x-config', 'application/x-sharedlib', 'application/gzip', 'text/x-python', 'application/tar', 'text/config', 'application/sharedlib', 'text/python'] or via header application/octet-stream)",
-        "INFO: NO info about file size available in given metadata for -: https://zenodo.org/records/15166258/files/Reprozip-E4-Sun.rpz",
-        "INFO: NO info about data service endpoint available in given metadata for -: https://zenodo.org/records/15166258/files/Reprozip-E4-Sun.rpz",
-        "INFO: Sucessfully verified content type from downloaded file -: (expected: application/octet-stream, found: via tika ['application/octet-stream', 'application/x-tar', 'text/troff', 'application/x-sharedlib', 'application/gzip', 'text/x-python', 'application/tar', 'application/sharedlib', 'text/python'] or via header application/octet-stream)",
-        "INFO: NO info about file size available in given metadata for -: https://zenodo.org/records/15166258/files/CodeOcean-E2-Bai%20and%20Zhao.zip",
-        "INFO: NO info about data service endpoint available in given metadata for -: https://zenodo.org/records/15166258/files/CodeOcean-E2-Bai%20and%20Zhao.zip",
-        "INFO: Sucessfully verified content type from downloaded file -: (expected: application/zip, found: via tika ['text/x-web-markdown', 'application/zip', 'application/json', 'text/web-markdown'] or via header application/octet-stream)",
         "INFO: NO info about file size available in given metadata for -: https://zenodo.org/records/15166258/files/CodeOcean-E5-Zhou.zip",
         "INFO: NO info about data service endpoint available in given metadata for -: https://zenodo.org/records/15166258/files/CodeOcean-E5-Zhou.zip",
         "INFO: Sucessfully verified content type from downloaded file -: (expected: application/zip, found: via tika ['text/x-web-markdown', 'application/pdf', 'application/zip', 'application/json', 'text/web-markdown'] or via header application/octet-stream)",
+        "INFO: NO info about file size available in given metadata for -: https://zenodo.org/records/15166258/files/CodeOcean-E10-Lin.zip",
+        "INFO: NO info about data service endpoint available in given metadata for -: https://zenodo.org/records/15166258/files/CodeOcean-E10-Lin.zip",
+        "INFO: Sucessfully verified content type from downloaded file -: (expected: application/zip, found: via tika ['text/x-web-markdown', 'application/json', 'application/zip', 'text/plain', 'text/x-python', 'text/web-markdown', 'text/python'] or via header application/octet-stream)",
         "INFO: NO info about file size available in given metadata for -: https://zenodo.org/records/15166258/files/PTU-E6-Chen.zip",
         "INFO: NO info about data service endpoint available in given metadata for -: https://zenodo.org/records/15166258/files/PTU-E6-Chen.zip",
         "INFO: Sucessfully verified content type from downloaded file -: (expected: application/zip, found: via tika ['application/json', 'application/octet-stream', 'image/png', 'application/x-sh', 'application/zip', 'text/x-log', 'text/x-python', 'application/sh', 'text/log', 'text/python'] or via header application/octet-stream)",
         "INFO: NO info about file size available in given metadata for -: https://zenodo.org/records/15166258/files/Reprozip-E6-Chen.rpz",
         "INFO: NO info about data service endpoint available in given metadata for -: https://zenodo.org/records/15166258/files/Reprozip-E6-Chen.rpz",
-        "INFO: Sucessfully verified content type from downloaded file -: (expected: application/octet-stream, found: via tika ['application/octet-stream', 'application/x-tar', 'text/troff', 'application/x-sharedlib', 'application/gzip', 'text/x-python', 'application/tar', 'application/sharedlib', 'text/python'] or via header application/octet-stream)"
+        "INFO: Sucessfully verified content type from downloaded file -: (expected: application/octet-stream, found: via tika ['application/octet-stream', 'application/x-tar', 'text/troff', 'application/x-sharedlib', 'application/gzip', 'text/x-python', 'application/tar', 'application/sharedlib', 'text/python'] or via header application/octet-stream)",
+        "INFO: NO info about file size available in given metadata for -: https://zenodo.org/records/15166258/files/PTU-E12-Collins.zip",
+        "INFO: NO info about data service endpoint available in given metadata for -: https://zenodo.org/records/15166258/files/PTU-E12-Collins.zip",
+        "INFO: Sucessfully verified content type from downloaded file -: (expected: application/zip, found: via tika ['application/x-sh', 'application/zip', 'application/x-sharedlib', 'text/x-rsrc', 'text/plain', 'application/sh', 'application/sharedlib', 'text/rsrc'] or via header application/octet-stream)",
+        "INFO: NO info about file size available in given metadata for -: https://zenodo.org/records/15166258/files/PTU-E9-Jehn.zip",
+        "INFO: NO info about data service endpoint available in given metadata for -: https://zenodo.org/records/15166258/files/PTU-E9-Jehn.zip",
+        "INFO: Sucessfully verified content type from downloaded file -: (expected: application/zip, found: via tika ['application/octet-stream', 'application/x-sh', 'application/zip', 'text/x-config', 'text/plain', 'text/x-python', 'application/sh', 'text/config', 'text/python'] or via header application/octet-stream)",
+        "INFO: NO info about file size available in given metadata for -: https://zenodo.org/records/15166258/files/Reprozip-E13-Hai.rpz",
+        "INFO: NO info about data service endpoint available in given metadata for -: https://zenodo.org/records/15166258/files/Reprozip-E13-Hai.rpz",
+        "INFO: Sucessfully verified content type from downloaded file -: (expected: application/octet-stream, found: via tika ['application/octet-stream', 'application/x-tar', 'text/troff', 'application/x-sharedlib', 'application/gzip', 'text/x-python', 'application/tar', 'application/sharedlib', 'text/python'] or via header application/octet-stream)",
+        "INFO: NO info about file size available in given metadata for -: https://zenodo.org/records/15166258/files/Reprozip-E18-Fronchetti.rpz",
+        "INFO: NO info about data service endpoint available in given metadata for -: https://zenodo.org/records/15166258/files/Reprozip-E18-Fronchetti.rpz",
+        "INFO: Sucessfully verified content type from downloaded file -: (expected: application/octet-stream, found: via tika ['application/octet-stream', 'application/x-tar', 'text/troff', 'text/x-config', 'application/x-sharedlib', 'application/gzip', 'text/x-python', 'application/tar', 'text/config', 'application/sharedlib', 'text/python'] or via header application/octet-stream)"
       ]
     },
     {
@@ -2390,114 +2393,8 @@
       "maturity": 3,
       "output": [
         {
-          "file_uri": "https://zenodo.org/records/15166258/files/CodeOcean-E5-Zhou.zip",
-          "mime_type": "text/x-web-markdown",
-          "is_preferred_format": true,
-          "preference_reason": [
-            "open format",
-            "long term format",
-            "generic science format"
-          ],
-          "subject_areas": [
-            "General"
-          ]
-        },
-        {
-          "file_uri": "https://zenodo.org/records/15166258/files/PTU-E6-Chen.zip",
-          "mime_type": "application/json",
-          "is_preferred_format": true,
-          "preference_reason": [
-            "open format",
-            "long term format",
-            "generic science format"
-          ],
-          "subject_areas": [
-            "General"
-          ]
-        },
-        {
-          "file_uri": "https://zenodo.org/records/15166258/files/CodeOcean-E15-Cai.zip",
-          "mime_type": "text/x-rsrc",
-          "is_preferred_format": true,
-          "preference_reason": [
-            "open format",
-            "long term format",
-            "generic science format"
-          ],
-          "subject_areas": [
-            "General"
-          ]
-        },
-        {
           "file_uri": "https://zenodo.org/records/15166258/files/CodeOcean-E10-Lin.zip",
-          "mime_type": "text/plain",
-          "is_preferred_format": true,
-          "preference_reason": [
-            "open format",
-            "long term format",
-            "generic science format"
-          ],
-          "subject_areas": [
-            "General"
-          ]
-        },
-        {
-          "file_uri": "https://zenodo.org/records/15166258/files/CodeOcean-E15-Cai.zip",
-          "mime_type": "text/csv",
-          "is_preferred_format": true,
-          "preference_reason": [
-            "open format",
-            "long term format",
-            "generic science format"
-          ],
-          "subject_areas": [
-            "General"
-          ]
-        },
-        {
-          "file_uri": "https://zenodo.org/records/15166258/files/CodeOcean-E5-Zhou.zip",
-          "mime_type": "text/web-markdown",
-          "is_preferred_format": true,
-          "preference_reason": [
-            "open format",
-            "long term format",
-            "generic science format"
-          ],
-          "subject_areas": [
-            "General"
-          ]
-        },
-        {
-          "file_uri": "https://zenodo.org/records/15166258/files/CodeOcean-E15-Cai.zip",
-          "mime_type": "text/rsrc",
-          "is_preferred_format": true,
-          "preference_reason": [
-            "open format",
-            "long term format",
-            "generic science format"
-          ],
-          "subject_areas": [
-            "General"
-          ]
-        },
-        {
-          "file_uri": "https://zenodo.org/records/15166258/files/PTU-E6-Chen.zip",
-          "mime_type": "text/x-python",
-          "is_preferred_format": true,
-          "preference_reason": [
-            "open format",
-            "long term format",
-            "generic science format",
-            "science format"
-          ],
-          "subject_areas": [
-            null,
-            "General"
-          ]
-        },
-        {
-          "file_uri": "https://zenodo.org/records/15166258/files/PTU-E6-Chen.zip",
-          "mime_type": "text/python",
+          "mime_type": "text/x-web-markdown",
           "is_preferred_format": true,
           "preference_reason": [
             "open format",
@@ -2521,6 +2418,73 @@
         },
         {
           "file_uri": "https://zenodo.org/records/15166258/files/PTU-E6-Chen.zip",
+          "mime_type": "application/json",
+          "is_preferred_format": true,
+          "preference_reason": [
+            "open format",
+            "long term format",
+            "generic science format"
+          ],
+          "subject_areas": [
+            "General"
+          ]
+        },
+        {
+          "file_uri": "https://zenodo.org/records/15166258/files/CodeOcean-E10-Lin.zip",
+          "mime_type": "text/web-markdown",
+          "is_preferred_format": true,
+          "preference_reason": [
+            "open format",
+            "long term format",
+            "generic science format"
+          ],
+          "subject_areas": [
+            "General"
+          ]
+        },
+        {
+          "file_uri": "https://zenodo.org/records/15166258/files/PTU-E9-Jehn.zip",
+          "mime_type": "text/plain",
+          "is_preferred_format": true,
+          "preference_reason": [
+            "open format",
+            "long term format",
+            "generic science format"
+          ],
+          "subject_areas": [
+            "General"
+          ]
+        },
+        {
+          "file_uri": "https://zenodo.org/records/15166258/files/PTU-E9-Jehn.zip",
+          "mime_type": "text/x-python",
+          "is_preferred_format": true,
+          "preference_reason": [
+            "open format",
+            "long term format",
+            "generic science format",
+            "science format"
+          ],
+          "subject_areas": [
+            null,
+            "General"
+          ]
+        },
+        {
+          "file_uri": "https://zenodo.org/records/15166258/files/PTU-E9-Jehn.zip",
+          "mime_type": "text/python",
+          "is_preferred_format": true,
+          "preference_reason": [
+            "open format",
+            "long term format",
+            "generic science format"
+          ],
+          "subject_areas": [
+            "General"
+          ]
+        },
+        {
+          "file_uri": "https://zenodo.org/records/15166258/files/PTU-E6-Chen.zip",
           "mime_type": "image/png",
           "is_preferred_format": true,
           "preference_reason": [
@@ -2532,7 +2496,7 @@
           ]
         },
         {
-          "file_uri": "https://zenodo.org/records/15166258/files/PTU-E6-Chen.zip",
+          "file_uri": "https://zenodo.org/records/15166258/files/PTU-E9-Jehn.zip",
           "mime_type": "application/x-sh",
           "is_preferred_format": false,
           "preference_reason": [],
@@ -2552,7 +2516,7 @@
           ]
         },
         {
-          "file_uri": "https://zenodo.org/records/15166258/files/PTU-E6-Chen.zip",
+          "file_uri": "https://zenodo.org/records/15166258/files/PTU-E9-Jehn.zip",
           "mime_type": "application/sh",
           "is_preferred_format": false,
           "preference_reason": [],
@@ -2570,38 +2534,105 @@
           "subject_areas": [
             "General"
           ]
+        },
+        {
+          "file_uri": "https://zenodo.org/records/15166258/files/PTU-E12-Collins.zip",
+          "mime_type": "application/x-sharedlib",
+          "is_preferred_format": false,
+          "preference_reason": [],
+          "subject_areas": []
+        },
+        {
+          "file_uri": "https://zenodo.org/records/15166258/files/PTU-E12-Collins.zip",
+          "mime_type": "text/x-rsrc",
+          "is_preferred_format": true,
+          "preference_reason": [
+            "open format",
+            "long term format",
+            "generic science format"
+          ],
+          "subject_areas": [
+            "General"
+          ]
+        },
+        {
+          "file_uri": "https://zenodo.org/records/15166258/files/PTU-E12-Collins.zip",
+          "mime_type": "application/sharedlib",
+          "is_preferred_format": false,
+          "preference_reason": [],
+          "subject_areas": []
+        },
+        {
+          "file_uri": "https://zenodo.org/records/15166258/files/PTU-E12-Collins.zip",
+          "mime_type": "text/rsrc",
+          "is_preferred_format": true,
+          "preference_reason": [
+            "open format",
+            "long term format",
+            "generic science format"
+          ],
+          "subject_areas": [
+            "General"
+          ]
+        },
+        {
+          "file_uri": "https://zenodo.org/records/15166258/files/PTU-E9-Jehn.zip",
+          "mime_type": "text/x-config",
+          "is_preferred_format": true,
+          "preference_reason": [
+            "open format",
+            "long term format",
+            "generic science format"
+          ],
+          "subject_areas": [
+            "General"
+          ]
+        },
+        {
+          "file_uri": "https://zenodo.org/records/15166258/files/PTU-E9-Jehn.zip",
+          "mime_type": "text/config",
+          "is_preferred_format": true,
+          "preference_reason": [
+            "open format",
+            "long term format",
+            "generic science format"
+          ],
+          "subject_areas": [
+            "General"
+          ]
         }
       ],
       "test_debug": [
-        "INFO: Data content identifier provided -: ['https://zenodo.org/records/15166258/files/Reprozip-E16-Spinellis.rpz', 'https://zenodo.org/records/15166258/files/CodeOcean-E15-Cai.zip', 'https://zenodo.org/records/15166258/files/CodeOcean-E10-Lin.zip', 'https://zenodo.org/records/15166258/files/Reprozip-E13-Hai.rpz', 'https://zenodo.org/records/15166258/files/Reprozip-E18-Fronchetti.rpz', 'https://zenodo.org/records/15166258/files/Reprozip-E4-Sun.rpz', 'https://zenodo.org/records/15166258/files/CodeOcean-E2-Bai%20and%20Zhao.zip', 'https://zenodo.org/records/15166258/files/CodeOcean-E5-Zhou.zip', 'https://zenodo.org/records/15166258/files/PTU-E6-Chen.zip', 'https://zenodo.org/records/15166258/files/Reprozip-E6-Chen.rpz']",
+        "INFO: Data content identifier provided -: ['https://zenodo.org/records/15166258/files/Reprozip-E2-BaiandZhao.rpz', 'https://zenodo.org/records/15166258/files/Reprozip-E16-Spinellis.rpz', 'https://zenodo.org/records/15166258/files/CodeOcean-E5-Zhou.zip', 'https://zenodo.org/records/15166258/files/CodeOcean-E10-Lin.zip', 'https://zenodo.org/records/15166258/files/PTU-E6-Chen.zip', 'https://zenodo.org/records/15166258/files/Reprozip-E6-Chen.rpz', 'https://zenodo.org/records/15166258/files/PTU-E12-Collins.zip', 'https://zenodo.org/records/15166258/files/PTU-E9-Jehn.zip', 'https://zenodo.org/records/15166258/files/Reprozip-E13-Hai.rpz', 'https://zenodo.org/records/15166258/files/Reprozip-E18-Fronchetti.rpz']",
+        "INFO: No mime type given in metadata or generic octet-stream type given, therefore guessing  the type of a file based on its filename or URL -: https://zenodo.org/records/15166258/files/Reprozip-E2-BaiandZhao.rpz",
         "INFO: No mime type given in metadata or generic octet-stream type given, therefore guessing  the type of a file based on its filename or URL -: https://zenodo.org/records/15166258/files/Reprozip-E16-Spinellis.rpz",
-        "INFO: Archiving/compression format specified -: application/zip",
-        "INFO: Extracted file formats for selected data object (see FsF-R1-01MD) -: ['text/x-web-markdown', 'application/json', 'text/x-rsrc', 'text/plain', 'text/csv', 'text/web-markdown', 'text/rsrc']",
-        "INFO: Archiving/compression format specified -: application/zip",
-        "INFO: Extracted file formats for selected data object (see FsF-R1-01MD) -: ['text/x-web-markdown', 'application/json', 'text/plain', 'text/x-python', 'text/web-markdown', 'text/python']",
-        "INFO: No mime type given in metadata or generic octet-stream type given, therefore guessing  the type of a file based on its filename or URL -: https://zenodo.org/records/15166258/files/Reprozip-E13-Hai.rpz",
-        "INFO: No mime type given in metadata or generic octet-stream type given, therefore guessing  the type of a file based on its filename or URL -: https://zenodo.org/records/15166258/files/Reprozip-E18-Fronchetti.rpz",
-        "INFO: No mime type given in metadata or generic octet-stream type given, therefore guessing  the type of a file based on its filename or URL -: https://zenodo.org/records/15166258/files/Reprozip-E4-Sun.rpz",
-        "INFO: Archiving/compression format specified -: application/zip",
-        "INFO: Extracted file formats for selected data object (see FsF-R1-01MD) -: ['text/x-web-markdown', 'application/json', 'text/web-markdown']",
         "INFO: Archiving/compression format specified -: application/zip",
         "INFO: Extracted file formats for selected data object (see FsF-R1-01MD) -: ['text/x-web-markdown', 'application/pdf', 'application/json', 'text/web-markdown']",
         "INFO: Archiving/compression format specified -: application/zip",
+        "INFO: Extracted file formats for selected data object (see FsF-R1-01MD) -: ['text/x-web-markdown', 'application/json', 'text/plain', 'text/x-python', 'text/web-markdown', 'text/python']",
+        "INFO: Archiving/compression format specified -: application/zip",
         "INFO: Extracted file formats for selected data object (see FsF-R1-01MD) -: ['application/json', 'image/png', 'application/x-sh', 'text/x-log', 'text/x-python', 'application/sh', 'text/log', 'text/python']",
         "INFO: No mime type given in metadata or generic octet-stream type given, therefore guessing  the type of a file based on its filename or URL -: https://zenodo.org/records/15166258/files/Reprozip-E6-Chen.rpz",
+        "INFO: Archiving/compression format specified -: application/zip",
+        "INFO: Extracted file formats for selected data object (see FsF-R1-01MD) -: ['application/x-sh', 'application/x-sharedlib', 'text/x-rsrc', 'text/plain', 'application/sh', 'application/sharedlib', 'text/rsrc']",
+        "INFO: Archiving/compression format specified -: application/zip",
+        "INFO: Extracted file formats for selected data object (see FsF-R1-01MD) -: ['application/x-sh', 'text/x-config', 'text/plain', 'text/x-python', 'application/sh', 'text/config', 'text/python']",
+        "INFO: No mime type given in metadata or generic octet-stream type given, therefore guessing  the type of a file based on its filename or URL -: https://zenodo.org/records/15166258/files/Reprozip-E13-Hai.rpz",
+        "INFO: No mime type given in metadata or generic octet-stream type given, therefore guessing  the type of a file based on its filename or URL -: https://zenodo.org/records/15166258/files/Reprozip-E18-Fronchetti.rpz",
         "SUCCESS: Could identify a file format commonly used by the scientific community -:text/x-web-markdown",
+        "SUCCESS: Could identify a file format commonly used by the scientific community -:application/pdf",
         "SUCCESS: Could identify a file format commonly used by the scientific community -:application/json",
-        "SUCCESS: Could identify a file format commonly used by the scientific community -:text/x-rsrc",
-        "SUCCESS: Could identify a file format commonly used by the scientific community -:text/plain",
-        "SUCCESS: Could identify a file format commonly used by the scientific community -:text/csv",
         "SUCCESS: Could identify a file format commonly used by the scientific community -:text/web-markdown",
-        "SUCCESS: Could identify a file format commonly used by the scientific community -:text/rsrc",
+        "SUCCESS: Could identify a file format commonly used by the scientific community -:text/plain",
         "SUCCESS: Could identify a file format commonly used by the scientific community -:text/x-python",
         "SUCCESS: Could identify a file format commonly used by the scientific community -:text/python",
-        "SUCCESS: Could identify a file format commonly used by the scientific community -:application/pdf",
         "SUCCESS: Could identify a file format commonly used by the scientific community -:image/png",
         "SUCCESS: Could identify a file format commonly used by the scientific community -:text/x-log",
-        "SUCCESS: Could identify a file format commonly used by the scientific community -:text/log"
+        "SUCCESS: Could identify a file format commonly used by the scientific community -:text/log",
+        "SUCCESS: Could identify a file format commonly used by the scientific community -:text/x-rsrc",
+        "SUCCESS: Could identify a file format commonly used by the scientific community -:text/rsrc",
+        "SUCCESS: Could identify a file format commonly used by the scientific community -:text/x-config",
+        "SUCCESS: Could identify a file format commonly used by the scientific community -:text/config"
       ]
     }
   ],
@@ -2740,6 +2771,9 @@
         "publisher": [
           "Zenodo"
         ],
+        "keywords": [
+          "new"
+        ],
         "creator": [
           "Barbosa",
           "Cunha",
@@ -2780,6 +2814,9 @@
           "name": "Zenodo"
         },
         "title": "Reproducibility package of a curated dataset of 18 computational experiments",
+        "keywords": [
+          "new"
+        ],
         "publication_date": 2025,
         "license": [
           "https://creativecommons.org/licenses/by/4.0/legalcode"

@@ -159,3 +159,40 @@ button {
     width: fit-content;
     max-width: 80%;
 }
+
+.fair-summary {
+    margin-top: 8px;
+    padding: 10px;
+    border-radius: 8px;
+    background: rgba(0,0,0,0.04);
+}
+
+.fair-header {
+    display: flex;
+    gap: 16px;
+    margin-bottom: 8px;
+    flex-wrap: wrap;
+}
+
+.fair-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 13px;
+}
+
+.fair-table th,
+.fair-table td {
+    border: 1px solid rgba(0,0,0,0.15);
+    padding: 8px;
+    text-align: left;
+}
+
+.fair-table th {
+    background: rgba(0,0,0,0.06);
+}
+
+.zenodo-header {
+    margin-bottom: 0.5rem;
+    padding-bottom: 0.25rem;
+    border-bottom: 2px solid #ddd;
+}

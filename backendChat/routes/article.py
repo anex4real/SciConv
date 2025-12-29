@@ -4,6 +4,9 @@ from __future__ import annotations
 import os
 import re
 import json
+from datetime import datetime
+import config as cfg
+
 from flask import Blueprint
 from flasgger import swag_from
 from flask_cors import cross_origin
@@ -11,15 +14,11 @@ from auth import require_auth
 from helpers.article.articleHelper import check_zenodo_metadata, create_zenodo_deposition_with_files, \
     _extract_text_from_pdf, _split_body_and_references, _normalize_article, \
     handle_dataset_list_edit, respond_define_next_step, _parse_referenced_entry_with_gpt_fallback, \
-    run_fuji_fair_assessment
+    run_fuji_fair_assessment, upsert_zenodo_deposition_metadata_and_files
 from flask import request
 from helpers.index import makeResponse, appendMessage, callGPTModel, _extract_json_safe
 
 ZENODO_API_BASE = "https://zenodo.org/api"
-
-# ----------------------------
-# NEW FLASK ROUTE (the one you requested)
-# ----------------------------
 
 article_bp = Blueprint("article", __name__)
 
@@ -31,6 +30,10 @@ article_bp = Blueprint("article", __name__)
 def analyze_author_datasets_citation_status_using_gpt():
     messagesToUser = []
     messagesToChat = []
+    article_uuid = datetime.now(cfg.timezone).strftime('%Y%m%d_%H%M%S')
+
+    # TODO apagar
+    # article_uuid=12345678
 
     # ---- CHECK FILE ----
     if 'file' not in request.files:
@@ -194,13 +197,13 @@ def analyze_author_datasets_citation_status_using_gpt():
     #     )
 
     # TODO delete
-    summary_full= "I found datasets in the article.\nReferenced: 2\nNot referenced: 0"
+    summary_full = "I found datasets in the article.\nReferenced: 2\nNot referenced: 0"
     summary_short = summary_full
-    referenced =  [
-                     "Curated dataset of 18 computational experiments (E1-E18) | https://doi.org/10.5281/zenodo.15492423",
-                     "Reproducibility package of a curated dataset of 18 computational experiments | https://doi.org/10.5281/zenodo.15166258"
-                 ]
-    non_referenced= []
+    referenced = [
+        "Curated dataset of 18 computational experiments (E1-E18) | https://doi.org/10.5281/zenodo.15492423",
+        "Reproducibility package of a curated dataset of 18 computational experiments | https://doi.org/10.5281/zenodo.15166258"
+    ]
+    non_referenced = []
 
     # ---- BUILD CLIENT-COMPATIBLE CHAT RESPONSE (SINGLE MESSAGE) ----
     respond_define_next_step(
@@ -210,7 +213,10 @@ def analyze_author_datasets_citation_status_using_gpt():
         summary_prefix="I found datasets in the article."
     )
 
-    return makeResponse(messagesToUser, 200, True)
+    return makeResponse({
+        "article_uuid": article_uuid,
+        "messages": messagesToUser
+    }, 200, True)
 
 
 # result = analyze_author_datasets_citation_status_using_gpt("example1.pdf")
@@ -279,42 +285,41 @@ def analyze_author_datasets_citation_status_using_gpt():
 #     }
 # ]
 
+# @article_bp.route("/article/<article_uuid>/check-metadata", methods=["POST"])
+# @cross_origin()
+# @require_auth
+# @swag_from("../swagger/article/zenodo-check.yml")
+# def zenodo_check_metadata_route(article_uuid):
+#     messagesToUser = []
+#
+#     data = request.get_json(silent=True) or {}
+#     identifier = data.get("identifier")
+#
+#     # TODO
+#     article_uuid = "12345678"
+#
+#     if not identifier:
+#         appendMessage(messagesToUser, "Missing 'identifier' field", "Error")
+#         return makeResponse(messagesToUser, 400, True)
+#
+#     try:
+#         summary = check_zenodo_metadata(identifier, article_uuid)
+#         return makeResponse(summary, 200, True)
+#
+#     except Exception as e:
+#         appendMessage(messagesToUser, f"Error: {str(e)}", "Error")
+#         return makeResponse(messagesToUser, 500, True)
 
-@article_bp.route("/article/check-metadata", methods=["POST"])
+@article_bp.route("/article/<article_uuid>/choose-next-step", methods=["POST"])
 @cross_origin()
 @require_auth
-@swag_from("../swagger/article/zenodo-check.yml")
-def zenodo_check_metadata_route():
-    messagesToUser = []
-
-    data = request.get_json(silent=True) or {}
-    identifier = data.get("identifier")
-
-    if not identifier:
-        appendMessage(messagesToUser, "Missing 'identifier' field", "Error")
-        return makeResponse(messagesToUser, 400, True)
-
-    try:
-        summary = check_zenodo_metadata(identifier)
-        return makeResponse(summary, 200, True)
-
-    except Exception as e:
-        appendMessage(messagesToUser, f"Error: {str(e)}", "Error")
-        return makeResponse(messagesToUser, 500, True)
-
-
-@article_bp.route("/article/choose-next-step", methods=["POST"])
-@cross_origin()
-@require_auth
-def choose_next_step():
+def choose_next_step(article_uuid):
     request_data = request.get_json(silent=True) or {}
     messages = request_data.get("messages", [])
     messagesToUser = []
 
-    article_uuid = (request_data.get("article_uuid") or "").strip()
-    #TODO
-
-    article_uuid="12345678"
+    # TODO
+    article_uuid = "12345678"
 
     if not messages:
         respond_define_next_step(
@@ -326,7 +331,7 @@ def choose_next_step():
         return makeResponse(messagesToUser, 200, True)
 
     # -------- 1) Get dataset lists from previous assistant jsonObject message --------
-    referencedDatasets = []     # Option A: list[str] like "name | reference"
+    referencedDatasets = []  # Option A: list[str] like "name | reference"
     nonReferencedDatasets = []  # list[str]
 
     for m in reversed(messages):
@@ -384,7 +389,6 @@ def choose_next_step():
         )
         return makeResponse(messagesToUser, 200, True)
 
-
     # -------- 4) Use GPT ONLY to extract action + dataset_name (infer/improve) --------
     system_prompt = {
         "role": "system",
@@ -402,9 +406,9 @@ def choose_next_step():
         "content": f'User message:\n{user_text}\n\nReturn ONLY JSON.'
     }
 
-    raw='{"action":"improve","dataset_name":"Reproducibility package of a curated dataset of 18 computational experiments"}'
-    #TODO TO BE deleted
-    #raw = callGPTModel([system_prompt, user_prompt])
+    raw = '{"action":"improve","dataset_name":"Reproducibility package of a curated dataset of 18 computational experiments"}'
+    # TODO TO BE deleted
+    # raw = callGPTModel([system_prompt, user_prompt])
 
     parsed = _extract_json_safe(raw) or {}
 
@@ -453,7 +457,7 @@ def choose_next_step():
 
         # Fetch Zenodo metadata
         try:
-            zenodo_metadata = check_zenodo_metadata(reference_or_link)
+            zenodo_metadata = check_zenodo_metadata(reference_or_link, article_uuid)
         except Exception as e:
             appendMessage(
                 messagesToUser,
@@ -464,7 +468,6 @@ def choose_next_step():
                 jsonObject=False
             )
             return makeResponse(messagesToUser, 200, True)
-
 
         # We do NOT hard-fail if article_uuid is missing or F-UJI fails.
         if article_uuid:
@@ -478,22 +481,30 @@ def choose_next_step():
             fuji_error = "Missing article_uuid in request body (required to save F-UJI result under articles/<uuid>/)."
 
     # -------- 6) Return payload --------
-    #TODO alterar
-    #next_stage = "InferDatasetMetadata" if action == "infer" else "ImproveDatasetMetadata"
+    # TODO alterar
+    # next_stage = "InferDatasetMetadata" if action == "infer" else "ImproveDatasetMetadata"
     next_stage = "DefineNextStepInteraction"
 
 
-    payload = {
-        "action": action,
-        "fuji_result": fuji_result
-    }
-
+    payload2 = {}
     if action == "improve":
-        payload["reference_or_link"] = reference_or_link
-        payload["zenodo_metadata"] = zenodo_metadata
+        payload2["zenodo_metadata"] = zenodo_metadata
 
         if fuji_error:
-            payload["fuji_error"] = fuji_error
+            payload2["fuji_error"] = fuji_error
+
+        appendMessage(
+            messagesToUser,
+            role="assistant",
+            jsonObject=True,
+            contentShort=payload2,
+            content=payload2
+        )
+
+    payload = {
+        "action": action,
+        "fuji_summary": fuji_result["fuji_summary"],
+    }
 
     appendMessage(
         messagesToUser,
@@ -506,14 +517,16 @@ def choose_next_step():
 
     return makeResponse(messagesToUser, 200, True)
 
-
-@article_bp.route("/article/infer-dataset-metadata", methods=['POST'])
+@article_bp.route("/article/<article_uuid>/infer-metadata", methods=['POST'])
 @cross_origin()
 @require_auth
 @swag_from("../swagger/article/infer-dataset-metadata.yml")
-def infer_dataset_metadata_from_article():
+def infer_dataset_metadata_from_article(article_uuid):
     messagesToUser = []
     messagesToChat = []
+
+    # TODO
+    article_uuid = "12345678"
 
     dataset_name = request.form.get("dataset_name")
     if not dataset_name:
@@ -609,7 +622,6 @@ def infer_dataset_metadata_from_article():
         "upload_type": "dataset",
         "publication_date": "",
         "version": "",
-        "doi": "",
         "description": "",
 
         "creators": [
@@ -730,7 +742,6 @@ def infer_dataset_metadata_from_article():
                 "upload_type": "dataset",
                 "publication_date": "",
                 "version": "",
-                "doi": "",
                 "description": "",
                 "creators": [],
                 "contributors": [],
@@ -758,14 +769,79 @@ def infer_dataset_metadata_from_article():
         }
 
     return makeResponse(llm_data, 200, True)
+# {
+#   "metadata": {
+#     "title": "Curated dataset of 18 computational experiments (E1-E18)",
+#     "upload_type": "dataset",
+#     "publication_date": "2025",
+#     "version": "",
+#     "description": "A curated benchmark dataset of 18 computational experiments (E1-E18) from diverse scientific domains, including details on software dependencies, execution steps, and configurations necessary for accurate reproduction. Released along with reproducibility packages to support ongoing evaluation efforts.",
+#     "creators": [
+#       {
+#         "name": "Lázaro Costa",
+#         "affiliation": "University of Porto & INESC TEC, Portugal",
+#         "orcid": "",
+#         "email": "lazaro@fe.up.pt",
+#         "role": ""
+#       },
+#       {
+#         "name": "Susana Barbosa",
+#         "affiliation": "INESC TEC, Portugal",
+#         "orcid": "",
+#         "email": "susana.a.barbosa@inesctec.pt",
+#         "role": ""
+#       },
+#       {
+#         "name": "Jácome Cunha",
+#         "affiliation": "University of Porto & HASLab/INESC TEC, Portugal",
+#         "orcid": "",
+#         "email": "jacome@fe.up.pt",
+#         "role": ""
+#       }
+#     ],
+#     "contributors": [],
+#     "keywords": [
+#       "Reproducibility",
+#       "Open Science",
+#       "Empirical Evaluation",
+#       "Dataset"
+#     ],
+#     "language": "en",
+#     "notes": "",
+#     "related_identifiers": [
+#       {
+#         "identifier": "10.5281/zenodo.15166258",
+#         "relation": "hasPart",
+#         "scheme": "doi"
+#       }
+#     ],
+#     "communities": [],
+#     "license": "",
+#     "access_right": "",
+#     "embargo_date": "",
+#     "grants": [],
+#     "subjects": [],
+#     "resource_type": {
+#       "type": "dataset",
+#       "title": "Dataset"
+#     },
+#     "dates": [],
+#     "locations": [],
+#     "imprint": {
+#       "publisher": "",
+#       "place": ""
+#     }
+#   }
+# }
 
-
-@article_bp.route("/article/create-dataset-zenodo", methods=["POST"])
+@article_bp.route("/article/<article_uuid>/create-dataset-zenodo", methods=["POST"])
 @cross_origin()
 @require_auth
 @swag_from("../swagger/article/create-dataset-zenodo.yml")
-def zenodo_create_dataset_route():
+def zenodo_create_dataset_route(article_uuid):
     messagesToUser = []
+    # TODO
+    article_uuid="12345678"
 
     # ---- CHECK METADATA JSON ----
     metadata_str = request.form.get("metadata")
@@ -774,12 +850,12 @@ def zenodo_create_dataset_route():
         return makeResponse(messagesToUser, 400, True)
 
     try:
-        llm_data = json.loads(metadata_str)
+        metadata_json = json.loads(metadata_str)
     except json.JSONDecodeError:
         appendMessage(messagesToUser, "Invalid JSON in 'metadata' field", "Error")
         return makeResponse(messagesToUser, 400, True)
 
-    if not isinstance(llm_data, dict) or "metadata" not in llm_data:
+    if not isinstance(metadata_json, dict) or "metadata" not in metadata_json:
         appendMessage(messagesToUser, "JSON must have top-level 'metadata' key", "Error")
         return makeResponse(messagesToUser, 400, True)
 
@@ -798,10 +874,79 @@ def zenodo_create_dataset_route():
 
     # ---- CALL ZENODO API ----
     try:
-        deposition = create_zenodo_deposition_with_files(llm_data, files)
+        deposition = create_zenodo_deposition_with_files(metadata_json, files)
     except Exception as e:
         appendMessage(messagesToUser, f"Error creating Zenodo deposition: {str(e)}", "Error")
         return makeResponse(messagesToUser, 500, True)
 
-    # You can wrap it directly; front-end will see Zenodo's JSON.
-    return makeResponse(deposition, 200, True)
+    deposition_id = deposition.get("id")
+
+    return makeResponse({
+        "deposition_id": deposition_id,
+        "deposition": deposition
+    }, 200, True)
+
+@article_bp.route("/article/<article_uuid>/zenodo/<int:deposition_id>/edit", methods=["POST"])
+@cross_origin()
+@require_auth
+@swag_from("../swagger/article/edit-dataset-zenodo.yml")
+def zenodo_edit_dataset_route(article_uuid, deposition_id):
+    messagesToUser = []
+
+    # TODO
+    article_uuid="12345678"
+
+    # ---- CHECK TOKEN ----
+    zenodo_token = request.form.get("zenodo_token")
+    token = zenodo_token or os.getenv("ZENODO_API_TOKEN")
+    if not token:
+        raise RuntimeError("Zenodo token not provided and ZENODO_API_TOKEN is not set")
+
+    # ---- CHECK METADATA JSON ----
+    metadata_str = request.form.get("metadata")
+    if not metadata_str:
+        appendMessage(messagesToUser, "Missing 'metadata' field in form data", "Error")
+        return makeResponse(messagesToUser, 400, True)
+
+    try:
+        llm_data = json.loads(metadata_str)
+    except json.JSONDecodeError:
+        appendMessage(messagesToUser, "Invalid JSON in 'metadata' field", "Error")
+        return makeResponse(messagesToUser, 400, True)
+
+    if not isinstance(llm_data, dict) or "metadata" not in llm_data:
+        appendMessage(messagesToUser, "JSON must have top-level 'metadata' key", "Error")
+        return makeResponse(messagesToUser, 400, True)
+
+    # ---- CHECK FILES (optional) ----
+    files = request.files.getlist("files") or []
+
+    single_file = request.files.get("file")
+    if not files and single_file:
+        files = [single_file]
+
+    # publish new version ONLY if we actually received files
+    publish = len(files) > 0
+
+    # ---- OPTIONAL FLAGS ----
+    replace_files = (request.form.get("replace_files", "false").lower() == "true")
+
+    # ---- CALL ZENODO EDIT ----
+    try:
+        dep = upsert_zenodo_deposition_metadata_and_files(
+            deposition_id=deposition_id,
+            llm_data=llm_data,
+            files=files,
+            zenodo_token=token,
+            replace_files=replace_files,
+            publish=publish
+        )
+    except Exception as e:
+        appendMessage(messagesToUser, f"Error editing Zenodo deposition: {str(e)}", "Error")
+        return makeResponse(messagesToUser, 500, True)
+
+    return makeResponse({
+        "article_uuid": article_uuid,
+        "deposition_id": dep.get("id"),
+        "deposition": dep
+    }, 200, True)
