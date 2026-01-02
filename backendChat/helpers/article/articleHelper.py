@@ -1,4 +1,6 @@
 from __future__ import annotations
+
+import copy
 import json
 import os
 import re
@@ -6,6 +8,8 @@ from typing import Tuple, Any, Dict, List, Optional, Union, IO
 import requests
 from PyPDF2 import PdfReader
 from werkzeug.datastructures import FileStorage
+
+from helpers.article.metadata_template import ZENODO_METADATA_TEMPLATE
 from helpers.index import appendMessage, callGPTModel, _extract_json_safe
 
 ZENODO_API_BASE = "https://zenodo.org/api"
@@ -803,10 +807,10 @@ def create_zenodo_deposition_with_files(llm_data: dict, files: List[FileStorage]
         put_resp.raise_for_status()
 
     # If you want to publish automatically, you could POST:
-    #publish_url = f"{ZENODO_API_BASE}/deposit/depositions/{deposition['id']}/actions/publish"
-    #pub_resp = requests.post(publish_url, headers=headers, timeout=30)
-    #pub_resp.raise_for_status()
-    #deposition = pub_resp.json()
+    publish_url = f"{ZENODO_API_BASE}/deposit/depositions/{deposition['id']}/actions/publish"
+    pub_resp = requests.post(publish_url, headers=headers, timeout=30)
+    pub_resp.raise_for_status()
+    deposition = pub_resp.json()
 
     return deposition
 
@@ -877,12 +881,12 @@ def upsert_zenodo_deposition_metadata_and_files(
     #   - done  -> actions/edit then PUT metadata (same deposition)
     #   - inprogress -> PUT metadata (same deposition)
     # -----------------------------------------
+    # --- inside METADATA ONLY branch ---
+
     if not has_files:
         if state == "done":
-            # Open an edit session (Zenodo will turn it into an editable draft)
             edited = _post(f"{ZENODO_API_BASE}/deposit/depositions/{deposition_id}/actions/edit")
 
-            # Use returned resource (or refetch) because state/links may change
             dep = edited if isinstance(edited, dict) and edited.get("id") else _get_dep(deposition_id)
             state = (dep.get("state") or "").lower()
 
@@ -892,53 +896,38 @@ def upsert_zenodo_deposition_metadata_and_files(
                     f"Deposition id={deposition_id} state='{dep.get('state')}'."
                 )
 
-            dep_self_url = (dep.get("links") or {}).get(
-                "self") or f"{ZENODO_API_BASE}/deposit/depositions/{deposition_id}"
-            return _put_json(dep_self_url, llm_data)
+            dep_id = int(dep["id"])  # IMPORTANT: this is the draft id after edit
+            dep_self_url = (dep.get("links") or {}).get("self") or f"{ZENODO_API_BASE}/deposit/depositions/{dep_id}"
+
+            updated = _put_json(dep_self_url, llm_data)
+
+            #TODO
+            publish=True
+
+            if publish:
+                pub_url = f"{ZENODO_API_BASE}/deposit/depositions/{dep_id}/actions/publish"
+                return _post(pub_url)
+
+            return updated
 
         if state == "inprogress":
-            dep_self_url = (dep.get("links") or {}).get(
-                "self") or f"{ZENODO_API_BASE}/deposit/depositions/{deposition_id}"
-            return _put_json(dep_self_url, llm_data)
+            dep_id = int(dep["id"])
+            dep_self_url = (dep.get("links") or {}).get("self") or f"{ZENODO_API_BASE}/deposit/depositions/{dep_id}"
+
+            updated = _put_json(dep_self_url, llm_data)
+            # TODO
+            publish = True
+
+            if publish:
+                pub_url = f"{ZENODO_API_BASE}/deposit/depositions/{dep_id}/actions/publish"
+                return _post(pub_url)
+
+            return updated
 
         raise RuntimeError(
             "Metadata-only update requested, but deposition is not editable.\n"
             f"Deposition id={deposition_id} has state='{dep.get('state')}'."
         )
-
-    # -----------------------------------------
-    # B) FILE UPLOAD -> MUST create a new version
-    #   - done       -> actions/newversion
-    #   - inprogress -> discard it, then actions/newversion on the PUBLISHED deposition
-    # -----------------------------------------
-
-    # If current is an inprogress draft, discard it first (as you requested)
-    if state == "inprogress":
-        _post(f"{ZENODO_API_BASE}/deposit/depositions/{deposition_id}/actions/discard")
-
-        # After discard, we need to start from the published deposition.
-        # If the caller gave us the draft id, Zenodo usually provides "links.latest"
-        # pointing to the latest *published* record/deposition.
-        # Best practice: re-fetch the discarded id's parent via links.latest (if available),
-        # otherwise the caller should pass the published id.
-        dep_after_discard = _get_dep(deposition_id)
-
-        latest_link = (dep_after_discard.get("links") or {}).get("latest")
-        if not latest_link:
-            raise RuntimeError(
-                "You provided an inprogress deposition id and it was discarded, "
-                "but Zenodo did not provide links.latest to resolve the published record. "
-                "Please call this with the PUBLISHED deposition id (state='done')."
-            )
-
-        latest_record = _get(latest_link)  # records API
-        published_id = latest_record.get("id")
-        if not published_id:
-            raise RuntimeError("Could not resolve published deposition id from links.latest after discard.")
-
-        deposition_id = int(published_id)
-        dep = _get_dep(deposition_id)
-        state = (dep.get("state") or "").lower()
 
     # Now we must be on a published deposition
     if state != "done":
@@ -1049,34 +1038,20 @@ def respond_define_next_step(
         "How would you like to proceed?\n\n"
         "A) Infer metadata (datasets WITHOUT a reference)\n"
         "   - Use when the dataset has no DOI/URL/citation.\n"
-        "   - Format: infer <dataset name>\n\n"
+        "   - In the UI: click \"infer\" and choose a dataset from the Non-referenced list.\n\n"
         "B) Improve metadata (datasets WITH a Zenodo reference)\n"
         "   - Use when the dataset is in the Referenced list (has Zenodo DOI/URL).\n"
-        "   - Format: improve <dataset name>\n\n"
-        "C) Edit dataset lists (add / update / delete)\n"
+        "   - In the UI: click \"improve\" and choose a dataset from the Referenced list.\n\n"
+        "C) Edit dataset lists (add / update / delete)  [handled in the UI]\n"
+        "   - Choose the action (add/update/delete), then choose the target list (referenced or non-referenced).\n"
         "   - Referenced entries MUST include a Zenodo DOI/URL.\n"
-        "   - Referenced format: <dataset name> | <Zenodo DOI/URL>\n"
-        "   - Non-referenced format: <dataset name>\n\n"
+        "     - Fields required: dataset name + Zenodo DOI/URL\n"
+        "   - Non-referenced entries:\n"
+        "     - Field required: dataset name only\n\n"
         "Zenodo reference accepted formats:\n"
         "  - 10.5281/zenodo.1234567\n"
         "  - https://doi.org/10.5281/zenodo.1234567\n"
         "  - https://zenodo.org/records/1234567"
-    )
-
-    examples = (
-        "Infer examples:\n"
-        "- infer Social Network Graph Dataset\n\n"
-        "Improve examples (must exist in Referenced list):\n"
-        "- improve Climate Observations 1990–2020\n\n"
-        "Edit examples:\n"
-        "- add referenced: My Dataset | https://doi.org/10.5281/zenodo.1234567\n"
-        "- add non-referenced: the CT scan dataset\n"
-        "- delete referenced: My Dataset\n"
-        "- delete non-referenced: the CT scan dataset\n"
-        "- update referenced: Old Dataset Name -> New Dataset Name\n"
-        "- update referenced: Old Dataset Name -> New Dataset Name | https://doi.org/10.5281/zenodo.7654321\n"
-        "- update referenced: Old Dataset Name -> | https://zenodo.org/records/7654321\n"
-        "- update non-referenced: Old Dataset Name -> New Dataset Name"
     )
 
     appendMessage(messagesToUser,
@@ -1091,5 +1066,302 @@ def respond_define_next_step(
                            "referencedDatasets": referencedDatasets,
                            "nonReferencedDatasets": nonReferencedDatasets,
                            "instructions": instructions},
-                  examples=examples
                   )
+
+def _deep_merge(base: Any, patch: Any) -> Any:
+    if isinstance(base, dict) and isinstance(patch, dict):
+        out = dict(base)
+        for k, v in patch.items():
+            out[k] = _deep_merge(out.get(k), v) if k in out else copy.deepcopy(v)
+        return out
+    return copy.deepcopy(patch)
+
+
+
+def _strip_license_urls_from_text_fields(metadata: Dict[str, Any]) -> Dict[str, Any]:
+    url_rx = re.compile(r"https?://creativecommons\.org/licenses/[^\s<>\"]+", re.IGNORECASE)
+
+    def _clean(s: Any) -> Any:
+        if not isinstance(s, str):
+            return s
+        return url_rx.sub("", s).strip()
+
+    for k in ("description", "notes", "access_conditions"):
+        if k in metadata:
+            metadata[k] = _clean(metadata[k])
+
+    if isinstance(metadata.get("references"), list):
+        metadata["references"] = [_clean(x) for x in metadata["references"]]
+
+    return metadata
+
+def _validate_minimal_zenodo_metadata(metadata: Dict[str, Any]) -> None:
+    if not isinstance(metadata, dict):
+        raise ValueError("metadata must be a dict")
+
+    required = ["title", "upload_type", "publication_date", "description", "access_right"]
+    missing = [k for k in required if not metadata.get(k)]
+    if missing:
+        raise ValueError(f"Missing required metadata fields: {missing}")
+
+    ar = metadata.get("access_right")
+    if ar not in ("open", "embargoed", "restricted", "closed"):
+        raise ValueError(f"Invalid access_right='{ar}'")
+
+    if ar in ("open", "embargoed"):
+        if not metadata.get("license"):
+            raise ValueError("license is required when access_right is open/embargoed")
+
+
+
+
+def _safe_list_article_files(article_uuid: str, max_files: int = 40) -> List[Dict[str, Any]]:
+    """
+    Lists files under articles/<article_uuid>/.
+    Sends only filenames + basic info to the LLM (not file contents).
+    """
+    base_dir = os.path.join("articles", article_uuid)
+    out: List[Dict[str, Any]] = []
+    if not os.path.isdir(base_dir):
+        return out
+
+    for name in sorted(os.listdir(base_dir)):
+        p = os.path.join(base_dir, name)
+        if not os.path.isfile(p):
+            continue
+        try:
+            size = os.path.getsize(p)
+        except Exception:
+            size = None
+        out.append({"filename": name, "path": p, "size_bytes": size})
+        if len(out) >= max_files:
+            break
+    return out
+
+
+def _filter_patch_to_template(metadata_patch: Dict[str, Any], template: Dict[str, Any]) -> Dict[str, Any]:
+    """
+    Drop keys not present in the template (prevents hallucinated fields).
+    """
+    allowed_keys = set(template.keys())
+    return {k: v for k, v in (metadata_patch or {}).items() if k in allowed_keys}
+
+def _ensure_top_level_metadata(obj: Any) -> Dict[str, Any]:
+    """
+    Ensure {"metadata": {...}} shape.
+    """
+    if not isinstance(obj, dict):
+        return {"metadata": {}}
+    if "metadata" in obj and isinstance(obj["metadata"], dict):
+        return obj
+    return {"metadata": obj}
+
+def propose_zenodo_metadata_patch_with_openai(
+    *,
+    zenodo_identifier: str,
+    warnings_by_dimension: Dict[str, List[str]],
+    current_metadata: Dict[str, Any],
+    article_uuid: str,
+    extra_files: Optional[List[Dict[str, Any]]] = None,
+    model: str = "o4-mini",
+) -> Dict[str, Any]:
+    """
+    Ask ChatGPT (via your callGPTModel) for a minimal Zenodo metadata PATCH.
+
+    Inputs:
+      - zenodo_identifier: DOI / record URL / record id (string)
+      - warnings_by_dimension: dict with keys findable/accessible/interoperable/reusable (lists of warning strings)
+      - current_metadata: current Zenodo deposit metadata (either {"metadata": {...}} or just {...})
+      - article_uuid: used to list available local files under articles/<article_uuid>/
+      - extra_files: optional list of extra file descriptors (filename/path/size_bytes/etc.)
+      - model: OpenAI model name used by callGPTModel()
+
+    Output:
+      {"metadata": {...}}  # minimal patch, only changed/added fields, filtered to ZENODO_METADATA_TEMPLATE
+    """
+
+    # Normalize current_metadata to deposit representation
+    if isinstance(current_metadata, dict) and "metadata" in current_metadata and isinstance(current_metadata["metadata"], dict):
+        current_metadata_for_llm = current_metadata
+    else:
+        current_metadata_for_llm = {"metadata": current_metadata or {}}
+
+    # File inventory for context (no file contents)
+    files_in_dir = _safe_list_article_files(article_uuid)
+    all_files = (extra_files or []) + files_in_dir
+
+    system = (
+        "You are a metadata engineer for Zenodo deposits.\n"
+        "Goal: produce a JSON PATCH (not full replacement) to improve FAIRness.\n\n"
+        "CRITICAL OUTPUT RULES:\n"
+        "1) Return ONLY valid JSON.\n"
+        "2) Output MUST be in Zenodo deposit PATCH form: {\"metadata\": {...}}.\n"
+        "3) PATCH MUST conform to the allowed Zenodo metadata template provided.\n"
+        "   - Only use keys that exist in the template.\n"
+        "   - Keep value types consistent with the template.\n"
+        "4) Do NOT invent DOIs/URLs, grant IDs, ORCIDs, licenses, access statements, or identifiers.\n"
+        "5) Do NOT remove required fields; only add/update what is necessary.\n"
+        "6) Avoid placing Creative Commons license URLs in access_conditions/description/notes.\n"
+        "   - Use `license` as an ID value (e.g., \"cc-by-4.0\").\n"
+        "7) If adding access rights, prefer COAR access-rights URIs.\n"
+        "8) Return a MINIMAL patch: include only the fields you changed/added.\n"
+    )
+
+    user_payload = {
+        "zenodo_identifier": zenodo_identifier,
+        "warnings_by_dimension": warnings_by_dimension,
+        "current_metadata": current_metadata_for_llm,
+        "allowed_metadata_template": ZENODO_METADATA_TEMPLATE,
+        "available_files_for_context": all_files,
+        "task": (
+            "Produce a minimal Zenodo metadata PATCH that addresses the warnings.\n"
+            "Only include fields present in allowed_metadata_template.\n"
+            "Return ONLY JSON in the exact shape: {\"metadata\": {...}}.\n"
+        ),
+        "output_example": {
+            "metadata": {
+                "notes": "<p>Access: open.</p>",
+                "related_identifiers": [
+                    {
+                        "identifier": "http://purl.org/coar/access_right/c_abf2",
+                        "relation": "isSupplementTo",
+                        "resource_type": "other"
+                    }
+                ]
+            }
+        }
+    }
+
+    messagesToChat = [
+        {"role": "system", "content": system},
+        {"role": "user", "content": json.dumps(user_payload, ensure_ascii=False)},
+    ]
+
+    # callGPTModel returns a STRING
+    raw_text = callGPTModel(messagesToChat, modelUsed=model)
+
+    # Parse JSON safely
+    patch = _extract_json_safe(raw_text)
+
+    # Regex fallback
+    if patch is None:
+        m = re.search(r"\{.*\}", raw_text or "", flags=re.DOTALL)
+        if not m:
+            raise ValueError("LLM did not return valid JSON.")
+        patch = json.loads(m.group(0))
+
+    # Ensure patch shape
+    patch = _ensure_top_level_metadata(patch)
+
+    if not isinstance(patch.get("metadata"), dict):
+        raise ValueError("Patch must contain a dict at patch['metadata'].")
+
+    # Hard-enforce template keys (prevents hallucinated / unsupported fields)
+    patch["metadata"] = _filter_patch_to_template(patch["metadata"], ZENODO_METADATA_TEMPLATE)
+
+    return patch
+
+
+
+
+
+# -----------------------------
+# Helpers: files + text extraction
+# -----------------------------
+def _safe_list_article_files(article_uuid: str, max_files: int = 50) -> List[Dict[str, Any]]:
+    """
+    List local files under articles/<article_uuid>/.
+    Only metadata about files is returned (not contents).
+    """
+    base_dir = os.path.join("articles", article_uuid)
+    out: List[Dict[str, Any]] = []
+    if not os.path.isdir(base_dir):
+        return out
+
+    for name in sorted(os.listdir(base_dir)):
+        path = os.path.join(base_dir, name)
+        if not os.path.isfile(path):
+            continue
+        try:
+            size = os.path.getsize(path)
+        except Exception:
+            size = None
+        out.append({"filename": name, "path": path, "size_bytes": size})
+        if len(out) >= max_files:
+            break
+    return out
+
+
+def _extract_text_snippets_from_article_files(
+    article_uuid: str,
+    *,
+    max_files: int = 6,
+    max_chars_per_file: int = 15000,
+) -> List[Dict[str, Any]]:
+    """
+    Extract limited text snippets from local files in articles/<article_uuid>/.
+    - PDF: uses your _extract_text_from_pdf()
+    - TXT/MD: reads directly
+    - JSON/YAML: reads first chars (no parsing)
+    For other types, just lists the file metadata without contents.
+    """
+    files = _safe_list_article_files(article_uuid)
+    snippets: List[Dict[str, Any]] = []
+
+    def _read_text_file(path: str) -> str:
+        with open(path, "r", encoding="utf-8", errors="ignore") as f:
+            return f.read()
+
+    for f in files:
+        if len(snippets) >= max_files:
+            break
+
+        name = f["filename"]
+        path = f["path"]
+        ext = os.path.splitext(name.lower())[1]
+
+        try:
+            if ext == ".pdf":
+                # Your helper accepts file-like or path
+                full = _extract_text_from_pdf(path)
+                body, refs = _split_body_and_references(full)
+                text = (body + "\n\n" + refs).strip()
+                snippets.append({
+                    "filename": name,
+                    "type": "application/pdf",
+                    "snippet": text[:max_chars_per_file],
+                })
+            elif ext in (".txt", ".md"):
+                text = _read_text_file(path)
+                snippets.append({
+                    "filename": name,
+                    "type": "text/plain",
+                    "snippet": text[:max_chars_per_file],
+                })
+            elif ext in (".json", ".yml", ".yaml"):
+                text = _read_text_file(path)
+                snippets.append({
+                    "filename": name,
+                    "type": "text/structured",
+                    "snippet": text[:max_chars_per_file],
+                })
+            else:
+                # skip binary/unknown
+                continue
+        except Exception:
+            continue
+
+    return snippets
+
+
+def _filter_metadata_to_template(metadata: Dict[str, Any], template: Dict[str, Any]) -> Dict[str, Any]:
+    """
+    Keeps only keys defined in ZENODO_METADATA_TEMPLATE.
+    Prevents hallucinated fields.
+    """
+    allowed = set(template.keys())
+    return {k: v for k, v in (metadata or {}).items() if k in allowed}
+
+
+
+

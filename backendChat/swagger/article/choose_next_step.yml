@@ -1,0 +1,123 @@
+Choose next step for an article workflow (infer or improve dataset metadata)
+---
+tags:
+  - Article
+
+consumes:
+  - application/json
+
+produces:
+  - application/json
+
+parameters:
+  - name: Authorization
+    in: header
+    required: true
+    type: string
+    default: "Bearer my-secret-token"
+    description: >
+      Bearer authentication token for YOUR application (not Zenodo).
+
+  - name: article_uuid
+    in: path
+    required: true
+    type: string
+    default: "12345678"
+    description: >
+      Internal article UUID used by the application to associate workflow state
+      and derived artifacts (e.g., FAIR assessments).
+
+  - name: body
+    in: body
+    required: true
+    description: >
+      Request payload containing conversation messages. The endpoint uses:
+      - The latest assistant JSON-object message with referenced/nonReferenced datasets
+      - The latest user message to extract the intended action and dataset name
+    schema:
+      type: object
+      required:
+        - messages
+      properties:
+        messages:
+          type: array
+          items:
+            type: object
+            properties:
+              role:
+                type: string
+                enum: [system, user, assistant, tool]
+              jsonObject:
+                type: boolean
+              stage:
+                type: string
+              contentShort:
+                oneOf:
+                  - type: string
+                  - type: object
+              content:
+                oneOf:
+                  - type: string
+                  - type: object
+            required:
+              - role
+              - content
+      example:
+        messages:
+          - role: "assistant"
+            jsonObject: true
+            stage: "DefineNextStepInteraction"
+            content:
+              summary: "I found datasets in the article.\nReferenced: 2\nNot referenced: 0"
+              referencedDatasets:
+                - "Curated dataset of 18 computational experiments (E1-E18) | https://doi.org/10.5281/zenodo.18087782"
+                - "Reproducibility package of a curated dataset of 18 computational experiments | https://doi.org/10.5281/zenodo.18087782"
+              nonReferencedDatasets: []
+              instructions: "How would you like to proceed? ..."
+          - role: "user"
+            jsonObject: false
+            content: "improve Reproducibility package of a curated dataset of 18 computational experiments"
+
+responses:
+  200:
+    description: >
+      Returns assistant messages indicating the next workflow stage.
+      If the user input is incomplete (e.g., just "improve" without a dataset name),
+      the endpoint returns a guidance message asking for:
+      "infer <dataset name>" or "improve <dataset name>".
+    schema:
+      type: object
+      properties:
+        success:
+          type: boolean
+        status:
+          type: integer
+          format: int32
+        messages:
+          type: array
+          items:
+            type: object
+            properties:
+              role:
+                type: string
+              stage:
+                type: string
+              jsonObject:
+                type: boolean
+              contentShort:
+                oneOf:
+                  - type: string
+                  - type: object
+              content:
+                oneOf:
+                  - type: string
+                  - type: object
+
+  400:
+    description: Bad request — invalid JSON.
+
+  401:
+    description: Unauthorized — invalid Authorization header.
+
+  500:
+    description: Internal server error.

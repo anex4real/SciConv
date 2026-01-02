@@ -1,0 +1,15 @@
+{
+  "metadata": {
+    "upload_type": "dataset",
+    "publication_date": "2025-12-22",
+    "title": "Example new",
+    "creators": [
+      {
+        "name": "Doe, Jane",
+        "affiliation": "Example University",
+        "orcid": "0000-0002-1694-233X",
+        "gnd": ""
+      }
+    ]
+  }
+}

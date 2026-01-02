@@ -1,0 +1,140 @@
+Improve Zenodo Metadata with FAIR Feedback
+---
+tags:
+  - Article
+
+consumes:
+  - application/json
+produces:
+  - application/json
+
+parameters:
+  - name: Authorization
+    in: header
+    required: true
+    type: string
+    default: "Bearer my-secret-token"
+    description: Bearer authentication token.
+
+
+  - name: article_uuid
+    in: path
+    required: true
+    default: "12345678"
+    type: string
+    description: Unique article identifier (used to save F-UJI outputs under articles/<article_uuid>/)
+    example: "12345678"
+
+  - name: body
+    in: body
+    required: true
+    schema:
+      type: object
+      required:
+        - identifier
+        - deposition_id
+        - warnings_by_dimension
+      properties:
+        identifier:
+          type: string
+          description: Zenodo identifier (DOI, record URL, or record ID)
+          example: "10.5281/zenodo.18087782"
+
+        deposition_id:
+          type: integer
+          description: Zenodo DEPOSITION ID (editable deposit). Required to update metadata.
+          example: 18087782
+
+        warnings_by_dimension:
+          type: object
+          description: FAIR warnings grouped by dimension (from F-UJI export)
+          example:
+            findable: []
+            accessible:
+              - "FsF-A1-01M: Access condition looks like license, therefore the following is ignored -: https://creativecommons.org/licenses/by/4.0/legalcode"
+              - "FsF-A1-01M: NO access information is available in metadata"
+              - "FsF-A1-01M: Unable to determine the access level"
+            interoperable:
+              - "FsF-I2-01M: NO known vocabulary namespace URI is found which is listed in  the LOD registry"
+            reusable: []
+
+        metadata:
+          type: object
+          description: OPTIONAL. Current Zenodo metadata object. If omitted, the server will fetch it from Zenodo.
+          example:
+              metadata:
+                upload_type: "dataset"
+                publication_date: "2025-12-22"
+                title: "Example new"
+                creators:
+                  - name: "Doe, Jane"
+                    affiliation: "Example University"
+                    orcid: "0000-0002-1694-233X"
+                    gnd: ""
+
+        zenodo_token:
+          type: string
+          description: OPTIONAL if ZENODO_API_TOKEN is set in server environment. Zenodo personal access token.
+          example: "zenodo_personal_access_token_here"
+
+        openai_api_key:
+          type: string
+          description: OPTIONAL if OPENAI_API_KEY is set in server environment. API key used to generate metadata improvements.
+          example: "sk-..."
+
+        openai_model:
+          type: string
+          description: OpenAI model to use for metadata improvement
+          default: "gpt-4o-mini"
+          example: "gpt-4o-mini"
+
+responses:
+  200:
+    description: Zenodo metadata improved and FAIR assessment re-run
+    schema:
+      type: object
+      properties:
+        identifier:
+          type: string
+          example: "10.5281/zenodo.18087782"
+
+        deposition_id:
+          type: integer
+          example: 18087782
+
+        llm_patch:
+          type: object
+          description: Metadata patch proposed by the LLM (Zenodo deposit metadata format)
+          example:
+            metadata:
+              related_identifiers:
+                - identifier: "http://purl.org/coar/access_right/c_abf2"
+                  relation: "isSupplementTo"
+                  resource_type: "other"
+                  scheme: "url"
+
+        merged_metadata:
+          type: object
+          description: Final metadata after patch application
+
+        zenodo_updated:
+          type: object
+          properties:
+            id:
+              type: integer
+              example: 18087782
+            state:
+              type: string
+              example: "done"
+            links:
+              type: object
+
+        fuji_summary:
+          type: object
+          description: FAIR score summary after update
+
+  400:
+    description: Invalid request or patch rejected
+
+  500:
+    description: Server error (Zenodo / OpenAI / F-UJI failure)

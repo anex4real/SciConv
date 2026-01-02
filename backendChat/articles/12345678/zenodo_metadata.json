@@ -1,23 +1,48 @@
 {
-  "metadata": {
-    "title": "Reproducibility package of a curated dataset of 18 computational experiments",
-    "publication_date": "2025-04-08",
-    "description": "This repository provides a curated dataset designed to address the critical need for standardized benchmarks in evaluating reproducibility tools. By encompassing a diverse collection of computational experiments across multiple scientific disciplines, this dataset facilitates the assessment of existing reproducibility tools while identifying areas for improvement.</p>\n<h2><strong>Dataset Composition</strong></h2>\n<p>The <a href=\"https://zenodo.org/records/15492423\">dataset previously published includes 18 curated experiments (E1&ndash;E18)</a> that successfully reproduced results using at least one reproducibility tool. These experiments span various research domains, reflecting the complexity and diversity of modern computational research:</p>\n<ul>\n<li><strong>Computer Science</strong>: Experiments sourced from <strong>IEEE/ACM ICSE 2022</strong> and <strong>VLDB 2021</strong>, covering topics such as software engineering, database management, and artificial intelligence.</li>\n<li><strong>Life Sciences</strong>: Climate change studies.</li>\n<li><strong>Health Sciences</strong>: Medical research.</li>\n<li><strong>Social Sciences &amp; Humanities</strong>: Economics and interdisciplinary computational research.</li>\n</ul>\n<p>Each experiment is carefully documented, providing:</p>\n<ul>\n<li>The original source code and data (where available).</li>\n<li>Metadata including programming languages, project size, and dependencies.</li>\n<li>Execution instructions to facilitate reproducibility.</li>\n</ul>\n<h2><strong>Purpose &amp; Applications</strong></h2>\n<p>This dataset serves as a <strong>benchmarking resource</strong> for researchers, developers, and tool creators working on reproducibility in computational science. It enables:</p>\n<ul>\n<li><strong>Comparative evaluation</strong> of reproducibility tools by testing real-world computational experiments.</li>\n<li><strong>Assessment of limitations</strong> in current platforms regarding dependency management, execution consistency, and software environment variability.</li>\n<li><strong>Advancement of reproducibility standards</strong> by promoting transparency, reliability, and cross-disciplinary collaboration.</li>\n</ul>\n<h2><strong>Reproducibility Tools Evaluated</strong></h2>\n<p>The dataset has been used to assess the capabilities of eight major reproducibility tools and our approach, including:</p>\n<ul>\n<li><strong>Binder (No package available)</strong></li>\n<li><strong>Code Ocean</strong></li>\n<li><strong>FLINC</strong></li>\n<li><strong>PTU</strong></li>\n<li><strong>Our (SciRep)</strong></li>\n<li><strong>ReproZip</strong></li>\n<li><strong>RenkuLab (No package available)</strong></li>\n<li><strong>Sciunit</strong></li>\n<li><strong>Whole Tale</strong></li>\n</ul>\n<p>The results highlight key challenges in modern computational reproducibility, including insufficient documentation, evolving software dependencies, and the need for more adaptable solutions.</p>",
-    "access_right": "open",
-    "creators": [
-      {
-        "name": "Costa, Lázaro",
-        "affiliation": "Universidade do Porto Faculdade de Engenharia",
-        "orcid": "0000-0002-6317-8792"
-      }
-    ],
-    "dates": [
-      {
-        "type": "submitted"
-      }
-    ],
-    "license": {
-      "id": "cc-by-4.0"
+  "title": "Reproducibility package of a curated dataset of 18 computational experiments",
+  "doi": "10.5281/zenodo.15166258",
+  "publication_date": "2025-04-08",
+  "description": "<h2><strong>Overview</strong></h2>\n<p>This repository provides a curated dataset designed to address the critical need for standardized benchmarks in evaluating reproducibility tools. By encompassing a diverse collection of computational experiments across multiple scientific disciplines, this dataset facilitates the assessment of existing reproducibility tools while identifying areas for improvement.</p>\n<h2><strong>Dataset Composition</strong></h2>\n<p>The <a href=\"https://zenodo.org/records/15492423\">dataset previously published includes 18 curated experiments (E1&ndash;E18)</a> that successfully reproduced results using at least one reproducibility tool. These experiments span various research domains, reflecting the complexity and diversity of modern computational research:</p>\n<ul>\n<li><strong>Computer Science</strong>: Experiments sourced from <strong>IEEE/ACM ICSE 2022</strong> and <strong>VLDB 2021</strong>, covering topics such as software engineering, database management, and artificial intelligence.</li>\n<li><strong>Life Sciences</strong>: Climate change studies.</li>\n<li><strong>Health Sciences</strong>: Medical research.</li>\n<li><strong>Social Sciences &amp; Humanities</strong>: Economics and interdisciplinary computational research.</li>\n</ul>\n<p>Each experiment is carefully documented, providing:</p>\n<ul>\n<li>The original source code and data (where available).</li>\n<li>Metadata including programming languages, project size, and dependencies.</li>\n<li>Execution instructions to facilitate reproducibility.</li>\n</ul>\n<h2><strong>Purpose &amp; Applications</strong></h2>\n<p>This dataset serves as a <strong>benchmarking resource</strong> for researchers, developers, and tool creators working on reproducibility in computational science. It enables:</p>\n<ul>\n<li><strong>Comparative evaluation</strong> of reproducibility tools by testing real-world computational experiments.</li>\n<li><strong>Assessment of limitations</strong> in current platforms regarding dependency management, execution consistency, and software environment variability.</li>\n<li><strong>Advancement of reproducibility standards</strong> by promoting transparency, reliability, and cross-disciplinary collaboration.</li>\n</ul>\n<h2><strong>Reproducibility Tools Evaluated</strong></h2>\n<p>The dataset has been used to assess the capabilities of eight major reproducibility tools and our approach, including:</p>\n<ul>\n<li><strong>Binder (No package available)</strong></li>\n<li><strong>Code Ocean</strong></li>\n<li><strong>FLINC</strong></li>\n<li><strong>PTU</strong></li>\n<li><strong>Our (SciRep)</strong></li>\n<li><strong>ReproZip</strong></li>\n<li><strong>RenkuLab (No package available)</strong></li>\n<li><strong>Sciunit</strong></li>\n<li><strong>Whole Tale</strong></li>\n</ul>\n<p>The results highlight key challenges in modern computational reproducibility, including insufficient documentation, evolving software dependencies, and the need for more adaptable solutions.</p>",
+  "access_right": "open",
+  "creators": [
+    {
+      "name": "Costa, Lázaro",
+      "affiliation": "Universidade do Porto Faculdade de Engenharia",
+      "orcid": "0000-0002-6317-8792"
+    },
+    {
+      "name": "Barbosa, Susana",
+      "affiliation": "INESC TEC",
+      "orcid": "0000-0003-2198-3715"
+    },
+    {
+      "name": "Cunha, Jácome",
+      "affiliation": "Universidade do Porto Faculdade de Engenharia",
+      "orcid": "0000-0002-4713-3834"
     }
+  ],
+  "dates": [
+    {
+      "type": "submitted"
+    }
+  ],
+  "resource_type": {
+    "title": "Physical object",
+    "type": "physicalobject"
+  },
+  "license": {
+    "id": "cc-by-4.0"
+  },
+  "relations": {
+    "version": [
+      {
+        "index": 3,
+        "is_last": true,
+        "parent": {
+          "pid_type": "recid",
+          "pid_value": "14101286"
+        }
+      }
+    ]
   }
 }

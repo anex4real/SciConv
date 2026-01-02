@@ -87,6 +87,15 @@ export class HomeComponent {
 
     /** Enviar mensagem (enter/click) */
     sendMessage() {
+        // If Dataset + an action form is active, submit it and stop.
+        if (this.appStage === AppStage.Dataset) {
+            const didSubmit = this.analysis.submitActionForm?.(); // return boolean
+            if (didSubmit) {
+                this.userMessage = '';
+                return;
+            }
+        }
+
         const text = (this.userMessage ?? '').trim();
         if (!text) return;
 
@@ -98,6 +107,8 @@ export class HomeComponent {
 
         this.userMessage = '';
     }
+
+
 
     /** Upload (REPRO) */
     onFileChangeRepro(event: any) {
@@ -142,6 +153,12 @@ export class HomeComponent {
         this.isAuthenticated = true;
         this.errorMessage = '';
     }
+    onDatasetActionClick(action: string) {
+        if (this.appStage !== AppStage.Dataset) return;
+        this.analysis.selectAction(action);
+    }
+
+
 
     /** Examples toggle */
     examplesVisibility: { [key: string]: boolean } = {};
@@ -152,9 +169,20 @@ export class HomeComponent {
     }
 
     isExamplesVisible(message: any): boolean {
+        // If there are no examples, never show the section
+        if (!message?.examples || !String(message.examples).trim()) return false;
+
         const messageId = message.id || message.contentShort;
         return !!this.examplesVisibility[messageId];
     }
+
+    isZenodoKey(key: string): boolean {
+        return key === 'zenodo_metadata'
+            || key === 'zenodo_metadata_template'
+            || key === 'zenodoMetadata';
+    }
+
+
 
     goToAppStart(resetWorkflows: boolean = false) {
         this.appStage = this.appStages.Start;
@@ -220,6 +248,8 @@ export class HomeComponent {
 
         return 'Unknown';
     }
+
+
 
 
 }

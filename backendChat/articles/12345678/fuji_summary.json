@@ -44,7 +44,9 @@
       "FsF-I2-01M: NO known vocabulary namespace URI is found which is listed in  the LOD registry"
     ],
     "reusable": [
-      "FsF-R1.2-01M: Formal provenance metadata is unavailable"
+      "FsF-R1.2-01M: Formal provenance metadata is unavailable",
+      "FsF-R1.3-01M: Request failed, status code -: https://zenodo.org/oai2d?verb=ListMetadataFormats, application/xml, text/xml;q=0.5 - 429",
+      "FsF-R1.3-01M: No response received from -: https://zenodo.org/oai2d?verb=ListMetadataFormats, application/xml, text/xml;q=0.5"
     ]
   }
 }

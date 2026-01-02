@@ -21,17 +21,14 @@
       }
     ],
     "description": "<p>This dataset contains hourly coastal sea-surface temperature measurements from three sensor stations collected between 2018 and 2024. Data are provided as CSV files with accompanying README documentation and quality-control flags.</p>",
-    "access_right": "open",
-    "license": "cc-by-4.0",
+
     "embargo_date": "",
-    "access_conditions": "",
     "keywords": [
       "sea surface temperature",
       "coastal monitoring",
       "oceanography",
       "time series"
     ],
-    "notes": "<p>Quality control applied: outlier removal using median absolute deviation and sensor drift correction.</p>",
     "references": [
       "Doe J (2024). Coastal monitoring methods. Example Publisher. DOI:10.1234/example.ref1",
       "Smith J (2023). Temperature sensor calibration. Example Publisher. DOI:10.1234/example.ref2"
@@ -86,13 +83,7 @@
       "supervisors": [],
       "university": ""
     },
-    "subjects": [
-      {
-        "term": "Oceanography",
-        "identifier": "http://id.loc.gov/authorities/subjects/sh85093990",
-        "scheme": "url"
-      }
-    ],
+
     "language": "eng",
     "locations": [
       {
@@ -116,6 +107,20 @@
         "description": "Primary measurement collection period."
       }
     ],
-    "method": "<p>Sea-surface temperature was recorded hourly using calibrated thermistor sensors. Data were transmitted via cellular telemetry, aggregated daily, and validated using automated QC rules and manual spot checks.</p>"
+    "method": "<p>Sea-surface temperature was recorded hourly using calibrated thermistor sensors. Data were transmitted via cellular telemetry, aggregated daily, and validated using automated QC rules and manual spot checks.</p>",
+
+
+
+    "notes": "<p>Quality control applied: outlier removal using median absolute deviation and sensor drift correction.</p>",
+    "access_conditions": "",
+    "access_right": "open",
+    "license": "cc-by-4.0",
+        "subjects": [
+      {
+        "term": "Oceanography",
+        "identifier": "http://id.loc.gov/authorities/subjects/sh85093990",
+        "scheme": "url"
+      }
+    ]
   }
 }

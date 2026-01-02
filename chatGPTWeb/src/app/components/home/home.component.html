@@ -31,7 +31,7 @@
                                     </span>
 
                                     <!-- Object vs primitive/array -->
-                                    <ng-container *ngIf="isObject(message.contentShort[key]); else showValue">
+                                    <ng-container *ngIf="isObject(message.contentShort[key]) || isZenodoKey(key); else showValue">
 
                                         <!-- Special FAIR rendering -->
                                         <ng-container *ngIf="key === 'fuji_summary' && hasFujiSummary(message.contentShort[key]);
@@ -39,7 +39,10 @@
 
                                             <div class="fair-summary">
                                                 <div class="fair-header">
-                                                    <div><strong>FAIR score:</strong> {{ message.contentShort[key]?.score_percent_fair }}%</div>
+                                                    <div><strong>FAIR
+                                                        score:</strong> {{ message.contentShort[key]?.score_percent_fair }}
+                                                        %
+                                                    </div>
                                                     <div>
                                                         <strong>Maturity:</strong>
                                                         {{ message.contentShort[key]?.maturity_fair }}
@@ -68,9 +71,10 @@
                                             </div>
 
                                             <!-- WARNINGS BY DIMENSION -->
-                                            <div class="fair-warnings" *ngIf="message.contentShort[key]?.warnings_by_dimension as wbd">
+                                            <div class="fair-warnings"
+                                                 *ngIf="message.contentShort[key]?.warnings_by_dimension as wbd">
 
-                                                    <h3 class="mt-2">Warnings</h3>
+                                                <h3 class="mt-2">Warnings</h3>
 
                                                 <div *ngFor="let dim of warningDimsOrder()">
                                                     <div *ngIf="wbd?.[dim]?.length">
@@ -102,8 +106,11 @@
                                                     <div><strong>Title:</strong> {{ zm.title }}</div>
                                                     <div><strong>DOI:</strong> {{ zm.doi || '-' }}</div>
                                                     <div><strong>Upload type:</strong> {{ zm.uploadType }}</div>
-                                                    <div><strong>Access:</strong> {{ zm.accessRight }} <span *ngIf="zm.license">({{ zm.license }})</span></div>
-                                                    <div><strong>Publication date:</strong> {{ zm.publicationDate || '-' }}</div>
+                                                    <div><strong>Access:</strong> {{ zm.accessRight }} <span
+                                                            *ngIf="zm.license">({{ zm.license }})</span></div>
+                                                    <div><strong>Publication
+                                                        date:</strong> {{ zm.publicationDate || '-' }}
+                                                    </div>
 
                                                     <div class="mt-2" *ngIf="zm.creators?.length">
                                                         <strong>Creators</strong>
@@ -172,6 +179,7 @@
                             {{ isExamplesVisible(message) ? 'Hide Examples' : 'Show Examples' }}
                         </a>
                     </div>
+
                 </div>
             </div>
         </div>
@@ -189,7 +197,8 @@
                             <li>A single source file (e.g., <code>.py</code>, <code>.cpp</code>)</li>
                             <li>A <code>.zip</code> file containing a project folder</li>
                         </ul>
-                        <p>The system will automatically assign a project name based on your upload and the current date.</p>
+                        <p>The system will automatically assign a project name based on your upload and the current
+                            date.</p>
                     </div>
 
                     <form class="upload-form" (ngSubmit)="onSubmitRepro()" #fileUploadFormRepro="ngForm">
@@ -214,12 +223,15 @@
                             <li>A scientific article in PDF format</li>
                         </ul>
                         <p>
-                            The system analyzes the article to identify datasets and data-containing artifacts used by the authors.
+                            The system analyzes the article to identify datasets and data-containing artifacts used by
+                            the authors.
                             It checks whether these datasets are properly referenced or linked.
                         </p>
                         <p>
-                            If a dataset is missing a reference or link, a FAIR-compliant dataset package is created with the required
-                            metadata. If a reference or link is provided, the dataset is validated for FAIR compliance and metadata
+                            If a dataset is missing a reference or link, a FAIR-compliant dataset package is created
+                            with the required
+                            metadata. If a reference or link is provided, the dataset is validated for FAIR compliance
+                            and metadata
                             completeness.
                         </p>
                     </div>
@@ -237,6 +249,132 @@
             </div>
 
         </ng-container>
+        <!-- Actions from backend (Dataset mode) -->
+        <div
+                *ngIf="appStage === appStages.Dataset
+                  && isDataState(s)
+                  && s.availableActions?.length"
+                class="chat-input"
+        >
+            <div style="display:flex; gap:8px; flex-wrap:wrap;">
+                <button
+                        type="button"
+                        *ngFor="let a of s.availableActions"
+                        [disabled]="s.isLoading"
+                        (click)="onDatasetActionClick(a)"
+                >
+                    {{ a }}
+                </button>
+            </div>
+        </div>
+        <!-- Action form (Dataset mode) -->
+        <div *ngIf="appStage === appStages.Dataset && isDataState(s) && s.uiAction" class="chat-input">
+            <div style="display:flex; flex-direction:column; gap:10px; width:100%;">
+                <div><strong>Selected action:</strong> {{ s.uiAction }}</div>
+
+                <!-- infer -->
+                <ng-container *ngIf="s.uiAction === 'infer'">
+                    <label>Choose dataset (non-referenced)</label>
+                    <select [(ngModel)]="s.uiDatasetName">
+                        <option [ngValue]="undefined">-- select --</option>
+                        <option *ngFor="let d of s.nonReferencedDatasets" [ngValue]="d">{{ d }}</option>
+                    </select>
+                </ng-container>
+
+                <!-- improve -->
+                <ng-container *ngIf="s.uiAction === 'improve'">
+                    <label>Choose dataset (referenced)</label>
+                    <select [(ngModel)]="s.uiDatasetName">
+                        <option [ngValue]="undefined">-- select --</option>
+                        <option *ngFor="let d of s.referencedDatasets" [ngValue]="d.split('|')[0].trim()">
+                            {{ d.split('|')[0].trim() }}
+                        </option>
+
+                    </select>
+                </ng-container>
+
+                <!-- list selection for add/update/delete -->
+                <ng-container *ngIf="s.uiAction === 'add' || s.uiAction === 'update' || s.uiAction === 'delete'">
+                    <label>Choose list</label>
+                    <select [(ngModel)]="s.uiListKind">
+                        <option [ngValue]="undefined">-- select --</option>
+                        <option [ngValue]="'referenced'">referenced</option>
+                        <option [ngValue]="'non-referenced'">non-referenced</option>
+                    </select>
+                </ng-container>
+
+                <!-- add -->
+                <ng-container *ngIf="s.uiAction === 'add'">
+                    <ng-container *ngIf="s.uiListKind === 'non-referenced'">
+                        <label>Dataset name</label>
+                        <input [(ngModel)]="s.uiDatasetName" placeholder="Type dataset name..." />
+                    </ng-container>
+
+                    <ng-container *ngIf="s.uiListKind === 'referenced'">
+                        <label>Dataset name</label>
+                        <input [(ngModel)]="s.uiDatasetName" placeholder="Type dataset name..." />
+                        <label>Zenodo DOI/URL</label>
+                        <input [(ngModel)]="s.uiZenodoRef" placeholder="https://doi.org/10.5281/zenodo...." />
+                    </ng-container>
+                </ng-container>
+
+                <!-- delete -->
+                <ng-container *ngIf="s.uiAction === 'delete'">
+                    <ng-container *ngIf="s.uiListKind === 'non-referenced'">
+                        <label>Choose dataset to delete</label>
+                        <select [(ngModel)]="s.uiDatasetName">
+                            <option [ngValue]="undefined">-- select --</option>
+                            <option *ngFor="let d of s.nonReferencedDatasets" [ngValue]="d">{{ d }}</option>
+                        </select>
+                    </ng-container>
+
+                    <ng-container *ngIf="s.uiListKind === 'referenced'">
+                        <label>Choose dataset to delete</label>
+                        <select [(ngModel)]="s.uiDatasetName">
+                            <option [ngValue]="undefined">-- select --</option>
+                            <option *ngFor="let d of s.referencedDatasets" [ngValue]="d.split('|')[0].trim()">
+                                {{ d.split('|')[0].trim() }}
+                            </option>
+
+                        </select>
+                    </ng-container>
+                </ng-container>
+
+                <!-- update -->
+                <ng-container *ngIf="s.uiAction === 'update'">
+                    <ng-container *ngIf="s.uiListKind === 'non-referenced'">
+                        <label>Choose dataset to update</label>
+                        <select [(ngModel)]="s.uiDatasetName">
+                            <option [ngValue]="undefined">-- select --</option>
+                            <option *ngFor="let d of s.nonReferencedDatasets" [ngValue]="d">{{ d }}</option>
+                        </select>
+
+                        <label>New dataset name</label>
+                        <input [(ngModel)]="s.uiNewDatasetName" placeholder="Type new name..." />
+                    </ng-container>
+
+                    <ng-container *ngIf="s.uiListKind === 'referenced'">
+                        <label>Choose dataset to update</label>
+                        <select [(ngModel)]="s.uiDatasetName">
+                            <option [ngValue]="undefined">-- select --</option>
+                            <option *ngFor="let d of s.referencedDatasets" [ngValue]="d.split('|')[0].trim()">
+                                {{ d.split('|')[0].trim() }}
+                            </option>
+                        </select>
+
+                        <label>New dataset name (optional)</label>
+                        <input [(ngModel)]="s.uiNewDatasetName" placeholder="Type new name..." />
+
+                        <label>New Zenodo DOI/URL (optional)</label>
+                        <input [(ngModel)]="s.uiZenodoRef" placeholder="https://doi.org/10.5281/zenodo...." />
+                    </ng-container>
+                </ng-container>
+
+            </div>
+        </div>
+
+
+
 
         <!-- Chat input (when not in App Start) -->
         <div class="chat-input" *ngIf="appStage != appStages.Start">

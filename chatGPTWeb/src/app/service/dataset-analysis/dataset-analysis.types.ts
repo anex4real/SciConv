@@ -8,6 +8,7 @@ export enum DataStages {
     WaitChatInteractionArticle = 'WaitChatInteractionArticle',
     DatasetCompleted = 'DatasetCompleted'
 }
+export type DatasetListKind = 'referenced' | 'non-referenced';
 
 export interface DataState {
     stage: DataStages;
@@ -16,10 +17,36 @@ export interface DataState {
     messageToAsk?: string;
     examplesToAsk?: string;
     stageAfterChat?: DataStages;
+    // ...existing
+    availableActions?: string[];
+    menuActions?: string[];
+    // ✅ NEW: snapshot of messages right after upload (menu)
+    menuMessages?: Message[];
+
+    // ✅ optionally, also store the exact menu message (last assistant message)
+    menuMessage?: Message;
+
+    // UI selection for action-driven form
+    uiAction?: 'infer' | 'improve' | 'add' | 'update' | 'delete' | 'create' | 'update metadata' | 'go to menu';
+    uiListKind?: DatasetListKind;
+    uiDatasetName?: string;
+    uiInstructions?: string;   // backend "instructions"
+
+
+    // Inputs for referenced add/update
+    uiZenodoRef?: string;
+
+    // For update: editable name (optional rename)
+    uiNewDatasetName?: string;
+
+    // For update/add referenced: optionally allow editing the full entry
+    // (you can extend later)
 
 
     referencedDatasets?: string[];
     nonReferencedDatasets?: string[];
+
+    activeDatasetName?: string;
 
     selectedAction?: 'infer' | 'improve';
     selectedDatasetName?: string;

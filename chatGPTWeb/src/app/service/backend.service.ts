@@ -139,21 +139,14 @@ export class BackendService {
         return this.http.post(`${this.baseUrl}/article/upload-file`, formData,
             {headers: this.headers});
     }
-    // Decide next step based on user's message (infer vs improve + dataset name)
-    datasetChooseNextStep(projectUuid: string, messages: Message[]) {
-        return this.http.post(
-            `${this.baseUrl}/article/${projectUuid}/choose-next-step`,
-            { messages },
-            { headers: this.headers }
-        );
-    }
+
 
 // Infer metadata for a NON-referenced dataset (user provides datasetName)
     datasetInferMetadata(projectUuid: string, datasetName: string, messages: Message[]) {
         return this.http.post(
             `${this.baseUrl}/article/${projectUuid}/infer-metadata`,
-            { datasetName, messages },
-            { headers: this.headers }
+            {datasetName, messages},
+            {headers: this.headers}
         );
     }
 
@@ -161,8 +154,8 @@ export class BackendService {
     datasetImproveMetadata(projectUuid: string, datasetName: string, messages: Message[]) {
         return this.http.post(
             `${this.baseUrl}/article/${projectUuid}/improve-metadata`,
-            { datasetName, messages },
-            { headers: this.headers }
+            {datasetName, messages},
+            {headers: this.headers}
         );
     }
 
@@ -170,9 +163,21 @@ export class BackendService {
     articleChatInteraction(projectUuid: string, messages: Message[]) {
         return this.http.post(
             `${this.baseUrl}/article/${projectUuid}/chat-interaction`,
-            { messages },
+            {messages},
+            {headers: this.headers}
+        );
+    }
+
+    datasetCreateZenodo(projectUuid: string, formData: FormData) {
+        return this.http.post(
+            `${this.baseUrl}/article/${projectUuid}/create-dataset-zenodo`,
+            formData,
             { headers: this.headers }
         );
     }
+
+
+
+
 
 }
