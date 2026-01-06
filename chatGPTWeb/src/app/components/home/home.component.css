@@ -78,6 +78,20 @@
     padding: 10px;
     background: #fff;
 }
+/* --- FIX: allow the editor to take half page inside .chat-input flex row --- */
+.chat-input app-zenodo-metadata-editor {
+    flex: 0 0 50vw;         /* take half viewport width */
+    max-width: 700px;
+    min-width: 420px;
+    width: 50vw;            /* fallback */
+    margin: 0 auto;         /* center in available space */
+}
+
+/* Ensure the editor's internal wrapper fills its host */
+.chat-input app-zenodo-metadata-editor .zm-editor {
+    width: 100%;
+}
+
 
 .chat-input input {
     flex: 1;

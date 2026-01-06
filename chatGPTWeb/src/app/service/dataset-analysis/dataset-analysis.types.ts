@@ -6,7 +6,9 @@ export enum DataStages {
     InferDatasetMetadata = 'InferDatasetMetadata',
     ImproveDatasetMetadata = 'ImproveDatasetMetadata',
     WaitChatInteractionArticle = 'WaitChatInteractionArticle',
-    DatasetCompleted = 'DatasetCompleted'
+    DatasetCompleted = 'DatasetCompleted',
+EditZenodoMetadata = 'EditZenodoMetadata',
+
 }
 export type DatasetListKind = 'referenced' | 'non-referenced';
 
@@ -17,16 +19,13 @@ export interface DataState {
     messageToAsk?: string;
     examplesToAsk?: string;
     stageAfterChat?: DataStages;
-    // ...existing
     availableActions?: string[];
     menuActions?: string[];
-    // ✅ NEW: snapshot of messages right after upload (menu)
     menuMessages?: Message[];
+    depositionId?: number;
 
-    // ✅ optionally, also store the exact menu message (last assistant message)
     menuMessage?: Message;
 
-    // UI selection for action-driven form
     uiAction?: 'infer' | 'improve' | 'add' | 'update' | 'delete' | 'create' | 'update metadata' | 'go to menu';
     uiListKind?: DatasetListKind;
     uiDatasetName?: string;
@@ -57,6 +56,8 @@ export interface DataState {
     goBack: number;
     articleUuid: string;
     zenodoMetadataView?: ZenodoMetadataView;
+    zenodoTemplate?: any;
+    zenodoMetadataDraft?: any;
 }
 
 

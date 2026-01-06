@@ -31,7 +31,8 @@
                                     </span>
 
                                     <!-- Object vs primitive/array -->
-                                    <ng-container *ngIf="isObject(message.contentShort[key]) || isZenodoKey(key); else showValue">
+                                    <ng-container
+                                            *ngIf="isObject(message.contentShort[key]) || isZenodoKey(key); else showValue">
 
                                         <!-- Special FAIR rendering -->
                                         <ng-container *ngIf="key === 'fuji_summary' && hasFujiSummary(message.contentShort[key]);
@@ -307,14 +308,14 @@
                 <ng-container *ngIf="s.uiAction === 'add'">
                     <ng-container *ngIf="s.uiListKind === 'non-referenced'">
                         <label>Dataset name</label>
-                        <input [(ngModel)]="s.uiDatasetName" placeholder="Type dataset name..." />
+                        <input [(ngModel)]="s.uiDatasetName" placeholder="Type dataset name..."/>
                     </ng-container>
 
                     <ng-container *ngIf="s.uiListKind === 'referenced'">
                         <label>Dataset name</label>
-                        <input [(ngModel)]="s.uiDatasetName" placeholder="Type dataset name..." />
+                        <input [(ngModel)]="s.uiDatasetName" placeholder="Type dataset name..."/>
                         <label>Zenodo DOI/URL</label>
-                        <input [(ngModel)]="s.uiZenodoRef" placeholder="https://doi.org/10.5281/zenodo...." />
+                        <input [(ngModel)]="s.uiZenodoRef" placeholder="https://doi.org/10.5281/zenodo...."/>
                     </ng-container>
                 </ng-container>
 
@@ -350,7 +351,7 @@
                         </select>
 
                         <label>New dataset name</label>
-                        <input [(ngModel)]="s.uiNewDatasetName" placeholder="Type new name..." />
+                        <input [(ngModel)]="s.uiNewDatasetName" placeholder="Type new name..."/>
                     </ng-container>
 
                     <ng-container *ngIf="s.uiListKind === 'referenced'">
@@ -363,10 +364,10 @@
                         </select>
 
                         <label>New dataset name (optional)</label>
-                        <input [(ngModel)]="s.uiNewDatasetName" placeholder="Type new name..." />
+                        <input [(ngModel)]="s.uiNewDatasetName" placeholder="Type new name..."/>
 
                         <label>New Zenodo DOI/URL (optional)</label>
-                        <input [(ngModel)]="s.uiZenodoRef" placeholder="https://doi.org/10.5281/zenodo...." />
+                        <input [(ngModel)]="s.uiZenodoRef" placeholder="https://doi.org/10.5281/zenodo...."/>
                     </ng-container>
                 </ng-container>
 
@@ -374,10 +375,29 @@
         </div>
 
 
+        <!-- ✅ Edit Zenodo Metadata -->
+        <div
+                *ngIf="appStage === appStages.Dataset
+    && isDataState(s)
+    && s.stage === dataStages.EditZenodoMetadata"
+                class="chat-input"
+        >
+            <app-zenodo-metadata-editor
+                    [template]="s.zenodoTemplate"
+                    [draft]="s.zenodoMetadataDraft"
+                    (save)="onSaveZenodoMetadata($event)"
+                    (cancel)="analysis.selectAction('go to menu')"
+            ></app-zenodo-metadata-editor>
+        </div>
 
 
         <!-- Chat input (when not in App Start) -->
-        <div class="chat-input" *ngIf="appStage != appStages.Start">
+        <div
+                class="chat-input"
+                *ngIf="appStage != appStages.Start
+      && (!isDataState(s) || s.stage !== dataStages.EditZenodoMetadata)"
+        >
+
             <input [(ngModel)]="userMessage" placeholder="Type your message here..." (keydown.enter)="sendMessage()"/>
             <button type="submit" [disabled]="s.isLoading" (click)="sendMessage()">
                 <span *ngIf="!s.isLoading">Send</span>

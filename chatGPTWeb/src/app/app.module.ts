@@ -11,13 +11,14 @@ import {AlertModule} from "./service/_alert/alert.module";
 import {RoutingModule} from './routing/routing.module';
 
 import {HTTP_INTERCEPTORS, HttpClientModule} from '@angular/common/http';
-import {FormsModule} from "@angular/forms";
+import {FormsModule, ReactiveFormsModule} from "@angular/forms";
 import {BrowserModule, Title} from '@angular/platform-browser';
 import {platformBrowserDynamic} from '@angular/platform-browser-dynamic';
 import {NgModule} from "@angular/core";
 import {BrowserAnimationsModule} from "@angular/platform-browser/animations";
 import {SurveyPairsComponent} from "./components/survey-pairs/survey-pairs.component";
 import {SurveyComponent} from "./components/survey/survey.component";
+import {ZenodoMetadataEditorComponent} from "./components/zenodo-metadata-editor/zenodo-metadata-editor.component";
 
 
 @NgModule({
@@ -29,6 +30,7 @@ import {SurveyComponent} from "./components/survey/survey.component";
         AlertModule,
         FormsModule,
         BrowserAnimationsModule,
+        ReactiveFormsModule,
 
 
     ],
@@ -43,7 +45,8 @@ import {SurveyComponent} from "./components/survey/survey.component";
         HomeComponent,
         FooterComponent,
         SurveyPairsComponent,
-        SurveyComponent
+        SurveyComponent,
+        ZenodoMetadataEditorComponent
     ],
     bootstrap: [
         AppComponent

@@ -37,6 +37,8 @@ export class DatasetAnalysisService {
 
         isLoading: false,
         errorMessage: undefined,
+        zenodoTemplate: undefined,
+        zenodoMetadataDraft: undefined,
 
         GO_BACK_NUMBER: 3,
         goBack: 3,
@@ -85,7 +87,7 @@ export class DatasetAnalysisService {
                 this.patch({ menuMessages: msgs });
 
                 const last = msgs?.[msgs.length - 1];
-                const c = last?.contentShort ?? last?.content;
+                const c = last?.content ?? last?.contentShort;
 
                 if (c?.instructions) this.patch({ uiInstructions: c.instructions });
 
@@ -139,21 +141,43 @@ export class DatasetAnalysisService {
         // IMPORTANT: do NOT change stages here.
         // The UI form will appear and user will click Send.
     }
+    saveEditedMetadata() {
+        const draft = this.state.zenodoMetadataDraft;
+        const template = this.state.zenodoTemplate;
+
+        if (!draft) {
+            this.patch({ errorMessage: 'Missing metadata draft.' });
+            return;
+        }
+
+
+        this.patch({
+            zenodoMetadataDraft: this.deepClone(draft),
+            errorMessage: undefined
+        });
+    }
+
+
 
     submitActionForm(): boolean {
         const a = this.state.uiAction;
         if (!a) return false; // nothing to submit
 
         if (a === 'update metadata') {
-            // ✅ for now: route user to chat interaction stage (or open a form)
+            if (!this.state.zenodoTemplate || !this.state.zenodoMetadataDraft) {
+                this.patch({ errorMessage: 'No metadata/template available. Please run infer or improve first.' });
+                return true;
+            }
+
             this.patch({
-                stage: DataStages.WaitChatInteractionArticle,
-                messageToAsk: 'Please provide what you want to update in the Zenodo metadata (or paste the updated fields).',
+                stage: DataStages.EditZenodoMetadata,
+                errorMessage: undefined,
             });
-            this.performActionBasedOnStage(DataStages.WaitChatInteractionArticle);
+
             this.clearUiActionForm();
             return true;
         }
+
 
 
         // ---------- CREATE (backend) ----------
@@ -491,6 +515,58 @@ export class DatasetAnalysisService {
             errorMessage: undefined,
         });
     }
+    editZenodoOnBackend(cleanedMetadata: any, zenodoToken?: string) {
+        const articleUuid = this.state.articleUuid;
+        let depositionId = this.state.depositionId;
+
+        if (!articleUuid) {
+            this.patch({ errorMessage: 'Missing article UUID.' });
+            return;
+        }
+        //todo
+        depositionId=1234
+        /*if (!depositionId) {
+            this.patch({ errorMessage: 'Missing deposition id. Create the Zenodo deposition first.' });
+            return;
+        }*/
+
+        const formData = new FormData();
+
+        // ✅ backend requires top-level "metadata"
+        formData.append('metadata', JSON.stringify({ metadata: cleanedMetadata }));
+
+        // optional token
+        if (zenodoToken) formData.append('zenodo_token', zenodoToken);
+
+        // optional flag
+        formData.append('replace_files', 'false');
+
+        this.patch({ isLoading: true, errorMessage: undefined });
+
+        this.backend.datasetEditZenodo(articleUuid, depositionId, formData).subscribe({
+            next: (response: any) => {
+                this.patch({ isLoading: false });
+
+                // if backend returns updated deposition/metadata you can refresh view here
+                const dep = response?.deposition;
+                const meta = dep?.metadata ? { metadata: dep.metadata } : null;
+
+                if (meta) {
+                    this.patch({
+                        zenodoMetadataView: this.buildZenodoMetadataView(meta),
+                        zenodoMetadataDraft: this.deepClone(dep.metadata),
+                    });
+                }
+
+                // go back to menu
+                this.selectAction('go to menu');
+            },
+            error: () => {
+                this.patch({ isLoading: false, errorMessage: 'Failed to edit Zenodo deposition.' });
+            }
+        });
+    }
+
 
     private createRepositoryOnBackend( datasetName: string,
                                        nonReferenced: string[] = [],
@@ -769,7 +845,7 @@ export class DatasetAnalysisService {
                   this.pushMessages(...response);
 
                   const last = response?.[response.length - 1];
-                  const c = last?.contentShort ?? last?.content;
+                  const c = last?.content ?? last?.contentShort;
                   if (c?.zenodo_metadata) {
                       this.patch({ zenodoMetadataView: this.buildZenodoMetadataView(c.zenodo_metadata) });
                   }
@@ -806,36 +882,65 @@ export class DatasetAnalysisService {
           });*/
     }
 
-
     private inferMetadataOnBackend(datasetName: string) {
         this.patch({ isLoading: true, errorMessage: undefined });
 
-        this.backend.datasetInferMetadata(this.state.articleUuid, datasetName, this.state.messages).subscribe({
-            next: (response: any) => {
-                this.patch({ isLoading: false });
+        this.backend
+            .datasetInferMetadata(this.state.articleUuid, datasetName, this.state.messages)
+            .subscribe({
+                next: (response: any) => {
+                    this.patch({ isLoading: false });
 
-                // ✅ NEW: response is { actions, messages }
-                const actions = response?.actions ?? [];
-                const msgs = response?.messages ?? response ?? [];
+                    // ✅ response is { actions, messages }
+                    const actions = response?.actions ?? [];
+                    const msgs = response?.messages ?? [];
 
-                this.patch({ availableActions: actions });
-                this.pushMessages(...msgs);
+                    this.patch({ availableActions: actions });
+                    this.pushMessages(...msgs);
 
-                const last = msgs?.[msgs.length - 1];
-                const c = last?.contentShort ?? last?.content;
+                    const last = msgs?.[msgs.length - 1];
 
-                if (c?.instructions) this.patch({ uiInstructions: c.instructions });
-                const zmRaw = c?.zenodo_metadata;
-                if (zmRaw) {
-                    this.patch({ zenodoMetadataView: this.buildZenodoMetadataView(zmRaw) });
-                }
+                    // ✅ IMPORTANT: prefer content, fallback to contentShort
+                    const c = last?.content ?? last?.contentShort;
 
-                // stage (if backend includest)
-                if (last?.stage) this.changeStage(last.stage);
-            },
-            error: () => this.patch({ isLoading: false, errorMessage: 'Failed to infer dataset metadata.' })
-        });
+                    if (c?.instructions) this.patch({ uiInstructions: c.instructions });
+
+                    // ---- 1) template/schema ----
+                    const tplRaw = c?.template;
+                    const templateObj = (tplRaw?.metadata ?? tplRaw) ?? undefined;
+
+                    if (templateObj) {
+                        this.patch({ zenodoTemplate: templateObj });
+                    }
+
+                    // ---- 2) metadata/values ----
+                    const zmRaw = c?.zenodo_metadata;
+
+                    if (zmRaw) {
+                        const first = Array.isArray(zmRaw) ? (zmRaw[0] ?? {}) : zmRaw;
+                        const metadataObj = (first?.metadata ?? first) ?? {};
+
+                        // ✅ summary view (your existing UI)
+                        const view = this.buildZenodoMetadataView(zmRaw);
+
+                        // ✅ draft MUST be ONLY values (do not merge schema into it)
+                        this.patch({
+                            zenodoMetadataView: view,
+                            zenodoMetadataDraft: this.deepClone(metadataObj),
+                        });
+                    } else if (!this.state.zenodoMetadataDraft) {
+                        // if backend sent only template, start with empty values
+                        this.patch({ zenodoMetadataDraft: {} });
+                    }
+
+                    // stage (if backend includes it)
+                    if (last?.stage) this.changeStage(last.stage);
+                },
+                error: () =>
+                    this.patch({ isLoading: false, errorMessage: 'Failed to infer dataset metadata.' }),
+            });
     }
+
 
 
     private improveMetadataOnBackend(datasetName: string) {
@@ -852,7 +957,7 @@ export class DatasetAnalysisService {
                 this.pushMessages(...msgs);
 
                 const last = msgs?.[msgs.length - 1];
-                const c = last?.contentShort ?? last?.content;
+                const c = last?.content ?? last?.contentShort;
                 const zmRaw = c?.zenodo_metadata;
                 if (zmRaw) {
                     this.patch({ zenodoMetadataView: this.buildZenodoMetadataView(zmRaw) });
@@ -885,7 +990,7 @@ export class DatasetAnalysisService {
                 this.pushMessages(...response);
 
                 const last = response?.[response.length - 1];
-                const c = last?.contentShort ?? last?.content;
+                const c = last?.content ?? last?.contentShort;
                 const zmRaw = c?.zenodo_metadata;
                 if (zmRaw) {
                     this.patch({ zenodoMetadataView: this.buildZenodoMetadataView(zmRaw) });
@@ -1108,5 +1213,37 @@ export class DatasetAnalysisService {
             return;
         }
     }
+
+    private deepClone<T>(x: T): T {
+        return x == null ? x : JSON.parse(JSON.stringify(x));
+    }
+
+    private deepMerge(target: any, source: any): any {
+        if (source == null) return target;
+
+        if (Array.isArray(target) && Array.isArray(source)) {
+            // prefer source for arrays (user/backend values override template)
+            return source;
+        }
+
+        if (this.isPlainObject(target) && this.isPlainObject(source)) {
+            for (const k of Object.keys(source)) {
+                if (k in target) target[k] = this.deepMerge(target[k], source[k]);
+                else target[k] = source[k];
+            }
+            return target;
+        }
+
+        // primitives: prefer source
+        return source;
+    }
+
+    private isPlainObject(v: any): boolean {
+        return v != null && typeof v === 'object' && !Array.isArray(v);
+    }
+    setZenodoDraft(draft: any) {
+        this.patch({ zenodoMetadataDraft: draft });
+    }
+
 
 }

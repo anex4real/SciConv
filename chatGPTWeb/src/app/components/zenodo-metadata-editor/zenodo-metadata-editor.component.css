@@ -1,0 +1,246 @@
+/* zenodo-metadata-editor.component.css */
+
+/* ✅ Make sure the COMPONENT ITSELF is half-page and not shrinkable */
+:host {
+    display: block;
+    box-sizing: border-box;
+
+    width: 50vw;          /* half of the viewport */
+    max-width: 700px;     /* cap */
+    min-width: 420px;     /* safety */
+    margin: 0 auto;       /* center */
+
+    /* important if parent is flex and tries to shrink it */
+    flex: 0 0 auto;
+}
+
+/* ✅ Inner wrapper should fill the host */
+.zm-editor {
+    width: 100%;
+    box-sizing: border-box;
+    padding: 14px;
+}
+
+/* Card */
+.zm-card {
+    background: #fff;
+    border: 1px solid #e6e8ef;
+    border-radius: 12px;
+    box-shadow: 0 1px 2px rgba(10, 20, 30, 0.04);
+    padding: 14px;
+}
+
+/* Header */
+.zm-header {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 12px;
+    margin-bottom: 12px;
+}
+
+.zm-title {
+    margin: 0;
+    font-size: 18px;
+    font-weight: 700;
+    color: #0f172a;
+}
+
+.zm-subtitle {
+    margin: 4px 0 0;
+    color: #64748b;
+    font-size: 13px;
+    line-height: 1.35;
+}
+
+/* Grid layout */
+.zm-form {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 12px;
+}
+
+@media (min-width: 860px) {
+    .zm-form.two-col {
+        grid-template-columns: 1fr 1fr;
+        gap: 14px 16px;
+    }
+}
+
+/* Field block */
+.zm-field {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.zm-label {
+    font-size: 12.5px;
+    font-weight: 600;
+    color: #334155;
+    word-break: break-word;
+}
+
+/* ✅ Scope label + inputs to editor */
+.zm-editor label {
+    display: block;
+    font-weight: 600;
+    margin-bottom: 4px;
+}
+
+/* ✅ Large inputs (scoped) */
+.zm-editor input[type="text"],
+.zm-editor input[type="number"],
+.zm-editor input[type="date"],
+.zm-editor select,
+.zm-editor textarea {
+    width: 100%;
+    min-height: 44px;
+    padding: 10px 12px;
+    font-size: 15px;
+    border-radius: 8px;
+    box-sizing: border-box;
+
+    border: 1px solid #d7dbe7;
+    background: #fff;
+    color: #0f172a;
+    outline: none;
+    transition: border-color 120ms ease, box-shadow 120ms ease;
+}
+
+.zm-editor textarea {
+    min-height: 120px;
+    resize: vertical;
+}
+
+.zm-editor input:focus,
+.zm-editor select:focus,
+.zm-editor textarea:focus {
+    border-color: #93c5fd;
+    box-shadow: 0 0 0 4px rgba(59, 130, 246, 0.15);
+}
+
+/* Required / invalid */
+.zm-invalid input,
+.zm-invalid select,
+.zm-invalid textarea {
+    border-color: #fca5a5;
+}
+
+.zm-error {
+    font-size: 12px;
+    color: #b91c1c;
+    margin-top: 2px;
+}
+
+.zm-help {
+    font-size: 12px;
+    color: #64748b;
+}
+
+/* Section / nested objects */
+.zm-fieldset,
+.zm-editor fieldset {
+    width: 100%;
+    border: 1px solid #e6e8ef;
+    border-radius: 12px;
+    padding: 12px;
+    background: #fbfcff;
+    margin-bottom: 14px;
+}
+
+.zm-legend,
+.zm-editor legend {
+    padding: 0 8px;
+    font-size: 13px;
+    font-weight: 700;
+    color: #0f172a;
+    word-break: break-word;
+}
+
+/* Nested grid inside fieldsets */
+.zm-nested {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 12px;
+}
+
+@media (min-width: 860px) {
+    .zm-nested.two-col {
+        grid-template-columns: 1fr 1fr;
+    }
+}
+
+/* Arrays */
+.zm-array {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.zm-array-row {
+    width: 100%;
+    display: flex;
+    gap: 8px;
+    align-items: center;
+}
+
+.zm-array-row input {
+    flex: 1;
+}
+
+/* Buttons */
+.zm-editor button {
+    padding: 8px 14px;
+    font-size: 14px;
+}
+
+/* “Pretty” buttons (optional if you use .zm-btn classes) */
+.zm-btn {
+    border: 1px solid transparent;
+    background: #2563eb;
+    color: #fff;
+    padding: 9px 12px;
+    border-radius: 10px;
+    font-weight: 700;
+    font-size: 13px;
+    cursor: pointer;
+    transition: transform 0.02s ease, filter 120ms ease;
+    user-select: none;
+}
+
+.zm-btn:active {
+    transform: translateY(1px);
+}
+
+.zm-btn:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+}
+
+.zm-btn.secondary {
+    background: #f1f5f9;
+    color: #0f172a;
+    border-color: #d7dbe7;
+}
+
+.zm-btn.danger {
+    background: #ef4444;
+}
+
+.zm-btn.ghost {
+    background: transparent;
+    border-color: #d7dbe7;
+    color: #0f172a;
+}
+
+/* Footer actions */
+.zm-footer {
+    display: flex;
+    justify-content: flex-end;
+    gap: 10px;
+    flex-wrap: wrap;
+    margin-top: 14px;
+    padding-top: 12px;
+    border-top: 1px solid #e6e8ef;
+}

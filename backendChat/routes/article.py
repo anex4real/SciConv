@@ -886,7 +886,9 @@ def infer_dataset_metadata_from_article(article_uuid: str):
     #     out_list.append({"metadata": md})
     #
     # payload = {
-    #     "zenodo_metadata": out_list[:max_return]
+    #     "zenodo_metadata": out_list[:max_return],
+    #     "template": ZENODO_METADATA_TEMPLATE
+
     # }
     payload = {
         "zenodo_metadata": [
@@ -927,7 +929,8 @@ def infer_dataset_metadata_from_article(article_uuid: str):
                     "language": "en"
                 }
             }
-        ]
+        ],
+        "template": ZENODO_METADATA_TEMPLATE
     }
     actions = ["create", "update metadata"]
 

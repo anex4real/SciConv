@@ -176,6 +176,15 @@ export class BackendService {
         );
     }
 
+    datasetEditZenodo(articleUuid: string, depositionId: number, formData: FormData) {
+        return this.http.post(
+            `${this.baseUrl}/article/${articleUuid}/zenodo/${depositionId}/edit`,
+            formData,
+            { headers: this.headers }
+        );
+    }
+
+
 
 
 

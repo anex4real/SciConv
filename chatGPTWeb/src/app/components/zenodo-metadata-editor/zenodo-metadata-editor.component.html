@@ -1,0 +1,143 @@
+<div class="zm-editor" #scrollHost>
+
+<div *ngIf="form" style="display:flex; flex-direction:column; gap:12px;">
+    <h3>Edit Zenodo Metadata</h3>
+
+    <form [formGroup]="form">
+        <!-- recursive renderer -->
+        <ng-container
+                *ngTemplateOutlet="renderGroup; context: { group: form, schema: schemaRoot }">
+        </ng-container>
+    </form>
+
+    <div style="display:flex; gap:8px;">
+        <button type="button" (click)="onSave()" [disabled]="form.invalid">
+            Save
+        </button>
+
+        <button type="button" (click)="cancel.emit()">Cancel</button>
+    </div>
+</div>
+
+<!-- ===== recursive template ===== -->
+    <ng-template #renderGroup let-group="group" let-schema="schema">
+        <ng-container *ngFor="let e of entriesOf(schema); trackBy: trackByEntryKey">
+
+            <!-- enum should be handled FIRST and should NOT allow fallthrough -->
+            <ng-container [ngSwitch]="!!e.value.enum ? 'enum' : e.value.type">
+
+                <!-- ENUM -->
+                <div *ngSwitchCase="'enum'" class="mb-1">
+                    <label>{{ e.key }}</label>
+                    <select [formControl]="group.get(e.key)">
+                        <option *ngFor="let opt of (e.value.enum || [])" [ngValue]="opt">{{ opt }}</option>
+                    </select>
+
+                    <div *ngIf="group.get(e.key)?.touched && group.get(e.key)?.hasError('required')" style="color:red;">
+                        Required
+                    </div>
+                </div>
+
+                <!-- STRING -->
+                <div *ngSwitchCase="'string'">
+                    <label>{{ e.key }}</label>
+                    <input type="text" [formControl]="group.get(e.key)" />
+                    <div *ngIf="group.get(e.key)?.touched && group.get(e.key)?.hasError('required')" style="color:red;">
+                        Required
+                    </div>
+                </div>
+
+                <!-- NUMBER -->
+                <div *ngSwitchCase="'number'">
+                    <label>{{ e.key }}</label>
+                    <input type="number" [formControl]="group.get(e.key)" />
+                </div>
+
+                <!-- BOOLEAN -->
+                <div *ngSwitchCase="'boolean'">
+                    <label>
+                        <input type="checkbox" [formControl]="group.get(e.key)" />
+                        {{ e.key }}
+                    </label>
+                </div>
+
+                <!-- ARRAY -->
+                <div *ngSwitchCase="'array'" class="zm-field mb-1">
+                    <label class="zm-label">{{ e.key }}</label>
+
+                    <!-- ✅ create a local [formGroup] context for this recursion level -->
+                    <ng-container [formGroup]="group">
+
+                        <div [formArrayName]="e.key" class="zm-array">
+                            <ng-container *ngIf="isObjectArray(e); else primitiveArray">
+
+                                <!-- object items -->
+                                <div
+                                        class="zm-array-card ml-3"
+                                        *ngFor="let _ of getFormArray(group, e.key).controls; let i = index; trackBy: trackByIndex"
+                                        [formGroupName]="i"
+                                        [attr.data-array-item]="e.key + ':' + i">
+                                    <div class="zm-array-card-header">
+                                        <strong>{{ e.key }} #{{ i + 1 }}</strong>
+
+                                        <button type="button" class="zm-btn danger ml-3"
+                                                (click)="removeArrayItemByKey(group, e.key, i)">
+                                            Remove
+                                        </button>
+                                    </div>
+
+                                    <ng-container
+                                            *ngTemplateOutlet="renderGroup; context: { group: getFormArray(group, e.key).at(i), schema: objectItemSchema(e) }">
+                                    </ng-container>
+                                </div>
+
+                            </ng-container>
+
+                            <!-- primitive items -->
+                            <ng-template #primitiveArray>
+                                <div class="zm-array-row"
+                                     *ngFor="let _ of getFormArray(group, e.key).controls; let i = index; trackBy: trackByIndex"
+                                     [attr.data-array-item]="e.key + ':' + i">
+                                    <input class="zm-input" [formControlName]="i" />
+                                    <button type="button" class="zm-btn danger"
+                                            (click)="removeArrayItemByKey(group, e.key, i)">
+                                        Remove
+                                    </button>
+                                </div>
+                            </ng-template>
+
+
+                            <button type="button"
+                                    class="zm-btn secondary mb-1"
+                                    (click)="addArrayItemBySchema(group, e, $event)">
+                                + Add
+                            </button>
+
+                        </div>
+
+                    </ng-container>
+                </div>
+
+                <!-- OBJECT -->
+                <div *ngSwitchCase="'object'">
+                    <fieldset style="border:1px solid #ddd; padding:8px; margin:8px 0;">
+                        <legend>{{ e.key }}</legend>
+
+                        <ng-container
+                                *ngIf="group.get(e.key) as childCtrl"
+                                [ngTemplateOutlet]="renderGroup"
+                                [ngTemplateOutletContext]="{ group: childCtrl, schema: e.value.properties || {} }"
+                        ></ng-container>
+                    </fieldset>
+                </div>
+
+                <!-- FALLBACK -->
+                <div *ngSwitchDefault>
+                    <label>{{ e.key }}</label>
+                    <input type="text" [formControl]="group.get(e.key)" />
+                </div>
+
+            </ng-container>
+        </ng-container>
+    </ng-template>
+</div>

@@ -17,11 +17,12 @@ enum AppStage {
 /** JSON keys that should NOT be displayed as labels */
 const HIDDEN_JSON_KEYS: readonly string[] = [
     'fuji_summary',
-    'zenodo_metadata'
+    'zenodo_metadata',
 ];
 
 const HIDDEN_ROW_KEYS: readonly string[] = [
-    'action'
+    'action',
+    'template'
 ];
 
 @Component({
@@ -35,6 +36,9 @@ export class HomeComponent {
     // App stage (UI-level)
     appStages = AppStage;
     appStage: AppStage = AppStage.Start;
+    zenodoDraftText: string = '';
+    metadataJsonError: string = '';
+
 
     // Uploads (separados)
     private fileToUploadRepro: File | null = null;
@@ -106,6 +110,13 @@ export class HomeComponent {
         }
 
         this.userMessage = '';
+    }
+
+    onSaveZenodoMetadata(cleaned: any) {
+        // if you have a token input in the UI, pass it; otherwise undefined
+        const zenodoToken = undefined; // or this.zenodoToken if you store it
+
+        this.analysis.editZenodoOnBackend(cleaned, zenodoToken);
     }
 
 
@@ -249,6 +260,38 @@ export class HomeComponent {
         return 'Unknown';
     }
 
+    loadDraftToText(s: any) {
+        this.metadataJsonError = '';
+        try {
+            this.zenodoDraftText = JSON.stringify(s.zenodoMetadataDraft ?? {}, null, 2);
+        } catch {
+            this.zenodoDraftText = '';
+        }
+    }
+
+    applyTextToDraft() {
+        this.metadataJsonError = '';
+        try {
+            const parsed = JSON.parse(this.zenodoDraftText || '{}');
+            this.analysis.setZenodoDraft(parsed); // ✅ add this method in service (next step)
+        } catch (e: any) {
+            this.metadataJsonError = 'Invalid JSON: ' + (e?.message ?? '');
+        }
+    }
+
+    saveMetadataAndReturnToMenu() {
+        // ensure draft in service matches text (if user forgot to click apply)
+        this.applyTextToDraft();
+        if (this.metadataJsonError) return;
+
+        this.analysis.saveEditedMetadata(); // your existing function (we’ll improve it)
+        this.analysis.selectAction('go to menu'); // back to menu
+    }
+
+    cancelMetadataEdit() {
+        this.metadataJsonError = '';
+        this.analysis.selectAction('go to menu');
+    }
 
 
 
