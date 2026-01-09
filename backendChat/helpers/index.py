@@ -1,8 +1,9 @@
 import json
 import os
+from typing import List, Dict, Any
+
 import flask
 from openai import OpenAI
-
 
 def makeResponse(response=None, status=200, isJson=True):
     """
@@ -22,9 +23,11 @@ def makeResponse(response=None, status=200, isJson=True):
 
     return flask.Response(response=response, status=status, mimetype=mimetype)
 
-
-def appendMessage(messages, content=None, contentShort=None, stage=None, role="assistant",
+def appendMessage(messages, content, contentShort=None, stage=None, role="assistant",
                   jsonObject=False, examples=None, goBack=None):
+    if contentShort is None:
+        contentShort = content
+
     message = {
         "role": role,
         "jsonObject": jsonObject,

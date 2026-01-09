@@ -21,9 +21,7 @@ export class SurveyComponent {
             // You can now use this.surveyId to fetch survey data or perform other logic
         });
         for (let i = 0; i < 6; i++) {
-            //todo alterar
             this.surveyService.setRating(i, null);
-            //this.surveyService.setRating(i, 50);
         }
         this.surveyScales = this.surveyService.getScales()
     }
@@ -51,8 +49,6 @@ export class SurveyComponent {
 
 
     // Current value of the slider
-    //todo alterar
-
     currentValue: number = -1;
 
     // Array of ticks (this could be dynamically generated based on min/max)

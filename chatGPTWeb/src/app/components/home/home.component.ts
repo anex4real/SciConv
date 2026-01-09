@@ -22,7 +22,8 @@ const HIDDEN_JSON_KEYS: readonly string[] = [
 
 const HIDDEN_ROW_KEYS: readonly string[] = [
     'action',
-    'template'
+    'template',
+    'zenodo_status',
 ];
 
 @Component({
@@ -113,12 +114,9 @@ export class HomeComponent {
     }
 
     onSaveZenodoMetadata(cleaned: any) {
-        // if you have a token input in the UI, pass it; otherwise undefined
-        const zenodoToken = undefined; // or this.zenodoToken if you store it
-
-        this.analysis.editZenodoOnBackend(cleaned, zenodoToken);
+        const zenodoToken = undefined;
+        this.analysis.saveOrCreateZenodo(cleaned, zenodoToken);   // ✅
     }
-
 
 
     /** Upload (REPRO) */
@@ -292,6 +290,17 @@ export class HomeComponent {
         this.metadataJsonError = '';
         this.analysis.selectAction('go to menu');
     }
+
+    onCreateFilesChange(event: any) {
+        const files: File[] = Array.from(event?.target?.files ?? []);
+        this.analysis.setCreateFiles(files);
+    }
+
+    onToggleReplaceFiles(event: any) {
+        const checked = !!event?.target?.checked;
+        this.analysis.setReplaceFilesMode(checked);
+    }
+
 
 
 

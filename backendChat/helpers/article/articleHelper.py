@@ -4,14 +4,18 @@ import copy
 import json
 import os
 import re
-from typing import Tuple, Any, Dict, List, Optional, Union, IO
+import shutil
+import zipfile
+from typing import Any, Dict, List, Optional, Union, IO, Tuple
 import requests
 from PyPDF2 import PdfReader
 from werkzeug.datastructures import FileStorage
+from werkzeug.utils import secure_filename
 
 from helpers.article.metadata_template import ZENODO_METADATA_TEMPLATE
 from helpers.index import appendMessage, callGPTModel, _extract_json_safe
 
+ALLOWED_EXTENSIONS = None  # or set: {"zip","pdf","txt","csv","json","yaml","yml","png","jpg"} etc.
 ZENODO_API_BASE = "https://zenodo.org/api"
 BASE = "https://www.f-uji.net"
 
@@ -19,456 +23,6 @@ ZENODO_REF_PATTERN = re.compile(
     r"(10\.5281\/zenodo\.\d+|https?:\/\/(?:www\.)?zenodo\.org\/records\/\d+|https?:\/\/doi\.org\/10\.5281\/zenodo\.\d+)",
     re.IGNORECASE
 )
-
-def _normalize_article(s: str) -> str:
-    return re.sub(r"\s+", " ", re.sub(r"[^a-z0-9]+", " ", (s or "").lower())).strip()
-
-def _parse_referenced_entry(entry: str) -> Tuple[str, str]:
-    entry = (entry or "").strip()
-
-    if "|" in entry:
-        name, ref = entry.split("|", 1)
-        return name.strip(), ref.strip()
-
-    m = ZENODO_REF_PATTERN.search(entry)
-    if not m:
-        return entry, ""
-    ref = m.group(0).strip()
-    name = (entry[:m.start()] + entry[m.end():]).strip()
-    return name, ref
-
-def _parse_referenced_entry_with_gpt_fallback(
-    entry: str
-) -> Tuple[str, str]:
-    """
-    Try regex-based parsing first.
-    If no Zenodo ref found, ask GPT to extract dataset_name + zenodo_ref.
-    """
-
-    # 1) Try deterministic parsing
-    name, ref = _parse_referenced_entry(entry)
-    if ref and _has_zenodo_ref(ref):
-        return name, ref
-
-    # 2) GPT fallback
-    system_prompt = {
-        "role": "system",
-        "content": (
-            "Extract dataset name and Zenodo reference from text.\n"
-            "Return ONLY valid JSON.\n"
-            "Do NOT invent references.\n"
-            "If no Zenodo DOI or URL is present, return empty string for zenodo_ref."
-        )
-    }
-
-    user_prompt = {
-        "role": "user",
-        "content": (
-            f"Text:\n{entry}\n\n"
-            "Return JSON:\n"
-            "{\n"
-            '  "dataset_name": "",\n'
-            '  "zenodo_ref": ""\n'
-            "}"
-        )
-    }
-
-    raw = callGPTModel([system_prompt, user_prompt])
-    parsed = _extract_json_safe(raw) or {}
-
-    gpt_name = str(parsed.get("dataset_name") or "").strip()
-    gpt_ref = str(parsed.get("zenodo_ref") or "").strip()
-
-    # 3) Validate GPT output (NO hallucinations)
-    if gpt_ref and not _has_zenodo_ref(gpt_ref):
-        gpt_ref = ""
-
-    # 4) Prefer GPT name only if it improves things
-    final_name = gpt_name if gpt_name else name
-    final_ref = gpt_ref if gpt_ref else ref
-
-    return final_name, final_ref
-
-def _has_zenodo_ref(s: str) -> bool:
-    return bool(ZENODO_REF_PATTERN.search(s or ""))
-
-def handle_dataset_list_edit(user_text: str, referenced: list, non_referenced: list, messagesToUser: list):
-    """
-    Improved dataset list editor.
-
-    Key behavior:
-    - User may provide FULL dataset name or ONLY A FUZZY/PARTIAL PART of it.
-    - For referenced list entries, we try to match datasets by:
-        1) exact normalized name match
-        2) regex-based token containment (fuzzy)
-        3) if still not found: ONE GPT fallback to resolve which referenced entry is intended
-    - For referenced ADD/UPDATE, user can provide the Zenodo ref anywhere in the text:
-        "<dataset name part> <zenodo doi/url>"
-        Also supports legacy: "<name> | <ref>"
-
-    Requires helpers available in your module:
-      - _normalize_article
-      - ZENODO_REF_PATTERN / _has_zenodo_ref
-      - _parse_referenced_entry (internal entry parse)
-      - _parse_referenced_entry_with_gpt_fallback (internal entry parse with GPT fallback)
-      - callGPTModel, _extract_json_safe, appendMessage
-    """
-
-    # -------------------------
-    # 0) Helpers (local)
-    # -------------------------
-    def _parse_user_name_and_ref(text: str) -> Tuple[str, str]:
-        """
-        Accepts:
-          - "name | ref"
-          - "name ref"
-          - "ref" (edge)
-        Returns (name, ref)
-        """
-        text = (text or "").strip()
-        if "|" in text:
-            a, b = text.split("|", 1)
-            return a.strip(), b.strip()
-
-        m = ZENODO_REF_PATTERN.search(text)
-        if not m:
-            return text.strip(), ""
-        ref = m.group(0).strip()
-        name = (text[:m.start()] + text[m.end():]).strip()
-        return name, ref
-
-    def _build_fuzzy_regex(query: str) -> re.Pattern | None:
-        """
-        Build a regex that checks whether ALL query tokens appear (in any order) in a candidate string.
-        """
-        tokens = [t for t in _normalize_article(query).split(" ") if t]
-        if not tokens:
-            return None
-        # Require all tokens as word boundaries (approx)
-        lookaheads = "".join([rf"(?=.*\b{re.escape(t)}\b)" for t in tokens])
-        return re.compile(lookaheads, re.IGNORECASE)
-
-    def _match_referenced_index_by_regex(old_name_part: str, lst: list[str]) -> Tuple[int | None, list[int]]:
-        """
-        Return (best_idx_or_None, candidate_idxs)
-
-        We treat:
-          - exact normalized match as best
-          - else regex fuzzy (all tokens present)
-        If multiple candidates, return None + candidates.
-        """
-        old_norm = _normalize_article(old_name_part)
-        if not old_norm:
-            return None, []
-
-        # 1) exact match on internal name
-        exact_hits = []
-        for i, entry in enumerate(lst):
-            name, _ = _parse_referenced_entry(entry)
-            if _normalize_article(name) == old_norm:
-                exact_hits.append(i)
-        if len(exact_hits) == 1:
-            return exact_hits[0], exact_hits
-        if len(exact_hits) > 1:
-            return None, exact_hits
-
-        # 2) fuzzy: all tokens of query appear in candidate name
-        rx = _build_fuzzy_regex(old_name_part)
-        if rx is None:
-            return None, []
-
-        fuzzy_hits = []
-        for i, entry in enumerate(lst):
-            name, _ = _parse_referenced_entry(entry)
-            if rx.search(_normalize_article(name)):
-                fuzzy_hits.append(i)
-
-        if len(fuzzy_hits) == 1:
-            return fuzzy_hits[0], fuzzy_hits
-        return None, fuzzy_hits
-
-    def _gpt_choose_referenced_index(old_value: str, lst: list[str]) -> int | None:
-        """
-        One GPT interaction: user typed something, and our regex matching didn't find a single target.
-        Ask GPT to choose the best dataset from the referenced list.
-        Returns index or None.
-        """
-        # Keep list compact to reduce token usage
-        options = []
-        for i, entry in enumerate(lst):
-            name, ref = _parse_referenced_entry(entry)
-            options.append({"index": i, "dataset_name": name, "zenodo_ref": ref})
-
-        system_prompt_local = {
-            "role": "system",
-            "content": (
-                "You are helping map a user's partial dataset name to one item from a list.\n"
-                "Return ONLY JSON.\n"
-                "If none match, return index = -1.\n"
-                "Do NOT invent options.\n"
-            )
-        }
-        user_prompt_local = {
-            "role": "user",
-            "content": (
-                f"User wants to edit this referenced dataset (partial name):\n{old_value}\n\n"
-                f"Referenced list options:\n{json.dumps(options, ensure_ascii=False)}\n\n"
-                "Return ONLY JSON:\n"
-                '{ "index": 0 }'
-            )
-        }
-
-        raw_local = callGPTModel([system_prompt_local, user_prompt_local])
-        parsed_local = _extract_json_safe(raw_local) or {}
-        try:
-            idx = int(parsed_local.get("index", -1))
-        except Exception:
-            idx = -1
-
-        if 0 <= idx < len(lst):
-            return idx
-        return None
-
-    def _respond_ambiguous(old_value: str, lst: list[str], candidate_idxs: list[int], action_word: str):
-        top = candidate_idxs[:5]
-        suggestions = []
-        for i in top:
-            nm, rf = _parse_referenced_entry(lst[i])
-            suggestions.append(f"- {nm} | {rf}".strip())
-        appendMessage(
-            messagesToUser,
-            role="assistant",
-            contentShort=f"I found multiple referenced datasets matching '{old_value}'. Please be more specific.",
-            content=(
-                f"I found multiple referenced datasets matching '{old_value}' for {action_word}.\n\n"
-                "Candidates:\n" + "\n".join(suggestions)
-            ),
-            stage="DefineNextStepInteraction",
-            jsonObject=False
-        )
-
-    # -------------------------
-    # 1) Extract edit op via GPT (you already do this)
-    # -------------------------
-    system_prompt = {
-        "role": "system",
-        "content": (
-            "You extract dataset list edit operations.\n"
-            "Operations: add, update, delete.\n"
-            "Lists: referenced, non-referenced.\n"
-            "Return ONLY JSON with keys: operation, list, old_value, new_value.\n"
-            "If something is missing, use empty string.\n"
-        )
-    }
-
-    user_prompt = {
-        "role": "user",
-        "content": (
-            f"User message:\n{user_text}\n\n"
-            "Return ONLY JSON:\n"
-            "{\n"
-            '  "operation": "add|update|delete|unknown",\n'
-            '  "list": "referenced|non-referenced|unknown",\n'
-            '  "old_value": "string",\n'
-            '  "new_value": "string"\n'
-            "}"
-        )
-    }
-
-    raw = callGPTModel([system_prompt, user_prompt])
-    parsed = _extract_json_safe(raw) or {}
-
-    op = str(parsed.get("operation") or "unknown").strip().lower()
-    target_list = str(parsed.get("list") or "unknown").strip().lower()
-    old_value = str(parsed.get("old_value") or "").strip()
-    new_value = str(parsed.get("new_value") or "").strip()
-
-    if op not in ("add", "update", "delete") or target_list not in ("referenced", "non-referenced"):
-        appendMessage(
-            messagesToUser,
-            role="assistant",
-            contentShort="I couldn't understand the edit request. Use add/update/delete and referenced/non-referenced.",
-            content="I couldn't understand the edit request. Use add/update/delete and referenced/non-referenced.",
-            stage="DefineNextStepInteraction",
-            jsonObject=False
-        )
-        return referenced, non_referenced
-
-    lst = referenced if target_list == "referenced" else non_referenced
-
-    # -----------------------
-    # ADD
-    # -----------------------
-    if op == "add":
-        if not new_value:
-            appendMessage(
-                messagesToUser,
-                role="assistant",
-                contentShort="Please provide the dataset text to add.",
-                content="Please provide the dataset text to add.",
-                stage="DefineNextStepInteraction",
-                jsonObject=False
-            )
-            return referenced, non_referenced
-
-        if target_list == "referenced":
-            # user does NOT need pipe; accept "name ref" or "name | ref"
-            name, ref = _parse_user_name_and_ref(new_value)
-
-            if not name or not ref or not _has_zenodo_ref(ref):
-                appendMessage(
-                    messagesToUser,
-                    role="assistant",
-                    contentShort="To add a referenced dataset, include a Zenodo DOI/URL after the dataset name.",
-                    content=(
-                        "Referenced datasets MUST include a Zenodo reference.\n\n"
-                        "Examples:\n"
-                        "- add referenced: My Dataset https://doi.org/10.5281/zenodo.1234567\n"
-                        "- add referenced: My Dataset https://zenodo.org/records/1234567\n"
-                        "- add referenced: My Dataset 10.5281/zenodo.1234567"
-                    ),
-                    stage="DefineNextStepInteraction",
-                    jsonObject=False
-                )
-                return referenced, non_referenced
-
-            lst.append(f"{name} | {ref}")
-        else:
-            lst.append(new_value)
-
-        return referenced, non_referenced
-
-    # -----------------------
-    # DELETE
-    # -----------------------
-    if op == "delete":
-        if not old_value:
-            appendMessage(
-                messagesToUser,
-                role="assistant",
-                contentShort="Please provide the dataset text to delete.",
-                content="Please provide the dataset text to delete.",
-                stage="DefineNextStepInteraction",
-                jsonObject=False
-            )
-            return referenced, non_referenced
-
-        if target_list == "referenced":
-            # match by exact or fuzzy via regex; if none -> GPT choose; if ambiguous -> ask user
-            idx, candidates = _match_referenced_index_by_regex(old_value, lst)
-            if idx is None:
-                if not candidates:
-                    idx = _gpt_choose_referenced_index(old_value, lst)
-                    if idx is None:
-                        appendMessage(
-                            messagesToUser,
-                            role="assistant",
-                            contentShort=f"I couldn't find '{old_value}' in the referenced list to delete.",
-                            content=f"I couldn't find '{old_value}' in the referenced list to delete.",
-                            stage="DefineNextStepInteraction",
-                            jsonObject=False
-                        )
-                        return referenced, non_referenced
-                else:
-                    _respond_ambiguous(old_value, lst, candidates, "delete")
-                    return referenced, non_referenced
-
-            del lst[idx]
-            return referenced, non_referenced
-
-        # non-referenced delete: keep simple exact match
-        target = _normalize_article(old_value)
-        lst[:] = [x for x in lst if _normalize_article(str(x)) != target]
-        return referenced, non_referenced
-
-    # -----------------------
-    # UPDATE
-    # -----------------------
-    if op == "update":
-        if not old_value or not new_value:
-            appendMessage(
-                messagesToUser,
-                role="assistant",
-                contentShort="Please provide both old and new values: update <old> -> <new>.",
-                content=(
-                    "Examples:\n"
-                    "- update referenced: Old Name -> New Name\n"
-                    "- update referenced: Old Name -> https://doi.org/10.5281/zenodo.1234567\n"
-                    "- update referenced: part of name -> New Name https://zenodo.org/records/1234567\n"
-                    "- update non-referenced: Old Name -> New Name"
-                ),
-                stage="DefineNextStepInteraction",
-                jsonObject=False
-            )
-            return referenced, non_referenced
-
-        if target_list == "referenced":
-            # 1) Find which entry to update (exact or fuzzy). If none -> GPT; if ambiguous -> ask user
-            idx, candidates = _match_referenced_index_by_regex(old_value, lst)
-            if idx is None:
-                if not candidates:
-                    idx = _gpt_choose_referenced_index(old_value, lst)
-                    if idx is None:
-                        appendMessage(
-                            messagesToUser,
-                            role="assistant",
-                            contentShort=f"I couldn't find '{old_value}' in the referenced list to update.",
-                            content=(
-                                f"I couldn't find '{old_value}' in the referenced list to update.\n"
-                                "Tip: you can type a partial name, but it must uniquely identify one dataset."
-                            ),
-                            stage="DefineNextStepInteraction",
-                            jsonObject=False
-                        )
-                        return referenced, non_referenced
-                else:
-                    _respond_ambiguous(old_value, lst, candidates, "update")
-                    return referenced, non_referenced
-
-            cur_name, cur_ref = _parse_referenced_entry_with_gpt_fallback(str(lst[idx]))
-
-            # 2) Parse the user's new_value (supports: name ref, name only, ref only, name|ref)
-            new_name, new_ref = _parse_user_name_and_ref(new_value)
-
-            final_name = new_name.strip() if new_name.strip() else cur_name
-            final_ref = new_ref.strip() if new_ref.strip() else cur_ref
-
-            if not final_ref or not _has_zenodo_ref(final_ref):
-                appendMessage(
-                    messagesToUser,
-                    role="assistant",
-                    contentShort="Referenced datasets must keep a valid Zenodo DOI/URL.",
-                    content="Please provide a valid Zenodo DOI/URL in the update message.",
-                    stage="DefineNextStepInteraction",
-                    jsonObject=False
-                )
-                return referenced, non_referenced
-
-            lst[idx] = f"{final_name} | {final_ref}"
-            return referenced, non_referenced
-
-        # non-referenced update (exact match)
-        target = _normalize_article(old_value)
-        replaced = False
-        for i, v in enumerate(lst):
-            if _normalize_article(str(v)) == target:
-                lst[i] = new_value
-                replaced = True
-                break
-
-        if not replaced:
-            appendMessage(
-                messagesToUser,
-                role="assistant",
-                contentShort=f"I couldn't find '{old_value}' in the {target_list} list to update.",
-                content=f"I couldn't find '{old_value}' in the {target_list} list to update.",
-                stage="DefineNextStepInteraction",
-                jsonObject=False
-            )
-
-        return referenced, non_referenced
-
-    return referenced, non_referenced
 
 def _extract_zenodo_identifier(input_str: str):
     import re
@@ -505,6 +59,7 @@ def _extract_zenodo_identifier(input_str: str):
 
     # 5) Nothing usable found
     return {"record_id": None, "doi": None}
+
 
 def run_fuji_fair_assessment(article_uuid: str, doi: str) -> dict:
     """
@@ -567,7 +122,6 @@ def run_fuji_fair_assessment(article_uuid: str, doi: str) -> dict:
     content_type = r2.headers.get("content-type", "")
     if "application/json" not in content_type:
         raise RuntimeError(f"F-UJI export did not return JSON (content-type={content_type})")
-
 
     fuji_result: Dict[str, Any] = r2.json()
 
@@ -677,7 +231,6 @@ def run_fuji_fair_assessment(article_uuid: str, doi: str) -> dict:
         total = _num(score_total.get(key))
         percent = _num(score_percent.get(key))
 
-
         score_by_element[key] = {
             "earned": earned,
             "total": total,
@@ -705,6 +258,7 @@ def run_fuji_fair_assessment(article_uuid: str, doi: str) -> dict:
         "fuji_summary": fuji_summary,
     }
 
+
 def _zenodo_fetch_by_id(record_id: str, token: str | None = None):
     url = f"{ZENODO_API_BASE}/records/{record_id}"
     params = {}
@@ -713,6 +267,7 @@ def _zenodo_fetch_by_id(record_id: str, token: str | None = None):
     r = requests.get(url, params=params, timeout=30)
     r.raise_for_status()
     return r.json()
+
 
 def _zenodo_fetch_by_doi(doi: str, token: str | None = None):
     url = f"{ZENODO_API_BASE}/records"
@@ -725,6 +280,7 @@ def _zenodo_fetch_by_doi(doi: str, token: str | None = None):
     if not hits:
         raise ValueError(f"No Zenodo record found for DOI {doi}")
     return hits[0]
+
 
 def check_zenodo_metadata(identifier: str, article_uuid: str, api_token: str | None = None) -> dict:
     """
@@ -755,7 +311,8 @@ def check_zenodo_metadata(identifier: str, article_uuid: str, api_token: str | N
 
     return metadata
 
-def create_zenodo_deposition_with_files(llm_data: dict, files: List[FileStorage]) -> dict:
+
+def create_zenodo_deposition_with_files(metadata_json: dict, files: List[FileStorage]) -> dict:
     """
     Create a Zenodo deposition using a metadata dict of the form:
     {
@@ -783,7 +340,7 @@ def create_zenodo_deposition_with_files(llm_data: dict, files: List[FileStorage]
 
     url = f"https://zenodo.org/api/deposit/depositions/{deposition.get('id')}"
 
-    resp = requests.put(url, data=json.dumps(llm_data), headers=headers)
+    resp = requests.put(url, data=json.dumps(metadata_json), headers=headers)
     resp.raise_for_status()
     deposition = resp.json()
 
@@ -814,15 +371,10 @@ def create_zenodo_deposition_with_files(llm_data: dict, files: List[FileStorage]
 
     return deposition
 
-def upsert_zenodo_deposition_metadata_and_files(
-    deposition_id: int,
-    llm_data: dict,
-    files: List[FileStorage],
-    *,
-    zenodo_token: str,
-    replace_files: bool = False,
-    publish: bool = False,
-) -> dict:
+
+def upsert_zenodo_deposition_metadata_and_files(deposition_id: int, llm_data: dict,
+                                                files: List[FileStorage], *, zenodo_token: str,
+                                                replace_files: bool = False, publish: bool = False, ) -> dict:
     """
     Behavior:
       - If files is empty:
@@ -901,8 +453,8 @@ def upsert_zenodo_deposition_metadata_and_files(
 
             updated = _put_json(dep_self_url, llm_data)
 
-            #TODO
-            publish=True
+            # TODO
+            publish = True
 
             if publish:
                 pub_url = f"{ZENODO_API_BASE}/deposit/depositions/{dep_id}/actions/publish"
@@ -995,6 +547,7 @@ def upsert_zenodo_deposition_metadata_and_files(
 
     return draft
 
+
 def _extract_text_from_pdf(pdf_source: Union[str, os.PathLike, IO[bytes]]) -> str:
     close_file = False
     if isinstance(pdf_source, (str, os.PathLike)):
@@ -1011,6 +564,7 @@ def _extract_text_from_pdf(pdf_source: Union[str, os.PathLike, IO[bytes]]) -> st
         if close_file:
             f.close()
 
+
 def _split_body_and_references(full_text: str):
     lower = full_text.lower()
     markers = ["\nreferences", "\nreference", "\nbibliography", "\nrefs"]
@@ -1022,12 +576,9 @@ def _split_body_and_references(full_text: str):
 
     return full_text, ""
 
-def respond_define_next_step(
-        messagesToUser,
-        referencedDatasets,
-        nonReferencedDatasets,
-        summary_prefix="I analyzed the article and identified datasets used by the authors."
-):
+
+def respond_define_next_step(messagesToUser, referencedDatasets, nonReferencedDatasets,
+                             summary_prefix="I analyzed the article and identified datasets used by the authors."):
     summary = (
         f"{summary_prefix}\n"
         f"Referenced: {len(referencedDatasets)}\n"
@@ -1056,7 +607,6 @@ def respond_define_next_step(
 
     appendMessage(messagesToUser,
                   role="assistant",
-                  stage="DefineNextStepInteraction",
                   jsonObject=True,
                   contentShort={"summary": summary,
                                 "referencedDatasets": referencedDatasets,
@@ -1068,6 +618,7 @@ def respond_define_next_step(
                            "instructions": instructions},
                   )
 
+
 def _deep_merge(base: Any, patch: Any) -> Any:
     if isinstance(base, dict) and isinstance(patch, dict):
         out = dict(base)
@@ -1075,7 +626,6 @@ def _deep_merge(base: Any, patch: Any) -> Any:
             out[k] = _deep_merge(out.get(k), v) if k in out else copy.deepcopy(v)
         return out
     return copy.deepcopy(patch)
-
 
 
 def _strip_license_urls_from_text_fields(metadata: Dict[str, Any]) -> Dict[str, Any]:
@@ -1095,6 +645,7 @@ def _strip_license_urls_from_text_fields(metadata: Dict[str, Any]) -> Dict[str, 
 
     return metadata
 
+
 def _validate_minimal_zenodo_metadata(metadata: Dict[str, Any]) -> None:
     if not isinstance(metadata, dict):
         raise ValueError("metadata must be a dict")
@@ -1111,8 +662,6 @@ def _validate_minimal_zenodo_metadata(metadata: Dict[str, Any]) -> None:
     if ar in ("open", "embargoed"):
         if not metadata.get("license"):
             raise ValueError("license is required when access_right is open/embargoed")
-
-
 
 
 def _safe_list_article_files(article_uuid: str, max_files: int = 40) -> List[Dict[str, Any]]:
@@ -1146,6 +695,7 @@ def _filter_patch_to_template(metadata_patch: Dict[str, Any], template: Dict[str
     allowed_keys = set(template.keys())
     return {k: v for k, v in (metadata_patch or {}).items() if k in allowed_keys}
 
+
 def _ensure_top_level_metadata(obj: Any) -> Dict[str, Any]:
     """
     Ensure {"metadata": {...}} shape.
@@ -1156,14 +706,15 @@ def _ensure_top_level_metadata(obj: Any) -> Dict[str, Any]:
         return obj
     return {"metadata": obj}
 
+
 def propose_zenodo_metadata_patch_with_openai(
-    *,
-    zenodo_identifier: str,
-    warnings_by_dimension: Dict[str, List[str]],
-    current_metadata: Dict[str, Any],
-    article_uuid: str,
-    extra_files: Optional[List[Dict[str, Any]]] = None,
-    model: str = "o4-mini",
+        *,
+        zenodo_identifier: str,
+        warnings_by_dimension: Dict[str, List[str]],
+        current_metadata: Dict[str, Any],
+        article_uuid: str,
+        extra_files: Optional[List[Dict[str, Any]]] = None,
+        model: str = "o4-mini",
 ) -> Dict[str, Any]:
     """
     Ask ChatGPT (via your callGPTModel) for a minimal Zenodo metadata PATCH.
@@ -1181,7 +732,8 @@ def propose_zenodo_metadata_patch_with_openai(
     """
 
     # Normalize current_metadata to deposit representation
-    if isinstance(current_metadata, dict) and "metadata" in current_metadata and isinstance(current_metadata["metadata"], dict):
+    if isinstance(current_metadata, dict) and "metadata" in current_metadata and isinstance(
+            current_metadata["metadata"], dict):
         current_metadata_for_llm = current_metadata
     else:
         current_metadata_for_llm = {"metadata": current_metadata or {}}
@@ -1262,12 +814,6 @@ def propose_zenodo_metadata_patch_with_openai(
     return patch
 
 
-
-
-
-# -----------------------------
-# Helpers: files + text extraction
-# -----------------------------
 def _safe_list_article_files(article_uuid: str, max_files: int = 50) -> List[Dict[str, Any]]:
     """
     List local files under articles/<article_uuid>/.
@@ -1293,10 +839,10 @@ def _safe_list_article_files(article_uuid: str, max_files: int = 50) -> List[Dic
 
 
 def _extract_text_snippets_from_article_files(
-    article_uuid: str,
-    *,
-    max_files: int = 6,
-    max_chars_per_file: int = 15000,
+        article_uuid: str,
+        *,
+        max_files: int = 6,
+        max_chars_per_file: int = 15000,
 ) -> List[Dict[str, Any]]:
     """
     Extract limited text snippets from local files in articles/<article_uuid>/.
@@ -1362,6 +908,173 @@ def _filter_metadata_to_template(metadata: Dict[str, Any], template: Dict[str, A
     allowed = set(template.keys())
     return {k: v for k, v in (metadata or {}).items() if k in allowed}
 
+def _allowed_file(filename: str) -> bool:
+    if not filename:
+        return False
+    if ALLOWED_EXTENSIONS is None:
+        return True
+    ext = filename.rsplit(".", 1)[-1].lower() if "." in filename else ""
+    return ext in ALLOWED_EXTENSIONS
+
+
+def get_zenodo_metadata_payload_for_article(
+    *,
+    article_uuid: str,
+    doi: str,
+    api_token: str | None = None,
+) -> dict[str, list[dict[str, dict[str, Any]]] | Any]:
+    """
+    Fetch Zenodo record metadata for a DOI/Zenodo identifier and return:
+      payload = {"zenodo_metadata":[{"metadata": {...}}], "template": ZENODO_METADATA_TEMPLATE}
+      actions = ["update metadata"]
+    """
+    if not article_uuid:
+        raise ValueError("article_uuid is required")
+    if not doi or not isinstance(doi, str):
+        raise ValueError("doi is required")
+
+    # 1) Fetch Zenodo metadata (your helper also saves under articles/<uuid>/zenodo_metadata.json)
+    raw_metadata = check_zenodo_metadata(doi, article_uuid, api_token=api_token)
+
+    # 2) Keep only keys supported by your template (prevents unsupported/hallucinated fields in UI)
+    filtered = _filter_metadata_to_template(raw_metadata or {}, ZENODO_METADATA_TEMPLATE)
+
+    # 3) (Optional) Ensure some required basics exist for UI consistency
+    #    If Zenodo returns them, they’ll already be present.
+    if not filtered.get("upload_type"):
+        # Most Zenodo datasets have upload_type; default to dataset for your UI flow
+        filtered["upload_type"] = "dataset"
+
+    payload = {
+        "zenodo_metadata": [
+            {"metadata": filtered}
+        ],
+        "template": ZENODO_METADATA_TEMPLATE,
+    }
+    return payload
+
+def _list_local_article_files(article_uuid: str) -> List[str]:
+    """
+    Collects file paths under articles/<article_uuid>/ excluding known non-artifact files.
+    Tune the exclusions to your project.
+    """
+    root_dir = os.path.join("articles", article_uuid)
+    if not os.path.isdir(root_dir):
+        return []
+
+    excluded_names = {
+        "fuji_result.json",
+        "metadata.json",
+    }
+    excluded_dirs = {
+        "__pycache__",
+        ".git",
+        ".idea",
+        ".vscode",
+    }
+
+    collected: List[str] = []
+    for dirpath, dirnames, filenames in os.walk(root_dir):
+        dirnames[:] = [d for d in dirnames if d not in excluded_dirs]
+
+        for fn in filenames:
+            if fn in excluded_names:
+                continue
+            full = os.path.join(dirpath, fn)
+            if os.path.isfile(full):
+                collected.append(full)
+
+    return collected
+
+
+def _safe_extract_zip(zip_path: str, dest_dir: str) -> List[str]:
+    """
+    Extract zip into dest_dir safely (prevents Zip Slip).
+    Returns list of extracted file paths.
+    """
+    extracted_paths: List[str] = []
+    dest_dir_abs = os.path.abspath(dest_dir)
+
+    with zipfile.ZipFile(zip_path, "r") as zf:
+        for member in zf.infolist():
+            # Skip directories
+            if member.is_dir():
+                continue
+
+            # Normalize the target path
+            member_path = member.filename.replace("\\", "/")
+            target_path = os.path.abspath(os.path.join(dest_dir, member_path))
+
+            # 🚫 Prevent Zip Slip (path traversal)
+            if not target_path.startswith(dest_dir_abs + os.sep) and target_path != dest_dir_abs:
+                # skip suspicious entry
+                continue
+
+            # Ensure parent dirs exist
+            os.makedirs(os.path.dirname(target_path), exist_ok=True)
+
+            # Extract file content
+            with zf.open(member, "r") as src, open(target_path, "wb") as dst:
+                shutil.copyfileobj(src, dst)
+
+            extracted_paths.append(target_path)
+
+    return extracted_paths
+
+
+def _save_uploaded_files_to_article_folder(article_uuid: str, incoming_files: List[FileStorage]) -> List[str]:
+    """
+    Saves uploaded files into articles/<article_uuid>/.
+    If a ZIP is uploaded, it is saved and then extracted into the same folder.
+    Returns all saved file paths (including extracted files).
+    """
+    root_dir = os.path.join("articles", article_uuid)
+    os.makedirs(root_dir, exist_ok=True)
+
+    saved_paths: List[str] = []
+
+    for f in incoming_files:
+        if not f or not getattr(f, "filename", ""):
+            continue
+
+        filename = secure_filename(f.filename)
+        if not filename:
+            continue
+
+        # Accept all file types (your policy)
+        dest_path = os.path.join(root_dir, filename)
+
+        # Save upload
+        f.save(dest_path)
+        saved_paths.append(dest_path)
+
+        # If ZIP -> extract
+        ext = os.path.splitext(filename.lower())[1]
+        if ext == ".zip":
+            try:
+                extracted = _safe_extract_zip(dest_path, root_dir)
+                saved_paths.extend(extracted)
+            except Exception:
+                # keep the zip saved, but don't crash the whole upload
+                # (you can also raise if you prefer hard-fail)
+                pass
+
+    return saved_paths
 
 
 
+def _paths_to_filestorage(paths: List[str]) -> List[FileStorage]:
+    """
+    Wrap local file paths into FileStorage objects so you can reuse
+    create_zenodo_deposition_with_files(metadata_json, files).
+    """
+    storages: List[FileStorage] = []
+    for p in paths:
+        try:
+            stream = open(p, "rb")
+        except Exception:
+            continue
+
+        filename = os.path.basename(p)
+        storages.append(FileStorage(stream=stream, filename=filename))
+    return storages

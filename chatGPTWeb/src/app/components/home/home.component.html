@@ -103,6 +103,9 @@
                                                 <div>
                                                 </div>
                                                 <div class="zenodo-summary">
+                                                    <h3 *ngIf="s.zenodoStatus" class="zenodo-status">
+                                                        {{ s.zenodoStatus }}
+                                                    </h3>
                                                     <div><h3>Zenodo Metadata</h3></div>
                                                     <div><strong>Title:</strong> {{ zm.title }}</div>
                                                     <div><strong>DOI:</strong> {{ zm.doi || '-' }}</div>
@@ -294,6 +297,27 @@
                     </select>
                 </ng-container>
 
+                <!-- create -->
+                <ng-container *ngIf="s.uiAction === 'create'">
+                    <div class="create-upload-block">
+                        <label>Upload files (optional)</label>
+                        <input type="file" multiple (change)="onCreateFilesChange($event)"/>
+
+                        <label class="replace-row">
+                            <input type="checkbox"
+                                   [checked]="s.uiReplaceFiles === true"
+                                   (change)="onToggleReplaceFiles($event)"/>
+                            <span>REPLACE (UPLOAD ONLY THE SELECTED FILES)</span>
+                        </label>
+
+                        <div class="hint-text">
+                            If unchecked: Merge (add selected files to article folder and upload ALL files under this article UUID).
+                        </div>
+                    </div>
+                </ng-container>
+
+
+
                 <!-- list selection for add/update/delete -->
                 <ng-container *ngIf="s.uiAction === 'add' || s.uiAction === 'update' || s.uiAction === 'delete'">
                     <label>Choose list</label>
@@ -378,17 +402,47 @@
         <!-- ✅ Edit Zenodo Metadata -->
         <div
                 *ngIf="appStage === appStages.Dataset
-    && isDataState(s)
-    && s.stage === dataStages.EditZenodoMetadata"
+      && isDataState(s)
+      && s.stage === dataStages.EditZenodoMetadata"
                 class="chat-input"
         >
+
+            <!-- ✅ show create options if we are creating (no deposition yet) -->
+            <ng-container
+                    *ngIf="isDataState(s)
+        && (!s.activeDepositionKey || !s.depositionIdsByKey?.[s.activeDepositionKey])"
+            >
+                <div class="create-upload-block">
+                    <label>Upload files (optional)</label>
+                    <input type="file" multiple (change)="onCreateFilesChange($event)" />
+
+                    <label class="replace-row">
+                        <input type="checkbox"
+                               [checked]="s.uiReplaceFiles === true"
+                               (change)="onToggleReplaceFiles($event)" />
+                        <span>REPLACE (UPLOAD ONLY THE SELECTED FILES)</span>
+                    </label>
+
+                    <div class="hint-text">
+                        If unchecked: Merge (add selected files to article folder and upload ALL files under this article UUID).
+                    </div>
+                </div>
+            </ng-container>
+
             <app-zenodo-metadata-editor
                     [template]="s.zenodoTemplate"
                     [draft]="s.zenodoMetadataDraft"
+                    [saveLabel]="(
+                                  isDataState(s)
+                                  && s.activeDepositionKey
+                                  && s.depositionIdsByKey?.[s.activeDepositionKey]
+                                ) ? 'Save changes' : 'Create repository'"
                     (save)="onSaveZenodoMetadata($event)"
                     (cancel)="analysis.selectAction('go to menu')"
             ></app-zenodo-metadata-editor>
+
         </div>
+
 
 
         <!-- Chat input (when not in App Start) -->

@@ -2,63 +2,68 @@ import {Message} from "../../interface/interfaces";
 
 export enum DataStages {
     FindInformation = 'FindInformation',
-    DefineNextStepInteraction = 'DefineNextStepInteraction',
     InferDatasetMetadata = 'InferDatasetMetadata',
     ImproveDatasetMetadata = 'ImproveDatasetMetadata',
-    WaitChatInteractionArticle = 'WaitChatInteractionArticle',
     DatasetCompleted = 'DatasetCompleted',
-EditZenodoMetadata = 'EditZenodoMetadata',
-
+    EditZenodoMetadata = 'EditZenodoMetadata',
 }
 export type DatasetListKind = 'referenced' | 'non-referenced';
 
 export interface DataState {
+    /* ===== Core workflow ===== */
     stage: DataStages;
     role: string;
+    articleUuid: string;
+
+    /* ===== Chat ===== */
     messages: Message[];
     messageToAsk?: string;
     examplesToAsk?: string;
     stageAfterChat?: DataStages;
+
+    /* ===== Backend-driven actions / menu ===== */
     availableActions?: string[];
     menuActions?: string[];
     menuMessages?: Message[];
-    depositionId?: number;
-
     menuMessage?: Message;
 
-    uiAction?: 'infer' | 'improve' | 'add' | 'update' | 'delete' | 'create' | 'update metadata' | 'go to menu';
-    uiListKind?: DatasetListKind;
-    uiDatasetName?: string;
-    uiInstructions?: string;   // backend "instructions"
-
-
-    // Inputs for referenced add/update
-    uiZenodoRef?: string;
-
-    // For update: editable name (optional rename)
-    uiNewDatasetName?: string;
-
-    // For update/add referenced: optionally allow editing the full entry
-    // (you can extend later)
-
-
+    /* ===== Dataset lists ===== */
     referencedDatasets?: string[];
     nonReferencedDatasets?: string[];
 
+    /* ===== Active / selected dataset ===== */
     activeDatasetName?: string;
-
     selectedAction?: 'infer' | 'improve';
     selectedDatasetName?: string;
 
-    isLoading: boolean;
-    errorMessage?: string;
-    readonly GO_BACK_NUMBER: number;
-    goBack: number;
-    articleUuid: string;
+    /* ===== UI actions & inputs ===== */
+    uiAction?: 'infer' | 'improve' | 'add' | 'update' | 'delete' | 'create' | 'update metadata' | 'go to menu';
+    uiListKind?: DatasetListKind;
+    uiDatasetName?: string;
+    uiZenodoRef?: string;
+    uiNewDatasetName?: string;
+    uiInstructions?: string;   // backend "instructions"
+    uiReplaceFiles?: boolean;
+    uiCreateFiles?: File[]; // optional - for Create action
+
+    /* ===== Zenodo ===== */
     zenodoMetadataView?: ZenodoMetadataView;
     zenodoTemplate?: any;
     zenodoMetadataDraft?: any;
+    depositionIdsByKey?: Record<string, number>;   // ✅ many depositions
+    activeDepositionKey?: string;                  // ✅ which one editor is bound to
+
+    zenodoStatus?: string;
+
+    /* ===== UI state ===== */
+    isLoading: boolean;
+    errorMessage?: string;
+
+    /* ===== Navigation ===== */
+    readonly GO_BACK_NUMBER: number;
+    goBack: number;
 }
+
 
 
 export interface PersonView {
@@ -165,4 +170,3 @@ export interface ZenodoMetadataView {
         university?: string;
     };
 }
-

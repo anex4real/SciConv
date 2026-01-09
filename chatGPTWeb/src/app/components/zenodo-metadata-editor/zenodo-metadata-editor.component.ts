@@ -23,6 +23,7 @@ type Entry = { key: string; value: JsonSchema };
 export class ZenodoMetadataEditorComponent implements OnChanges {
     @ViewChild('scrollHost', { static: true }) scrollHost!: ElementRef<HTMLElement>;
     @Input() template: any;
+    @Input() saveLabel: string = 'Save';
     @Input() draft: any;
     @Output() save = new EventEmitter<any>();
     @Output() cancel = new EventEmitter<void>();

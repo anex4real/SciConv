@@ -7,29 +7,24 @@ import json
 from datetime import datetime
 
 from werkzeug.datastructures import FileStorage
-from werkzeug.utils import secure_filename
 
 import config as cfg
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
 from flask import Blueprint
 from flasgger import swag_from
 from flask_cors import cross_origin
 from auth import require_auth
 from helpers.article.articleHelper import check_zenodo_metadata, create_zenodo_deposition_with_files, \
-    _extract_text_from_pdf, _split_body_and_references, _normalize_article, \
-    handle_dataset_list_edit, respond_define_next_step, _parse_referenced_entry_with_gpt_fallback, \
-    run_fuji_fair_assessment, upsert_zenodo_deposition_metadata_and_files, _deep_merge, \
-    _strip_license_urls_from_text_fields, _validate_minimal_zenodo_metadata, propose_zenodo_metadata_patch_with_openai, \
+    _extract_text_from_pdf, _split_body_and_references, respond_define_next_step, \
+    run_fuji_fair_assessment, upsert_zenodo_deposition_metadata_and_files, \
     _extract_text_snippets_from_article_files, _safe_list_article_files, _filter_metadata_to_template, \
-    _ensure_top_level_metadata
+    _ensure_top_level_metadata, get_zenodo_metadata_payload_for_article, _list_local_article_files, \
+    _save_uploaded_files_to_article_folder, _paths_to_filestorage
 from flask import request
 from helpers.index import makeResponse, appendMessage, callGPTModel, _extract_json_safe
 from helpers.article.metadata_template import ZENODO_METADATA_TEMPLATE
 
-ZENODO_API_BASE = "https://zenodo.org/api"
-
-ALLOWED_EXTENSIONS = None  # or set: {"zip","pdf","txt","csv","json","yaml","yml","png","jpg"} etc.
 article_bp = Blueprint("article", __name__)
 
 
@@ -42,22 +37,48 @@ def analyze_author_datasets_citation_status_using_gpt():
     messagesToChat = []
     article_uuid = datetime.now(cfg.timezone).strftime('%Y%m%d_%H%M%S')
 
-    # TODO apagar
-    # article_uuid=12345678
+    # ---- GET UPLOADED FILE(S) ----
+    uploaded_files = request.files.getlist("files")
+    if not uploaded_files:
+        single = request.files.get("file")
+        if single:
+            uploaded_files = [single]
 
-    # ---- CHECK FILE ----
-    if 'file' not in request.files:
-        appendMessage(messagesToUser, contentShort="I can’t find your file", stage="Start")
+    if not uploaded_files:
+        appendMessage(messagesToUser, "I can’t find your file", stage="Start")
         return makeResponse(messagesToUser, 400, True)
 
-    file = request.files["file"]
-
-    if file.filename == '':
-        appendMessage(messagesToUser, contentShort="I can’t select your file", stage="Start")
+    # Remove empty filenames
+    uploaded_files = [f for f in uploaded_files if f and getattr(f, "filename", "").strip()]
+    if not uploaded_files:
+        appendMessage(messagesToUser, "I can’t select your file", stage="Start")
         return makeResponse(messagesToUser, 400, True)
 
-    # ------ FIXED: EXTRACT TEXT FROM THE UPLOADED FILE ------
-    full_text = _extract_text_from_pdf(file)
+    # ✅ SAVE ALL FILES under articles/<article_uuid>/ (and extract zip if present)
+    try:
+        saved_paths = _save_uploaded_files_to_article_folder(article_uuid, uploaded_files)
+    except Exception as e:
+        appendMessage(messagesToUser, f"Failed to save uploaded files: {str(e)}", stage="Save")
+        return makeResponse({"article_uuid": article_uuid, "messages": messagesToUser}, 500, True)
+
+    if not saved_paths:
+        appendMessage(messagesToUser, "Uploaded files were empty or invalid", stage="Save")
+        return makeResponse({"article_uuid": article_uuid, "messages": messagesToUser}, 400, True)
+
+    # ✅ Find a PDF to analyze (from upload or extracted zip)
+    pdf_candidates = [p for p in saved_paths if isinstance(p, str) and p.lower().endswith(".pdf")]
+    if not pdf_candidates:
+        appendMessage(messagesToUser, "No PDF found in upload/zip to analyze.", stage="PDF")
+        return makeResponse({
+            "article_uuid": article_uuid,
+            "used_files": [os.path.basename(p) for p in saved_paths],
+            "messages": messagesToUser
+        }, 400, True)
+
+    pdf_path = pdf_candidates[0]  # pick first pdf (change if you want all PDFs)
+
+    # ------ EXTRACT TEXT FROM SAVED PDF PATH ------
+    full_text = _extract_text_from_pdf(pdf_path)
     body_text, refs_text = _split_body_and_references(full_text)
 
     max_chars = 20000
@@ -168,43 +189,45 @@ def analyze_author_datasets_citation_status_using_gpt():
 
     # # ---- CALL GPT ----
     # raw_response = callGPTModel([system_prompt, user_prompt])
-    #
-    # # ---- JSON EXTRACTION ----
+
+    # ---- JSON EXTRACTION ----
     # data = _extract_json_safe(raw_response)
-    #
-    # # Normalize to always produce arrays
-    # raw_with_refs = (data or {}).get("author_datasets_with_references", []) or []
-    # raw_without_refs = (data or {}).get("author_datasets_without_references", []) or []
-    #
-    # referenced = []
-    # for item in raw_with_refs:
-    #     if isinstance(item, dict):
-    #         name = str(item.get("dataset_name", "")).strip()
-    #         ref = str(item.get("reference_or_link", "")).strip()
-    #         referenced.append(f"{name} | {ref}".strip(" |"))
-    #
-    # non_referenced = []
-    # for item in raw_without_refs:
-    #     if isinstance(item, dict):
-    #         non_referenced.append(str(item.get("dataset_name", "")).strip())
-    #     else:
-    #         non_referenced.append(str(item).strip())
-    #
-    # # If extraction failed, keep empty lists and show an error summary
-    # if data is None:
-    #     summary_short = "I couldn't extract dataset information from the article. Please try another PDF."
-    #     summary_full = summary_short
-    # else:
-    #     summary_short = (
-    #         "I found datasets in the article.\n"
-    #         f"Referenced: {len(referenced)}\n"
-    #         f"Not referenced: {len(non_referenced)}"
-    #     )
-    #     summary_full = (
-    #         "I found datasets in the article.\n\n"
-    #         f"Referenced datasets: {len(referenced)}\n"
-    #         f"Datasets without references: {len(non_referenced)}"
-    #     )
+    # todo delete
+    data = {}
+
+    # Normalize to always produce arrays
+    raw_with_refs = (data or {}).get("author_datasets_with_references", []) or []
+    raw_without_refs = (data or {}).get("author_datasets_without_references", []) or []
+
+    referenced = []
+    for item in raw_with_refs:
+        if isinstance(item, dict):
+            name = str(item.get("dataset_name", "")).strip()
+            ref = str(item.get("reference_or_link", "")).strip()
+            referenced.append(f"{name} | {ref}".strip(" |"))
+
+    non_referenced = []
+    for item in raw_without_refs:
+        if isinstance(item, dict):
+            non_referenced.append(str(item.get("dataset_name", "")).strip())
+        else:
+            non_referenced.append(str(item).strip())
+
+    # If extraction failed, keep empty lists and show an error summary
+    if data is None:
+        summary_short = "I couldn't extract dataset information from the article. Please try another PDF."
+        summary_full = summary_short
+    else:
+        summary_short = (
+            "I found datasets in the article.\n"
+            f"Referenced: {len(referenced)}\n"
+            f"Not referenced: {len(non_referenced)}"
+        )
+        summary_full = (
+            "I found datasets in the article.\n\n"
+            f"Referenced datasets: {len(referenced)}\n"
+            f"Datasets without references: {len(non_referenced)}"
+        )
 
     # TODO delete
     summary_full = "I found datasets in the article.\nReferenced: 2\nNot referenced: 0"
@@ -214,6 +237,8 @@ def analyze_author_datasets_citation_status_using_gpt():
         "Reproducibility package of a curated dataset of 18 computational experiments | https://doi.org/10.5281/zenodo.15166258"
     ]
     non_referenced = ["new dataset"]
+    # TODO    END
+
     actions = ["infer", "improve", "add", "update", "delete"]
 
     # ---- BUILD CLIENT-COMPATIBLE CHAT RESPONSE (SINGLE MESSAGE) ----
@@ -230,8 +255,6 @@ def analyze_author_datasets_citation_status_using_gpt():
         "messages": messagesToUser,
     }, 200, True)
 
-
-# result = analyze_author_datasets_citation_status_using_gpt("example1.pdf")
 
 # print("WITH REFERENCES:", result["author_datasets_with_references"])
 # print("WITHOUT REFERENCES:", result["author_datasets_without_references"])
@@ -268,7 +291,6 @@ def analyze_author_datasets_citation_status_using_gpt():
 #             "CompRep: A Dataset For Computational Reproducibility"
 #         ]
 #     },
-#     "stage": "DefineNextStepInteraction"
 # }
 
 
@@ -293,246 +315,10 @@ def analyze_author_datasets_citation_status_using_gpt():
 #             ],
 #             "nonReferencedDatasets": []
 #         },
-#         "stage": "DefineNextStepInteraction"
 #     }
 # ]
 
-# @article_bp.route("/article/<article_uuid>/check-metadata", methods=["POST"])
-# @cross_origin()
-# @require_auth
-# @swag_from("../swagger/article/zenodo-check.yml")
-# def zenodo_check_metadata_route(article_uuid):
-#     messagesToUser = []
-#
-#     data = request.get_json(silent=True) or {}
-#     identifier = data.get("identifier")
-#
-#     # TODO
-#     article_uuid = "12345678"
-#
-#     if not identifier:
-#         appendMessage(messagesToUser, "Missing 'identifier' field", "Error")
-#         return makeResponse(messagesToUser, 400, True)
-#
-#     try:
-#         summary = check_zenodo_metadata(identifier, article_uuid)
-#         return makeResponse(summary, 200, True)
-#
-#     except Exception as e:
-#         appendMessage(messagesToUser, f"Error: {str(e)}", "Error")
-#         return makeResponse(messagesToUser, 500, True)
 
-@article_bp.route("/article/<article_uuid>/choose-next-step", methods=["POST"])
-@cross_origin()
-@require_auth
-@swag_from("../swagger/article/choose_next_step.yml")
-def choose_next_step(article_uuid):
-    request_data = request.get_json(silent=True) or {}
-    messages = request_data.get("messages", [])
-    messagesToUser = []
-
-    # TODO
-    article_uuid = "12345678"
-
-    if not messages:
-        respond_define_next_step(
-            messagesToUser,
-            referencedDatasets=[],
-            nonReferencedDatasets=[],
-            summary_prefix="No previous conversation found. Please choose a next step."
-        )
-        return makeResponse(messagesToUser, 200, True)
-
-    # -------- 1) Get dataset lists from previous assistant jsonObject message --------
-    referencedDatasets = []  # Option A: list[str] like "name | reference"
-    nonReferencedDatasets = []  # list[str]
-
-    for m in reversed(messages):
-        c = m.get("content")
-        if isinstance(c, dict) and ("referencedDatasets" in c or "nonReferencedDatasets" in c):
-            referencedDatasets = c.get("referencedDatasets", []) or []
-            nonReferencedDatasets = c.get("nonReferencedDatasets", []) or []
-            break
-
-    # -------- 2) Get last user text (fallback if roles are missing) --------
-    last_user_msg = next((m for m in reversed(messages) if m.get("role") == "user"), None)
-    if last_user_msg is None:
-        last_user_msg = messages[-1]
-
-    user_text = (last_user_msg.get("content") or "") if isinstance(last_user_msg, dict) else ""
-    if isinstance(user_text, dict):
-        user_text = json.dumps(user_text)
-
-    user_text = str(user_text).strip()
-
-    if not user_text:
-        respond_define_next_step(
-            messagesToUser,
-            referencedDatasets=referencedDatasets,
-            nonReferencedDatasets=nonReferencedDatasets,
-            summary_prefix="I didn't receive a command. Please choose one of the options below."
-        )
-        return makeResponse(messagesToUser, 200, True)
-
-    # -------- 3) If user wants to edit the lists (add/update/delete), handle it here --------
-    EDIT_PATTERN = re.compile(
-        r"\b("
-        r"add(?:s|ed|ing)?|"
-        r"update(?:s|d|ing)?|"
-        r"delete(?:s|d|ing)?|"
-        r"remove(?:s|d|ing)?|"
-        r"edit(?:s|ed|ing)?"
-        r")\b",
-        re.IGNORECASE
-    )
-
-    if EDIT_PATTERN.search(user_text):
-        referencedDatasets, nonReferencedDatasets = handle_dataset_list_edit(
-            user_text,
-            referencedDatasets,
-            nonReferencedDatasets,
-            messagesToUser
-        )
-
-        respond_define_next_step(
-            messagesToUser,
-            referencedDatasets,
-            nonReferencedDatasets,
-            summary_prefix="Updated dataset lists."
-        )
-        return makeResponse(messagesToUser, 200, True)
-
-    # -------- 4) Use GPT ONLY to extract action + dataset_name (infer/improve) --------
-    system_prompt = {
-        "role": "system",
-        "content": (
-            "Extract the user's intended action and dataset name.\n"
-            "Accepted actions: infer, improve.\n"
-            "User may write infer%, improve%, infer metadata, improve metadata.\n"
-            "Return ONLY JSON with keys: action, dataset_name.\n"
-            'Example: {"action":"improve","dataset_name":"HospitalX-CXR Collection"}'
-        )
-    }
-
-    user_prompt = {
-        "role": "user",
-        "content": f'User message:\n{user_text}\n\nReturn ONLY JSON.'
-    }
-
-    raw = '{"action":"improve","dataset_name":"Reproducibility package of a curated dataset of 18 computational experiments"}'
-    # TODO TO BE deleted
-    # raw = callGPTModel([system_prompt, user_prompt])
-
-    parsed = _extract_json_safe(raw) or {}
-
-    action = str(parsed.get("action") or "unknown").strip().lower().replace("%", "")
-    dataset_name = str(parsed.get("dataset_name") or "").strip()
-
-    if action not in ("infer", "improve") or not dataset_name:
-        appendMessage(
-            messagesToUser,
-            role="assistant",
-            contentShort="Please write: infer <dataset name> OR improve <dataset name>.",
-            content="Please write: infer <dataset name> OR improve <dataset name>.",
-            stage="DefineNextStepInteraction",
-            jsonObject=False
-        )
-        return makeResponse(messagesToUser, 200, True)
-
-    # -------- 5) If improve: fetch reference_or_link + Zenodo metadata + F-UJI --------
-    reference_or_link = ""
-    zenodo_metadata = None
-    fuji_error = ""
-    fuji_result = ""
-
-    if action == "improve":
-        target = _normalize_article(dataset_name)
-
-        # Find ref
-        for s in referencedDatasets:
-            if not isinstance(s, str):
-                continue
-            name, ref = _parse_referenced_entry_with_gpt_fallback(s)
-            if _normalize_article(name) == target:
-                reference_or_link = ref
-                break
-
-        if not reference_or_link:
-            appendMessage(
-                messagesToUser,
-                role="assistant",
-                contentShort=f"I couldn't find the reference for '{dataset_name}'. Please select a dataset from the referenced list.",
-                content=f"I couldn't find the reference for '{dataset_name}'. Please select a dataset from the referenced list.",
-                stage="DefineNextStepInteraction",
-                jsonObject=False
-            )
-            return makeResponse(messagesToUser, 200, True)
-
-        # Fetch Zenodo metadata
-        try:
-            zenodo_metadata = check_zenodo_metadata(reference_or_link, article_uuid)
-        except Exception as e:
-            appendMessage(
-                messagesToUser,
-                role="assistant",
-                contentShort=f"I found the reference but couldn't fetch Zenodo metadata: {str(e)}",
-                content=f"I found the reference but couldn't fetch Zenodo metadata: {str(e)}",
-                stage="DefineNextStepInteraction",
-                jsonObject=False
-            )
-            return makeResponse(messagesToUser, 200, True)
-
-        # We do NOT hard-fail if article_uuid is missing or F-UJI fails.
-        if article_uuid:
-            try:
-                fuji_result = run_fuji_fair_assessment(article_uuid=article_uuid, doi=reference_or_link)
-                fuji_path = os.path.join("articles", article_uuid, "fuji_result.json")
-            except Exception as e:
-                fuji_error = str(e)
-                fuji_path = os.path.join("articles", article_uuid, "fuji_result.json")
-        else:
-            fuji_error = "Missing article_uuid in request body (required to save F-UJI result under articles/<uuid>/)."
-
-    # -------- 6) Return payload --------
-    # TODO alterar
-    # next_stage = "InferDatasetMetadata" if action == "infer" else "ImproveDatasetMetadata"
-    next_stage = "DefineNextStepInteraction"
-
-    payload2 = {}
-    # if action == "improve":
-    #     payload2["zenodo_metadata"] = zenodo_metadata
-    #
-    #     if fuji_error:
-    #         payload2["fuji_error"] = fuji_error
-    #
-    #     appendMessage(
-    #         messagesToUser,
-    #         role="assistant",
-    #         jsonObject=True,
-    #         contentShort=payload2,
-    #         content=payload2
-    #     )
-    payload = {
-        "action": action,
-        "fuji_summary": fuji_result["fuji_summary"],
-    }
-
-
-    appendMessage(
-        messagesToUser,
-        role="assistant",
-        stage=next_stage,
-        jsonObject=True,
-        contentShort=payload,
-        content=payload
-    )
-
-    return makeResponse(messagesToUser, 200, True)
-
-
-# -----------------------------
-# NEW: Infer MULTIPLE datasets' metadata from local article folder
-# -----------------------------
 @article_bp.route("/article/<article_uuid>/infer-metadata", methods=["POST"])
 @cross_origin()
 @require_auth
@@ -548,7 +334,6 @@ def infer_dataset_metadata_from_article(article_uuid: str):
       - Python converts placeholders into {"_tobefilledbyuser":true,...} with options for license.
     """
     # TODO DO
-    article_uuid = "1234"
     TOBE = "<TOBeFilledByUser>"
     MAX_TRIES = 3
 
@@ -563,8 +348,7 @@ def infer_dataset_metadata_from_article(article_uuid: str):
     # if not files_inventory:
     #     appendMessage(
     #         messagesToUser,
-    #         contentShort=f"No local files found under articles/{article_uuid}/. Upload files first.",
-    #         stage="Error"
+    #         f"No local files found under articles/{article_uuid}/. Upload files first."
     #     )
     #     return makeResponse(messagesToUser, 400, True)
     #
@@ -861,8 +645,7 @@ def infer_dataset_metadata_from_article(article_uuid: str):
     # if parsed is None:
     #     appendMessage(
     #         messagesToUser,
-    #         contentShort="LLM did not return the required JSON schema after 3 attempts.",
-    #         stage="Error"
+    #         "LLM did not return the required JSON schema after 3 attempts.",
     #     )
     #     return makeResponse(messagesToUser, 500, True)
     #
@@ -937,7 +720,6 @@ def infer_dataset_metadata_from_article(article_uuid: str):
     appendMessage(
         messagesToUser,
         role="assistant",
-        stage="WaitChatInteractionArticle",
         jsonObject=True,
         contentShort=payload,
         content=payload
@@ -949,221 +731,172 @@ def infer_dataset_metadata_from_article(article_uuid: str):
     }, 200, True)
 
 
-def _allowed_file(filename: str) -> bool:
-    if not filename:
-        return False
-    if ALLOWED_EXTENSIONS is None:
-        return True
-    ext = filename.rsplit(".", 1)[-1].lower() if "." in filename else ""
-    return ext in ALLOWED_EXTENSIONS
-
-
-def _list_local_article_files(article_uuid: str) -> List[str]:
-    """
-    Collects file paths under articles/<article_uuid>/ excluding known non-artifact files.
-    Tune the exclusions to your project.
-    """
-    root_dir = os.path.join("articles", article_uuid)
-    if not os.path.isdir(root_dir):
-        return []
-
-    excluded_names = {
-        "fuji_result.json",
-        "metadata.json",
-    }
-    excluded_dirs = {
-        "__pycache__",
-        ".git",
-        ".idea",
-        ".vscode",
-    }
-
-    collected: List[str] = []
-    for dirpath, dirnames, filenames in os.walk(root_dir):
-        dirnames[:] = [d for d in dirnames if d not in excluded_dirs]
-
-        for fn in filenames:
-            if fn in excluded_names:
-                continue
-            full = os.path.join(dirpath, fn)
-            if os.path.isfile(full):
-                collected.append(full)
-
-    return collected
-
-
-def _save_uploaded_files_to_article_folder(article_uuid: str, incoming_files: List[FileStorage]) -> List[str]:
-    """
-    Saves uploaded files into articles/<article_uuid>/ (updates local repository).
-    Returns saved file paths.
-    """
-    root_dir = os.path.join("articles", article_uuid)
-    os.makedirs(root_dir, exist_ok=True)
-
-    saved_paths: List[str] = []
-
-    for f in incoming_files:
-        if not f or not getattr(f, "filename", ""):
-            continue
-
-        filename = secure_filename(f.filename)
-        if not filename:
-            continue
-
-        if not _allowed_file(filename):
-            # skip disallowed file types
-            continue
-
-        dest_path = os.path.join(root_dir, filename)
-
-        # overwrite/update local copy
-        f.save(dest_path)
-        saved_paths.append(dest_path)
-
-    return saved_paths
-
-
-def _paths_to_filestorage(paths: List[str]) -> List[FileStorage]:
-    """
-    Wrap local file paths into FileStorage objects so you can reuse
-    create_zenodo_deposition_with_files(metadata_json, files).
-    """
-    storages: List[FileStorage] = []
-    for p in paths:
-        try:
-            stream = open(p, "rb")
-        except Exception:
-            continue
-
-        filename = os.path.basename(p)
-        storages.append(FileStorage(stream=stream, filename=filename))
-    return storages
-
-
 @article_bp.route("/article/<article_uuid>/create-dataset-zenodo", methods=["POST"])
 @cross_origin()
 @require_auth
 @swag_from("../swagger/article/create-dataset-zenodo.yml")
 def zenodo_create_dataset_route(article_uuid):
-    # todo
-    article_uuid = "1234"
+    """
+    Upload to Zenodo all files available under articles/<article_uuid>/.
 
+    If the request includes uploaded files (pdf/zip/etc), you can choose:
+      - merge: add uploaded files to existing local repository, then upload ALL local files
+      - replace: ignore existing local repository and upload ONLY the received files (still saved locally)
+
+    Control via form field:
+      file_mode = "merge" (default) | "replace"
+    """
     messagesToUser: List[Dict[str, Any]] = []
 
     # ---- CHECK METADATA JSON ----
     metadata_str = request.form.get("metadata")
     if not metadata_str:
-        appendMessage(messagesToUser, "Missing 'metadata' field in form data", "Error")
+        appendMessage(messagesToUser, "Missing 'metadata' field in form data")
         return makeResponse(messagesToUser, 400, True)
 
     try:
         metadata_json = json.loads(metadata_str)
     except json.JSONDecodeError:
-        appendMessage(messagesToUser, "Invalid JSON in 'metadata' field", "Error")
+        appendMessage(messagesToUser, "Invalid JSON in 'metadata' field")
         return makeResponse(messagesToUser, 400, True)
 
     if not isinstance(metadata_json, dict) or "metadata" not in metadata_json:
-        appendMessage(messagesToUser, "JSON must have top-level 'metadata' key", "Error")
+        appendMessage(messagesToUser, "JSON must have top-level 'metadata' key")
         return makeResponse(messagesToUser, 400, True)
 
+    # ---- MODE: merge vs replace ----
+    file_mode = (request.form.get("file_mode") or "merge").strip().lower()
+    if file_mode not in ("merge", "replace"):
+        file_mode = "merge"
+
     # ---- GET UPLOADED FILES (IF ANY) ----
-    uploaded_files = request.files.getlist("files")
+    uploaded_files = request.files.getlist("files") or []
     if not uploaded_files:
         single_file = request.files.get("file")
         if single_file:
             uploaded_files = [single_file]
 
-    # ---- DECIDE FILE SOURCE ----
+    # Remove empties
+    uploaded_files = [f for f in uploaded_files if f and getattr(f, "filename", "").strip()]
+
     local_paths: List[str] = []
 
+    # ---- DECIDE WHAT TO UPLOAD ----
     if uploaded_files:
-        # ✅ 1) Save uploaded files locally (update local repository)
-        local_paths = _save_uploaded_files_to_article_folder(article_uuid, uploaded_files)
+        # Always save incoming files to local repository (and extract zip if your helper does)
+        try:
+            saved_paths = _save_uploaded_files_to_article_folder(article_uuid, uploaded_files)
+        except Exception as e:
+            appendMessage(messagesToUser, f"Failed to save uploaded files: {str(e)}")
+            return makeResponse({"article_uuid": article_uuid, "messages": messagesToUser}, 500, True)
+
+        if not saved_paths:
+            appendMessage(messagesToUser, "Uploaded files were empty or invalid")
+            return makeResponse({"article_uuid": article_uuid, "messages": messagesToUser}, 400, True)
+
+        if file_mode == "replace":
+            # Upload ONLY what we just received/saved (including extracted files)
+            local_paths = saved_paths
+        else:
+            # Upload ALL files now available in the article folder (existing + newly saved)
+            local_paths = _list_local_article_files(article_uuid)
 
         if not local_paths:
-            appendMessage(messagesToUser, "Uploaded files were empty or invalid", "Error")
-            return makeResponse(messagesToUser, 400, True)
+            appendMessage(messagesToUser, f"No files found under articles/{article_uuid}/ after saving upload.")
+            return makeResponse({"article_uuid": article_uuid, "messages": messagesToUser}, 400, True)
+
     else:
-        # ✅ 2) No files sent -> use files already stored in articles/<article_uuid>/
+        # ALL LOCAL
         local_paths = _list_local_article_files(article_uuid)
 
         if not local_paths:
-            appendMessage(
-                messagesToUser,
-                f"No files provided and no local files found under articles/{article_uuid}/",
-                "Error",
-            )
-            return makeResponse(messagesToUser, 400, True)
+            appendMessage(messagesToUser, f"No files provided and no local files found under articles/{article_uuid}/")
+            return makeResponse({"article_uuid": article_uuid, "messages": messagesToUser}, 400, True)
+
+    # (Optional) de-duplicate paths while preserving order
+    seen = set()
+    deduped_paths: List[str] = []
+    for p in local_paths:
+        if not isinstance(p, str):
+            continue
+        if p not in seen:
+            seen.add(p)
+            deduped_paths.append(p)
+    local_paths = deduped_paths
 
     # Wrap local paths as FileStorage so your existing helper can be reused
     files_for_zenodo: List[FileStorage] = _paths_to_filestorage(local_paths)
-
     if not files_for_zenodo:
-        appendMessage(messagesToUser, "Could not open any files for upload", "Error")
-        return makeResponse(messagesToUser, 400, True)
+        appendMessage(messagesToUser, "Could not open any files for upload")
+        return makeResponse({"article_uuid": article_uuid, "messages": messagesToUser}, 400, True)
+    try:
+        deposition = create_zenodo_deposition_with_files(metadata_json, files_for_zenodo)
+    except Exception as e:
+        appendMessage(messagesToUser, f"Error creating Zenodo deposition: {str(e)}")
+        return makeResponse({"article_uuid": article_uuid, "messages": messagesToUser}, 500, True)
+    finally:
+        for fs in files_for_zenodo:
+            try:
+                fs.stream.close()
+            except Exception:
+                pass
 
-    # ---- CALL ZENODO API ----
-    # try:
-    #     deposition = create_zenodo_deposition_with_files(metadata_json, files_for_zenodo)
-    # except Exception as e:
-    #     appendMessage(messagesToUser, f"Error creating Zenodo deposition: {str(e)}", "Error")
-    #     return makeResponse(messagesToUser, 500, True)
-    # finally:
-    #     # Close opened file streams (FileStorage.stream)
-    #     for fs in files_for_zenodo:
-    #         try:
-    #             fs.stream.close()
-    #         except Exception:
-    #             pass
+    # zenodo_metadata = {
+    #     "title": "CompRep: A Dataset For Computational Reproducibility",
+    #     "doi": "10.5281/zenodo.18134102",
+    #     "publication_date": "2025-07-29",
+    #     "description": "Reproducibility in computational science is increasingly dependent on the ability to faithfully re-execute experiments involving code, data, and software environments. However, assessing the effectiveness of reproducibility tools is difficult due to the lack of standardized benchmarks. To address this, we collected 38 computational experiments from diverse scientific domains and attempted to reproduce each using 8 different reproducibility tools. From this initial pool, we identified 18 experiments that could be successfully reproduced using at least one tool. These experiments form our curated benchmark dataset, which we release along with reproducibility packages to support ongoing evaluation efforts.",
+    #     "access_right": "open",
+    #     "creators": [
+    #         {
+    #             "name": "L\u00e1zaro Costa",
+    #             "affiliation": "University of Porto & INESC TEC, Portugal"
+    #         },
+    #         {
+    #             "name": "Susana Barbosa",
+    #             "affiliation": "INESC TEC, Portugal"
+    #         },
+    #         {
+    #             "name": "J\u00e1come Cunha",
+    #             "affiliation": "University of Porto & HASLab/INESC TEC, Portugal"
+    #         }
+    #     ],
+    #     "keywords": [
+    #         "Reproducibility",
+    #         "Open Science",
+    #         "Empirical Evaluation",
+    #         "Dataset"
+    #     ],
+    #     "language": "eng",
+    #     "license": "cc-zero",
+    #     "imprint_publisher": "Zenodo",
+    #     "upload_type": "dataset",
+    #     "prereserve_doi": {
+    #         "doi": "10.5281/zenodo.18134102",
+    #         "recid": 18134102
+    #     }}
 
-    zenodo_metadata = {
-        "title": "CompRep: A Dataset For Computational Reproducibility",
-        "doi": "10.5281/zenodo.18134102",
-        "publication_date": "2025-07-29",
-        "description": "Reproducibility in computational science is increasingly dependent on the ability to faithfully re-execute experiments involving code, data, and software environments. However, assessing the effectiveness of reproducibility tools is difficult due to the lack of standardized benchmarks. To address this, we collected 38 computational experiments from diverse scientific domains and attempted to reproduce each using 8 different reproducibility tools. From this initial pool, we identified 18 experiments that could be successfully reproduced using at least one tool. These experiments form our curated benchmark dataset, which we release along with reproducibility packages to support ongoing evaluation efforts.",
-        "access_right": "open",
-        "creators": [
-            {
-                "name": "L\u00e1zaro Costa",
-                "affiliation": "University of Porto & INESC TEC, Portugal"
-            },
-            {
-                "name": "Susana Barbosa",
-                "affiliation": "INESC TEC, Portugal"
-            },
-            {
-                "name": "J\u00e1come Cunha",
-                "affiliation": "University of Porto & HASLab/INESC TEC, Portugal"
-            }
-        ],
-        "keywords": [
-            "Reproducibility",
-            "Open Science",
-            "Empirical Evaluation",
-            "Dataset"
-        ],
-        "language": "eng",
-        "license": "cc-zero",
-        "imprint_publisher": "Zenodo",
-        "upload_type": "dataset",
-        "prereserve_doi": {
-            "doi": "10.5281/zenodo.18134102",
-            "recid": 18134102
-        }}
     actions = ["go to menu", "update metadata"]
+
+    zenodo_meta = deposition.get("metadata") or {}
+
+    payload = {
+        "zenodo_status": "Zenodo repository created",
+        "zenodo_metadata": zenodo_meta
+    }
+
+    appendMessage(
+        messagesToUser,
+        role="assistant",
+        jsonObject=True,
+        contentShort=payload,
+        content=payload
+    )
 
     return makeResponse({
         "actions": actions,
-        "article_uuid": article_uuid,
-        "used_files": [os.path.basename(p) for p in local_paths],
-        "zenodo_metadata": zenodo_metadata
+        "messages": messagesToUser,
     }, 200, True)
-
-    # return makeResponse({
-    #     "article_uuid": article_uuid,
-    #     "used_files": [os.path.basename(p) for p in local_paths],
-    #     "zenodo_metadata": deposition.get("metadata")
-    # }, 200, True)
 
 
 @article_bp.route("/article/<article_uuid>/zenodo/<int:deposition_id>/edit", methods=["POST"])
@@ -1172,9 +905,6 @@ def zenodo_create_dataset_route(article_uuid):
 @swag_from("../swagger/article/edit-dataset-zenodo.yml")
 def zenodo_edit_dataset_route(article_uuid, deposition_id):
     messagesToUser = []
-
-    # TODO
-    article_uuid = "12345678"
 
     # ---- CHECK TOKEN ----
     zenodo_token = request.form.get("zenodo_token")
@@ -1185,17 +915,17 @@ def zenodo_edit_dataset_route(article_uuid, deposition_id):
     # ---- CHECK METADATA JSON ----
     metadata_str = request.form.get("metadata")
     if not metadata_str:
-        appendMessage(messagesToUser, "Missing 'metadata' field in form data", "Error")
+        appendMessage(messagesToUser, "Missing 'metadata' field in form data")
         return makeResponse(messagesToUser, 400, True)
 
     try:
-        llm_data = json.loads(metadata_str)
+        metadata_json = json.loads(metadata_str)
     except json.JSONDecodeError:
-        appendMessage(messagesToUser, "Invalid JSON in 'metadata' field", "Error")
+        appendMessage(messagesToUser, "Invalid JSON in 'metadata' field", )
         return makeResponse(messagesToUser, 400, True)
 
-    if not isinstance(llm_data, dict) or "metadata" not in llm_data:
-        appendMessage(messagesToUser, "JSON must have top-level 'metadata' key", "Error")
+    if not isinstance(metadata_json, dict) or "metadata" not in metadata_json:
+        appendMessage(messagesToUser, "JSON must have top-level 'metadata' key")
         return makeResponse(messagesToUser, 400, True)
 
     # ---- CHECK FILES (optional) ----
@@ -1215,165 +945,49 @@ def zenodo_edit_dataset_route(article_uuid, deposition_id):
     try:
         dep = upsert_zenodo_deposition_metadata_and_files(
             deposition_id=deposition_id,
-            llm_data=llm_data,
+            llm_data=metadata_json,
             files=files,
             zenodo_token=token,
             replace_files=replace_files,
             publish=publish
         )
     except Exception as e:
-        appendMessage(messagesToUser, f"Error editing Zenodo deposition: {str(e)}", "Error")
+        appendMessage(messagesToUser, f"Error editing Zenodo deposition: {str(e)}")
         return makeResponse(messagesToUser, 500, True)
 
-    return makeResponse({
-        "article_uuid": article_uuid,
-        "deposition_id": dep.get("id"),
-        "deposition": dep
-    }, 200, True)
+    return makeResponse({"deposition": dep}, 200, True)
 
 
-@article_bp.route("/article/<article_uuid>/improve-zenodo-metadata", methods=["POST"])
+@article_bp.route("/article/<article_uuid>/metadata", methods=["GET"])
 @cross_origin()
 @require_auth
-@swag_from("../swagger/article/improve-zenodo-metadata.yml")  # optional, create if you use flasgger
-def improve_zenodo_metadata_route(article_uuid: str):
+@swag_from("../swagger/article/metadata.yml")
+def get_metadata_from_article(article_uuid: str):
     """
-    Request JSON body:
-    {
-      "identifier": "10.5281/zenodo.... | https://zenodo.org/records/... ",
-      "warnings_by_dimension": { "accessible":[...], "interoperable":[...], ... },
+    GET /article/<article_uuid>/metadata?doi=<doi-or-zenodo-url-or-doi-url>
 
-      // optional: if you already fetched it client-side, you can pass it
-      "current_metadata": { ... },
-
-      // required for updating Zenodo
-      "zenodo_token": "...",
-
-      // required for calling OpenAI
-      "openai_api_key": "...",   // OR omit and set OPENAI_API_KEY in env
-      "openai_model": "gpt-4o-mini" // optional
-    }
+    Returns UI payload:
+      - zenodo_metadata list (in your expected format)
+      - template to follow
+      - actions user can do next
     """
-    # TODO
-    article_uuid = "1234"
-    messagesToUser = []
+    messagesToUser: List[Dict[str, Any]] = []
 
-    data = request.get_json(silent=True) or {}
-    identifier = (data.get("identifier") or "").strip()
-    warnings_by_dimension = data.get("warnings_by_dimension") or {}
-    current_metadata = data.get("metadata")  # optional
+    doi = (request.args.get("doi") or "").strip()
 
-    # ---- CHECK TOKEN ----
-    zenodo_token = request.form.get("zenodo_token")
-    token = zenodo_token or os.getenv("ZENODO_API_TOKEN")
-    if not token:
-        raise RuntimeError("Zenodo token not provided and ZENODO_API_TOKEN is not set")
+    if not doi:
+        appendMessage(messagesToUser, "Missing required query param: doi. Example: ?doi=10.5281/zenodo.1234567", )
+        return makeResponse({"messages": messagesToUser}, 400, True)
 
-    openai_api_key = (data.get("openai_api_key") or os.getenv("OPENAI_API_KEY") or "").strip()
-    openai_model = (data.get("openai_model") or "gpt-4o-mini").strip()
-
-    if not identifier:
-        appendMessage(messagesToUser, contentShort="Missing 'identifier'.", stage="Error")
-        return makeResponse(messagesToUser, 400, True)
-
-    if not isinstance(warnings_by_dimension, dict) or not warnings_by_dimension:
-        appendMessage(messagesToUser, contentShort="Missing or invalid 'warnings_by_dimension'.", stage="Error")
-        return makeResponse(messagesToUser, 400, True)
-
-    # 1) Ask LLM for patch
     try:
-        patch = propose_zenodo_metadata_patch_with_openai(
-            zenodo_identifier=identifier,
-            warnings_by_dimension=warnings_by_dimension,
-            current_metadata=current_metadata,
+        payload = get_zenodo_metadata_payload_for_article(
+            article_uuid=article_uuid,
+            doi=doi,
+            api_token=None,
         )
     except Exception as e:
-        appendMessage(
-            messagesToUser,
-            role="assistant",
-            contentShort=f"LLM patch generation failed: {str(e)}",
-            content=f"LLM patch generation failed: {str(e)}",
-            stage="Error",
-            jsonObject=False,
-        )
-        return makeResponse(messagesToUser, 500, True)
-
-    # 3) Merge + clean + validate
-    try:
-        merged_metadata = _deep_merge(current_metadata, patch["metadata"])
-        merged_metadata = _strip_license_urls_from_text_fields(merged_metadata)
-        _validate_minimal_zenodo_metadata(merged_metadata)
-    except Exception as e:
-        appendMessage(
-            messagesToUser,
-            role="assistant",
-            contentShort=f"Patch validation failed: {str(e)}",
-            content=f"Patch validation failed: {str(e)}",
-            stage="Error",
-            jsonObject=False,
-        )
-        return makeResponse(messagesToUser, 400, True)
-
-    # 4) Update Zenodo (metadata-only, publish)
-    #    IMPORTANT: For editing a published record, Zenodo requires deposit deposition ID.
-    #    In many Zenodo cases, record id == deposition id; your existing helper already knows how to edit.
-    try:
-        # Resolve deposition_id using your existing parsing+record fetch patterns.
-        # If you already have deposition_id in client, you can pass it and use it directly.
-        deposition_id = data.get("deposition_id")
-        if deposition_id is None:
-            # Derive from identifier using your record fetch (reuse your helper)
-            # check_zenodo_metadata returns only metadata; so use your existing record fetch if you have it.
-            # Minimal workaround: accept deposition_id from client is best.
-            raise ValueError(
-                "Missing 'deposition_id'. Provide the Zenodo DEPOSITION ID (editable deposit) to update metadata."
-            )
-
-        updated_dep = upsert_zenodo_deposition_metadata_and_files(
-            deposition_id=int(deposition_id),
-            llm_data={"metadata": merged_metadata},
-            files=[],
-            zenodo_token=zenodo_token,
-            replace_files=False,
-            publish=True,
-        )
-    except Exception as e:
-        appendMessage(
-            messagesToUser,
-            role="assistant",
-            contentShort=f"Zenodo update failed: {str(e)}",
-            content=f"Zenodo update failed: {str(e)}",
-            stage="Error",
-            jsonObject=False,
-        )
-        return makeResponse(messagesToUser, 500, True)
-
-    # 5) Re-run F-UJI
-    try:
-        fuji = run_fuji_fair_assessment(article_uuid=article_uuid, doi=identifier)
-    except Exception as e:
-        fuji = {"fuji_summary": None}
-        appendMessage(
-            messagesToUser,
-            role="assistant",
-            contentShort=f"Zenodo updated, but F-UJI failed: {str(e)}",
-            content=f"Zenodo updated, but F-UJI failed: {str(e)}",
-            stage="Warning",
-            jsonObject=False,
-        )
-
-    payload = {
-        "identifier": identifier,
-        "deposition_id": int(data.get("deposition_id")),
-        "llm_patch": patch,
-        "merged_metadata": merged_metadata,
-        "zenodo_updated": {
-            "id": updated_dep.get("id"),
-            "state": updated_dep.get("state"),
-            "links": updated_dep.get("links"),
-        },
-        "fuji_summary": (fuji or {}).get("fuji_summary"),
-    }
+        appendMessage(messagesToUser, f"Failed to fetch Zenodo metadata: {str(e)}")
+        return makeResponse({"messages": messagesToUser}, 500, True)
 
     appendMessage(
         messagesToUser,
@@ -1381,7 +995,49 @@ def improve_zenodo_metadata_route(article_uuid: str):
         jsonObject=True,
         contentShort=payload,
         content=payload,
-        stage="ImproveZenodoMetadata"
+    )
+    actions = ["go to menu", "update metadata"]
+    return makeResponse({"actions": actions, "messages": messagesToUser, }, 200, True, )
+
+
+# TODO
+# TO BE DELETED tem o fugi
+@article_bp.route("/article/<article_uuid>/choose-next-step", methods=["POST"])
+@cross_origin()
+@require_auth
+@swag_from("../swagger/article/choose_next_step.yml")
+def choose_next_step(article_uuid):
+    messagesToUser = []
+
+    reference_or_link = ""
+    zenodo_metadata = None
+    fuji_error = ""
+    fuji_result = ""
+
+    zenodo_metadata = check_zenodo_metadata(reference_or_link, article_uuid)
+
+    # We do NOT hard-fail if article_uuid is missing or F-UJI fails.
+    if article_uuid:
+        try:
+            fuji_result = run_fuji_fair_assessment(article_uuid=article_uuid, doi=reference_or_link)
+            fuji_path = os.path.join("articles", article_uuid, "fuji_result.json")
+        except Exception as e:
+            fuji_error = str(e)
+            fuji_path = os.path.join("articles", article_uuid, "fuji_result.json")
+    else:
+        fuji_error = "Missing article_uuid in request body (required to save F-UJI result under articles/<uuid>/)."
+
+    payload = {
+        "zenodo_metadata": zenodo_metadata,
+        "fuji_summary": fuji_result["fuji_summary"],
+    }
+
+    appendMessage(
+        messagesToUser,
+        role="assistant",
+        jsonObject=True,
+        contentShort=payload,
+        content=payload
     )
 
     return makeResponse(messagesToUser, 200, True)

@@ -28,5 +28,3 @@ def nasa(surveyId):
 
     print(f"Data has been written to {number}.json.")
     return makeResponse([])
-
-

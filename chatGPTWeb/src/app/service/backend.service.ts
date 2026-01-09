@@ -150,22 +150,13 @@ export class BackendService {
         );
     }
 
-// Improve metadata for a REFERENCED dataset (user provides datasetName)
-    datasetImproveMetadata(projectUuid: string, datasetName: string, messages: Message[]) {
-        return this.http.post(
-            `${this.baseUrl}/article/${projectUuid}/improve-metadata`,
-            {datasetName, messages},
-            {headers: this.headers}
-        );
-    }
-
-// Optional: generic chat interaction for article workflow (if you need it)
-    articleChatInteraction(projectUuid: string, messages: Message[]) {
-        return this.http.post(
-            `${this.baseUrl}/article/${projectUuid}/chat-interaction`,
-            {messages},
-            {headers: this.headers}
-        );
+// Improve metadata for a REFERENCED dataset
+// datasetName here should actually be the DOI / Zenodo URL
+    datasetGetMetadata(projectUuid: string, doi: string) {
+        return this.http.get(`${this.baseUrl}/article/${projectUuid}/metadata`, {
+            headers: this.headers,
+            params: { doi }
+        });
     }
 
     datasetCreateZenodo(projectUuid: string, formData: FormData) {

@@ -11,4 +11,3 @@ def require_auth(f):
             return jsonify({"message": "Unauthorized"}), 401
         return f(*args, **kwargs)
     return decorated
-

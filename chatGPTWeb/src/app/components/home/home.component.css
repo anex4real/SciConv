@@ -210,3 +210,49 @@ button {
     padding-bottom: 0.25rem;
     border-bottom: 2px solid #ddd;
 }
+
+/* Make action blocks take full width and align content left */
+.create-upload-block{
+    width: 100%;
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;     /* ✅ left align */
+    justify-content: flex-start; /* ✅ */
+    gap: 10px;
+}
+
+/* Checkbox + label in one left-aligned row */
+.replace-row{
+    width: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: flex-start; /* ✅ prevents checkbox center / label right */
+    gap: 10px;
+    margin: 0;
+}
+
+/* Make sure the checkbox doesn't stretch weirdly */
+.replace-row input[type="checkbox"]{
+    flex: 0 0 auto;
+    margin: 0;
+}
+
+/* Keep label text left, not pushed */
+.replace-row span{
+    flex: 0 1 auto;
+    text-align: left;
+}
+
+/* Hint text consistent */
+.hint-text{
+    text-align: left;
+    font-size: 12px;
+    opacity: 0.8;
+}
+
+.zenodo-status{
+    color: #1b5e20;
+}
+.zenodo-status::before{
+    content: "✓ ";
+}
