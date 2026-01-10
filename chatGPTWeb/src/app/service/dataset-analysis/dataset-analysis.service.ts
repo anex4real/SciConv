@@ -115,6 +115,7 @@ export class DatasetAnalysisService {
         const rebuiltMenuMessages = this.rebuildMenuMessagesWithCurrentLists();
 
         this.patch({
+            stage: DataStages.DatasetCompleted, // ✅ IMPORTANT: leave EditZenodoMetadata
             availableActions: menuActions.length ? menuActions : this.state.availableActions,
             messages: rebuiltMenuMessages.length ? rebuiltMenuMessages : this.state.messages,
 
@@ -158,7 +159,11 @@ export class DatasetAnalysisService {
                 const msgs = response?.messages ?? [];
                 this.pushMessages(...msgs);
 
-                this.patch({menuMessages: msgs});
+                this.patch({
+                    menuActions: actions,
+                    menuMessages: this.state.messages, // ✅ full conversation snapshot
+                });
+
 
                 const last = msgs?.[msgs.length - 1];
                 const c = last?.content ?? last?.contentShort;
@@ -500,27 +505,48 @@ export class DatasetAnalysisService {
         this.patch({ uiReplaceFiles: !!replace });
     }
 
+    private mergeMessages(a: Message[], b: Message[]): Message[] {
+        const sig = (m: any) =>
+            JSON.stringify({
+                role: m?.role,
+                jsonObject: !!m?.jsonObject,
+                contentShort: m?.contentShort,
+                content: m?.content
+            });
+
+        const seen = new Set<string>();
+        const out: Message[] = [];
+
+        for (const m of [...a, ...b]) {
+            const k = sig(m);
+            if (seen.has(k)) continue;
+            seen.add(k);
+            out.push(m);
+        }
+        return out;
+    }
+
 
     private rebuildMenuMessagesWithCurrentLists(): Message[] {
-        const menuMessages = [...(this.state.menuMessages ?? [])];
-        if (!menuMessages.length) return menuMessages;
+        // ✅ full chat is the truth
+        const all = [...(this.state.messages ?? [])];
+
+        // ✅ merge any older snapshot messages if they exist
+        const merged = this.mergeMessages(this.state.menuMessages ?? [], all);
+
+        if (!merged.length) return merged;
 
         const instructions = this.state.uiInstructions ?? '';
+        const referenced = [...(this.state.referencedDatasets ?? [])];
+        const nonReferenced = [...(this.state.nonReferencedDatasets ?? [])];
 
-        // Start from CURRENT state lists
-        let referenced = [...(this.state.referencedDatasets ?? [])];
-        let nonReferenced = [...(this.state.nonReferencedDatasets ?? [])];
-
-
-        // ✅ recompute summary
         const newSummary =
             `I found datasets in the article.\n` +
             `Referenced: ${referenced.length}\n` +
             `Not referenced: ${nonReferenced.length}`;
 
-        // ✅ update the menu message snapshot (lists + summary)
-        for (let i = menuMessages.length - 1; i >= 0; i--) {
-            const m: any = menuMessages[i];
+        for (let i = merged.length - 1; i >= 0; i--) {
+            const m: any = merged[i];
             if (!m?.jsonObject) continue;
 
             const cShort = m?.contentShort;
@@ -532,7 +558,7 @@ export class DatasetAnalysisService {
 
             if (!hasLists) continue;
 
-            menuMessages[i] = {
+            const updated: Message = {
                 ...m,
                 contentShort: {
                     ...(cShort ?? {}),
@@ -549,13 +575,15 @@ export class DatasetAnalysisService {
                     instructions,
                 }
             };
-
+            merged.splice(i, 1);
+            merged.push(updated);
             break;
         }
 
-        this.patch({menuMessages});
-        return menuMessages;
+        this.patch({ menuMessages: merged });
+        return merged;
     }
+
 
     saveOrCreateZenodo(cleanedMetadata: any, zenodoToken?: string) {
         const articleUuid = this.state.articleUuid;
@@ -568,9 +596,25 @@ export class DatasetAnalysisService {
 
         // ✅ If no deposition id for that key, CREATE instead of failing
         if (!depositionId) {
-            this.createRepositoryFromCleanedMetadata(cleanedMetadata, zenodoToken);
+            const files = this.state.uiCreateFiles ?? [];
+            const replace = !!this.state.uiReplaceFiles;
+
+            // ✅ ensure there is a key to store deposition id
+            if (!this.state.activeDepositionKey) {
+                const fallback = (this.state.activeDatasetName || this.state.uiDatasetName || '').trim();
+                if (fallback) this.patch({ activeDepositionKey: fallback });
+            }
+
+            this.createRepositoryOnBackend(
+                this.getActiveKey(),      // datasetName/key
+                files,
+                replace,
+                cleanedMetadata,
+                zenodoToken
+            );
             return;
         }
+
 
         const formData = new FormData();
         formData.append('metadata', JSON.stringify({ metadata: cleanedMetadata }));
@@ -600,36 +644,52 @@ export class DatasetAnalysisService {
     }
 
 
-    private createRepositoryOnBackend(datasetName: string, files: File[] = [], replaceFiles: boolean = false) {
-        this.patch({isLoading: true, errorMessage: undefined});
+    private createRepositoryOnBackend(
+        datasetName: string,
+        files: File[] = [],
+        replaceFiles: boolean = false,
+        cleanedMetadata?: any,
+        zenodoToken?: string
+    ) {
+        this.patch({ isLoading: true, errorMessage: undefined });
 
-        const zm = this.state.zenodoMetadataView;
-        if (!zm) {
-            this.patch({isLoading: false, errorMessage: 'No Zenodo metadata available.'});
+        const metadataToSend =
+            cleanedMetadata ??
+            (this.state.zenodoMetadataView
+                ? this.serializeZenodoMetadata(this.state.zenodoMetadataView)
+                : undefined);
+
+        if (!metadataToSend) {
+            this.patch({ isLoading: false, errorMessage: 'No Zenodo metadata available.' });
             return;
         }
 
-        const metadataPayload = {
-            metadata: this.serializeZenodoMetadata(zm),
-        };
-
         const formData = new FormData();
-        formData.append('metadata', JSON.stringify(metadataPayload));
+        formData.append('metadata', JSON.stringify({ metadata: metadataToSend }));
         formData.append('file_mode', replaceFiles ? 'replace' : 'merge');
+
+        if (zenodoToken) formData.append('zenodo_token', zenodoToken); // ✅ IMPORTANT
 
         for (const f of (files ?? [])) {
             formData.append('files', f, f.name);
         }
 
-
         this.backend.datasetCreateZenodo(this.state.articleUuid, formData).subscribe({
             next: (response: any) => {
-                this.patch({isLoading: false});
-                const actions = response?.actions ?? [];
-                this.patch({availableActions: actions});
+                this.patch({ isLoading: false });
 
+                const actions = response?.actions ?? [];
                 const msgs = response?.messages ?? [];
+
+                // ✅ actions + messages
+                this.patch({ availableActions: actions });
                 this.pushMessages(...msgs);
+
+                // ✅ refresh menu snapshots to latest backend output (NO duplicates)
+                this.patch({
+                    menuActions: actions,
+                    menuMessages: this.state.messages, // pushMessages already updated it
+                });
 
                 const last = msgs?.[msgs.length - 1];
                 const c = last?.content ?? last?.contentShort;
@@ -637,29 +697,25 @@ export class DatasetAnalysisService {
                 const depId = c?.deposition_id;
                 if (depId) this.storeDepositionIdForActiveKey(depId);
 
-
-// ✅ status from backend
                 const status = c?.zenodo_status;
+                if (status) this.patch({ zenodoStatus: status });
 
-// ✅ metadata from backend
                 const zm = c?.zenodo_metadata;
-                let view
+                let view: any;
                 if (zm) {
                     view = this.buildZenodoMetadataView({ metadata: zm });
                     this.patch({
                         zenodoMetadataView: view,
                         zenodoMetadataDraft: this.deepClone(zm),
-                        zenodoStatus: status, // store it
                     });
                 }
 
-                // @ts-ignore
-                const title = (view.title || '').trim();
-                // @ts-ignore
-                const doi = (view.doi || '').trim();
+                // ✅ update lists (your existing logic kept)
+                const title = (view?.title || '').trim();
+                const doi = (view?.doi || '').trim();
                 const link = doi ? `https://doi.org/${doi}` : '';
 
-                const originalName = (datasetName || '').trim(); // ✅ the name selected in UI (function param)
+                const originalName = (datasetName || '').trim();
 
                 if (originalName && title && link) {
                     const newNonRef = (this.state.nonReferencedDatasets ?? [])
@@ -683,17 +739,15 @@ export class DatasetAnalysisService {
                     if (idx >= 0) newRef[idx] = entry;
                     else newRef.push(entry);
 
-                    this.patch({nonReferencedDatasets: newNonRef, referencedDatasets: newRef});
-
-                    // keep menu snapshot in sync
+                    this.patch({ nonReferencedDatasets: newNonRef, referencedDatasets: newRef });
                     this.updateMenuSnapshotLists(newRef, newNonRef);
                 }
+
+                // ✅ leave create screen and show updated actions/menu
+                this.selectAction('go to menu');
             },
-            error: (err) => {
-                this.patch({
-                    isLoading: false,
-                    errorMessage: 'Failed to create Zenodo repository.'
-                });
+            error: () => {
+                this.patch({ isLoading: false, errorMessage: 'Failed to create Zenodo repository.' });
             }
         });
     }
@@ -1076,19 +1130,24 @@ export class DatasetAnalysisService {
                 this.patch({ isLoading: false });
 
                 const actions = response?.actions ?? [];
-                this.patch({ availableActions: actions });
-
                 const msgs = response?.messages ?? [];
+
+                // keep current UI updated
+                this.patch({ availableActions: actions });
                 this.pushMessages(...msgs);
+
+                // ✅ IMPORTANT: refresh menu snapshots to include NEW backend info
+                this.patch({
+                    menuActions: actions,
+                    menuMessages: [...this.state.messages, ...msgs], // or just this.state.messages after pushMessages if you prefer
+                });
 
                 const last = msgs?.[msgs.length - 1];
                 const c = last?.content ?? last?.contentShort;
 
-                // ✅ store deposition id under current key
                 const depId = c?.deposition_id;
                 if (depId) this.storeDepositionIdForActiveKey(depId);
 
-                // ✅ status + metadata
                 if (c?.zenodo_status) this.patch({ zenodoStatus: c.zenodo_status });
 
                 const zm = c?.zenodo_metadata;

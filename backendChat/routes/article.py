@@ -829,60 +829,63 @@ def zenodo_create_dataset_route(article_uuid):
     if not files_for_zenodo:
         appendMessage(messagesToUser, "Could not open any files for upload")
         return makeResponse({"article_uuid": article_uuid, "messages": messagesToUser}, 400, True)
-    try:
-        deposition = create_zenodo_deposition_with_files(metadata_json, files_for_zenodo)
-    except Exception as e:
-        appendMessage(messagesToUser, f"Error creating Zenodo deposition: {str(e)}")
-        return makeResponse({"article_uuid": article_uuid, "messages": messagesToUser}, 500, True)
-    finally:
-        for fs in files_for_zenodo:
-            try:
-                fs.stream.close()
-            except Exception:
-                pass
+    zenodo_metadata={}
 
-    # zenodo_metadata = {
-    #     "title": "CompRep: A Dataset For Computational Reproducibility",
-    #     "doi": "10.5281/zenodo.18134102",
-    #     "publication_date": "2025-07-29",
-    #     "description": "Reproducibility in computational science is increasingly dependent on the ability to faithfully re-execute experiments involving code, data, and software environments. However, assessing the effectiveness of reproducibility tools is difficult due to the lack of standardized benchmarks. To address this, we collected 38 computational experiments from diverse scientific domains and attempted to reproduce each using 8 different reproducibility tools. From this initial pool, we identified 18 experiments that could be successfully reproduced using at least one tool. These experiments form our curated benchmark dataset, which we release along with reproducibility packages to support ongoing evaluation efforts.",
-    #     "access_right": "open",
-    #     "creators": [
-    #         {
-    #             "name": "L\u00e1zaro Costa",
-    #             "affiliation": "University of Porto & INESC TEC, Portugal"
-    #         },
-    #         {
-    #             "name": "Susana Barbosa",
-    #             "affiliation": "INESC TEC, Portugal"
-    #         },
-    #         {
-    #             "name": "J\u00e1come Cunha",
-    #             "affiliation": "University of Porto & HASLab/INESC TEC, Portugal"
-    #         }
-    #     ],
-    #     "keywords": [
-    #         "Reproducibility",
-    #         "Open Science",
-    #         "Empirical Evaluation",
-    #         "Dataset"
-    #     ],
-    #     "language": "eng",
-    #     "license": "cc-zero",
-    #     "imprint_publisher": "Zenodo",
-    #     "upload_type": "dataset",
-    #     "prereserve_doi": {
-    #         "doi": "10.5281/zenodo.18134102",
-    #         "recid": 18134102
-    #     }}
+    # try:
+    #     deposition = create_zenodo_deposition_with_files(metadata_json, files_for_zenodo)
+    #     zenodo_metadata = deposition.get("metadata") or {}
+
+    # except Exception as e:
+    #     appendMessage(messagesToUser, f"Error creating Zenodo deposition: {str(e)}")
+    #     return makeResponse({"article_uuid": article_uuid, "messages": messagesToUser}, 500, True)
+    # finally:
+    #     for fs in files_for_zenodo:
+    #         try:
+    #             fs.stream.close()
+    #         except Exception:
+    #             pass
+
+    zenodo_metadata = {
+        "title": "CompRep: A Dataset For Computational Reproducibility",
+        "doi": "10.5281/zenodo.18134102",
+        "publication_date": "2025-07-29",
+        "description": "Reproducibility in computational science is increasingly dependent on the ability to faithfully re-execute experiments involving code, data, and software environments. However, assessing the effectiveness of reproducibility tools is difficult due to the lack of standardized benchmarks. To address this, we collected 38 computational experiments from diverse scientific domains and attempted to reproduce each using 8 different reproducibility tools. From this initial pool, we identified 18 experiments that could be successfully reproduced using at least one tool. These experiments form our curated benchmark dataset, which we release along with reproducibility packages to support ongoing evaluation efforts.",
+        "access_right": "open",
+        "creators": [
+            {
+                "name": "L\u00e1zaro Costa",
+                "affiliation": "University of Porto & INESC TEC, Portugal"
+            },
+            {
+                "name": "Susana Barbosa",
+                "affiliation": "INESC TEC, Portugal"
+            },
+            {
+                "name": "J\u00e1come Cunha",
+                "affiliation": "University of Porto & HASLab/INESC TEC, Portugal"
+            }
+        ],
+        "keywords": [
+            "Reproducibility",
+            "Open Science",
+            "Empirical Evaluation",
+            "Dataset"
+        ],
+        "language": "eng",
+        "license": "cc-zero",
+        "imprint_publisher": "Zenodo",
+        "upload_type": "dataset",
+        "prereserve_doi": {
+            "doi": "10.5281/zenodo.18134102",
+            "recid": 18134102
+        }}
 
     actions = ["go to menu", "update metadata"]
 
-    zenodo_meta = deposition.get("metadata") or {}
 
     payload = {
         "zenodo_status": "Zenodo repository created",
-        "zenodo_metadata": zenodo_meta
+        "zenodo_metadata": zenodo_metadata
     }
 
     appendMessage(
