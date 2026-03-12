@@ -122,6 +122,47 @@ export class BackendService {
             {headers: this.headers});
     }
 
+    specifyOutputs(projectUuid: string, messages: Message[]) {
+        return this.http.post(`${this.baseUrl}/project/${projectUuid}/specify-outputs`, {
+                messages: messages
+            },
+            {headers: this.headers});
+    }
+
+    skipOutputs(projectUuid: string) {
+        return this.http.post(`${this.baseUrl}/project/${projectUuid}/specify-outputs`, {
+                skip: true
+            },
+            {headers: this.headers});
+    }
+
+    getRunProgress(projectUuid: string) {
+        return this.http.get(`${this.baseUrl}/project/${projectUuid}/run-progress`,
+            {headers: this.headers});
+    }
+
+    uploadArtifactToZenodo(projectUuid: string, body: any = {}) {
+        return this.http.post(
+            `${this.baseUrl}/project/${projectUuid}/upload-artifact-to-zenodo`,
+            body, {headers: this.headers});
+    }
+
+    reproduceFromDoiInit(artifactDoi: string) {
+        return this.http.post(
+            `${this.baseUrl}/project/reproduce-from-doi/init`,
+            {artifact_doi: artifactDoi}, {headers: this.headers});
+    }
+
+    reproduceRun(newProjectUuid: string) {
+        return this.http.post(
+            `${this.baseUrl}/project/${newProjectUuid}/reproduce-run`,
+            {}, {headers: this.headers});
+    }
+
+    getOutputFileUrl(projectUuid: string, filename: string): string {
+        return `${this.baseUrl}/project/${projectUuid}/download-output/${filename}`;
+    }
+
     findConfigurationsFunc(projectUuid: string, messages: Message[], myMessage: any) {
         return this.http.post(`${this.baseUrl}/project/${projectUuid}/find-configurations-change`, {
                 messages: messages,
@@ -133,6 +174,14 @@ export class BackendService {
     uploadProject(formData: FormData) {
         return this.http.post(`${this.baseUrl}/project/upload-project`, formData,
             {headers: this.headers});
+    }
+
+    externalizeData(projectUuid: string) {
+        return this.http.post(
+            `${this.baseUrl}/project/${projectUuid}/externalize-data`,
+            {},
+            {headers: this.headers}
+        );
     }
 
     uploadArticleFindInformation(formData: FormData) {

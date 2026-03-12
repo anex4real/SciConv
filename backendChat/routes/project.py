@@ -1,10 +1,10 @@
 # routes/project.py
-import os, re, json, zipfile, tempfile, shutil
+import os, re, json, zipfile, tempfile, shutil, subprocess, tarfile, io
 from copy import copy
 from datetime import datetime
 from flasgger import swag_from
 
-from flask import Blueprint, request
+from flask import Blueprint, request, jsonify, send_from_directory
 from flask_cors import cross_origin
 
 import config as cfg
@@ -15,11 +15,254 @@ from helpers.project.projectHelper import (
     write_messagesUser_to_file, saveDockerImage
 )
 from helpers.index import makeResponse, appendMessage, return_messages, callGPTModel
+from helpers.article.articleHelper import _extract_zenodo_identifier, _zenodo_fetch_by_id, _zenodo_fetch_by_doi
 from packageExperiment.linux import writeLinuxFile
 from packageExperiment.windows import writeWindowsFIle
 from werkzeug.utils import secure_filename
 
 project_bp = Blueprint("project", __name__)
+
+# ---------------------------------------------------------------------------
+# Data Extension Layer: constants
+# ---------------------------------------------------------------------------
+EMBED_THRESHOLD_BYTES = 5 * 1024 * 1024 * 1024   # 5 GB
+ZENODO_RECORD_LIMIT_BYTES = 50 * 1024 * 1024 * 1024  # 50 GB
+
+
+def _get_folder_size(path):
+    """Calculate total size in bytes of all files under *path*."""
+    total = 0
+    for dirpath, _dirnames, filenames in os.walk(path):
+        for f in filenames:
+            fp = os.path.join(dirpath, f)
+            if os.path.isfile(fp):
+                total += os.path.getsize(fp)
+    return total
+
+
+def _resolve_zenodo_doi(dataset_doi):
+    """
+    Resolve a Zenodo DOI / URL / record-ID to a dataset_reference dict.
+    Returns None if the identifier cannot be parsed.
+    """
+    parsed = _extract_zenodo_identifier(dataset_doi)
+    if not parsed["record_id"] and not parsed["doi"]:
+        return None
+
+    token = os.getenv("ZENODO_API_TOKEN")
+    if parsed["record_id"]:
+        record = _zenodo_fetch_by_id(parsed["record_id"], token)
+    else:
+        record = _zenodo_fetch_by_doi(parsed["doi"], token)
+
+    files_info = []
+    total_size = 0
+    for f in record.get("files", []):
+        size = f.get("size", 0)
+        total_size += size
+        files_info.append({
+            "filename": f.get("key") or f.get("filename", ""),
+            "size": size,
+            "checksum": f.get("checksum", ""),
+            "download_url": (f.get("links") or {}).get("self", ""),
+        })
+
+    doi_files_are_archives = any(_is_archive_filename(f["filename"]) for f in files_info)
+
+    return {
+        "doi": parsed["doi"] or f"10.5281/zenodo.{record.get('id', '')}",
+        "record_id": str(record.get("id", "")),
+        "zenodo_metadata": {
+            "title": record.get("metadata", {}).get("title", ""),
+            "creators": record.get("metadata", {}).get("creators", []),
+        },
+        "files": files_info,
+        "total_size_bytes": total_size,
+        "doi_files_are_archives": doi_files_are_archives,
+        "resolved_at": datetime.utcnow().isoformat() + "Z",
+    }
+
+
+ZENODO_MAX_FILES_PER_RECORD = 100
+
+_ARCHIVE_EXTENSIONS = (".zip", ".tar", ".tar.gz", ".tgz", ".tar.bz2", ".tar.xz", ".gz", ".bz2")
+
+
+def _is_archive_filename(filename):
+    name = filename.lower()
+    return any(name.endswith(ext) for ext in _ARCHIVE_EXTENSIONS)
+
+
+def _can_upload_individually(data_dir):
+    """
+    Return True if the data/ folder can be uploaded as individual files
+    (no tar required) — i.e. all files are in the root of data_dir (no
+    subdirectories), file count ≤ 100, and no single file > 50 GB.
+    Subdirectory paths in the Zenodo bucket URL cause connection aborts.
+    """
+    files = []
+    for root, _dirs, filenames in os.walk(data_dir):
+        for fname in filenames:
+            # Any file not directly in data_dir means subdirectories exist
+            if root != data_dir:
+                return False
+            files.append(os.path.join(root, fname))
+
+    if len(files) > ZENODO_MAX_FILES_PER_RECORD:
+        return False
+
+    for fpath in files:
+        if os.path.getsize(fpath) > ZENODO_RECORD_LIMIT_BYTES:
+            return False
+
+    return True
+
+
+def _evaluate_data_strategy(mode, local_data_size, remote_data_size,
+                            data_dir=None):
+    """
+    Step 2 — Orchestration: decide how to handle the dataset.
+
+    Returns one of:
+      "no_data"                 — no dataset provided, existing workflow unchanged
+      "embed"                   — data ≤ 5 GB, copy into Docker image
+      "externalize_files"       — data 5–50 GB, ≤100 files, no single file >50 GB;
+                                  upload individually → rclone mount possible
+      "externalize"             — data 5–50 GB, but cannot upload individually;
+                                  tar and upload to Zenodo as 1 record
+      "chunk_and_externalize"   — data > 50 GB, tar, chunk, upload across records
+      "external_doi"            — data already on Zenodo (Mode C)
+
+    Zenodo constraints (per record): 50 GB total, 100 files max.
+    """
+    if mode == "C":
+        return "external_doi"
+
+    # Mode A — decision based on local data size
+    if local_data_size == 0:
+        return "no_data"
+    elif local_data_size <= EMBED_THRESHOLD_BYTES:
+        return "embed"
+    elif local_data_size <= ZENODO_RECORD_LIMIT_BYTES:
+        # Prefer individual file upload (enables rclone mount) if constraints allow
+        if data_dir and _can_upload_individually(data_dir):
+            return "externalize_files"
+        return "externalize"
+    else:
+        return "chunk_and_externalize"
+
+
+def _save_project_info(project_location, project_uuid, mode,
+                       local_files_size, dataset_doi, dataset_reference,
+                       data_dir=None):
+    """Persist project_info.json inside the project folder."""
+    remote_size = 0
+    if dataset_reference:
+        remote_size = dataset_reference.get("total_size_bytes", 0)
+
+    # Step 2: evaluate data strategy (pass data_dir for externalize_files check)
+    data_strategy = _evaluate_data_strategy(mode, local_files_size, remote_size,
+                                            data_dir=data_dir)
+
+    info = {
+        "projectUuid": project_uuid,
+        "mode": mode,
+        "local_files_size_bytes": local_files_size,
+        "dataset_doi": dataset_doi,
+        "remote_data_size_bytes": remote_size,
+        "total_data_size_bytes": local_files_size + remote_size,
+        "data_strategy": data_strategy,
+        "created_at": datetime.utcnow().isoformat() + "Z",
+    }
+
+    info_path = os.path.join(project_location, "project_info.json")
+    with open(info_path, "w", encoding="utf-8") as fh:
+        json.dump(info, fh, indent=2, ensure_ascii=False)
+
+    if dataset_reference:
+        ref_path = os.path.join(project_location, "dataset_reference.json")
+        with open(ref_path, "w", encoding="utf-8") as fh:
+            json.dump(dataset_reference, fh, indent=2, ensure_ascii=False)
+
+    return info
+
+
+def _extract_code_zip(file, cfg_projects, now_str):
+    """
+    Extract a code ZIP or save a single file.
+    Returns (projectUuid, projectLocation, projectFilesLocation).
+    Identical to the original upload logic.
+    """
+    filename = secure_filename(file.filename)
+    ext = os.path.splitext(filename)[1].lower()
+
+    if ext == '.zip':
+        temp_path = os.path.join(cfg_projects, filename)
+        file.save(temp_path)
+
+        with zipfile.ZipFile(temp_path, 'r') as zip_ref:
+            namelist = zip_ref.namelist()
+            top_levels = set(
+                name.split('/')[0] for name in namelist
+                if not name.startswith('__MACOSX')
+            )
+
+            if len(top_levels) == 1 and all(
+                name.startswith(f"{list(top_levels)[0]}/") for name in namelist
+            ):
+                clean_name = re.sub(r'[^\w.-]', '', list(top_levels)[0]).lower()
+                projectUuid = f"{clean_name}_{now_str}"
+            else:
+                name_no_ext = os.path.splitext(filename)[0]
+                clean_name = re.sub(r'[^\w.-]', '', name_no_ext).lower()
+                projectUuid = f"{clean_name}_{now_str}"
+
+        projectLocation = os.path.join(cfg_projects, projectUuid)
+        projectFilesLocation = os.path.join(projectLocation, "files")
+
+        with zipfile.ZipFile(temp_path, 'r') as zip_ref:
+            zip_ref.extractall(projectLocation)
+        os.remove(temp_path)
+
+        if len(top_levels) == 1:
+            extracted_root = os.path.join(projectLocation, list(top_levels)[0])
+            os.rename(extracted_root, projectFilesLocation)
+        else:
+            os.makedirs(projectFilesLocation, exist_ok=True)
+            for item in os.listdir(projectLocation):
+                src = os.path.join(projectLocation, item)
+                if item != "files":
+                    os.rename(src, os.path.join(projectFilesLocation, item))
+    else:
+        name_no_ext = re.sub(r'[^\w.-]', '', os.path.splitext(filename)[0]).lower()
+        projectUuid = f"{name_no_ext}_{now_str}"
+        projectLocation = os.path.join(cfg_projects, projectUuid)
+        projectFilesLocation = os.path.join(projectLocation, "files")
+        os.makedirs(projectFilesLocation, exist_ok=True)
+        file.save(os.path.join(projectFilesLocation, filename))
+
+    return projectUuid, projectLocation, projectFilesLocation
+
+
+def _save_data_upload(data_file, project_location):
+    """
+    Save an uploaded data file/ZIP into projects/<uuid>/data/.
+    Returns the data directory path.
+    """
+    data_dir = os.path.join(project_location, "data")
+    os.makedirs(data_dir, exist_ok=True)
+
+    filename = secure_filename(data_file.filename)
+    dest = os.path.join(data_dir, filename)
+    data_file.save(dest)
+
+    ext = os.path.splitext(filename)[1].lower()
+    if ext == '.zip':
+        with zipfile.ZipFile(dest, 'r') as zf:
+            zf.extractall(data_dir)
+        os.remove(dest)
+
+    return data_dir
 
 
 @project_bp.route("/project/upload-project", methods=['POST'])
@@ -27,71 +270,148 @@ project_bp = Blueprint("project", __name__)
 @require_auth
 @swag_from("../swagger/project/upload-project.yml")
 def upload_file():
+    """
+    Step 1 — Experiment Request & Dataset Submission.
+
+    Accepts:
+      - "file"        (required)  code ZIP or single file
+      - "data_file"   (optional)  data ZIP or file — saved to projects/<uuid>/data/
+      - "dataset_doi"  (optional)  Zenodo DOI / URL / record-ID for remote dataset
+
+    Modes:
+      A  — file only           (existing behaviour, fully backwards-compatible)
+      C  — file + data_file and/or dataset_doi  (Data Extension Layer)
+    """
     messagesToUser = []
     messagesToChat = []
 
+    # ------------------------------------------------------------------
+    # 1. Validate that a code file was provided (always required)
+    # ------------------------------------------------------------------
     if 'file' not in request.files:
-        appendMessage(messagesToUser, contentShort="I can’t find your file", stage="Start")
+        appendMessage(messagesToUser, "I can't find your file", stage="Start")
         return makeResponse(messagesToUser, 201, True)
 
     file = request.files["file"]
 
     if file.filename == '':
-        appendMessage(messagesToUser, contentShort="I can’t select your file", stage="Start")
+        appendMessage(messagesToUser, "I can't select your file", stage="Start")
+        return makeResponse(messagesToUser, 201, True)
+
+    # ------------------------------------------------------------------
+    # 2. Read optional Data Extension Layer fields
+    # ------------------------------------------------------------------
+    data_file = request.files.get("data_file")
+    dataset_doi = (request.form.get("dataset_doi") or "").strip()
+    use_data_layer = (request.form.get("use_data_layer") or "").strip().lower() in ("true", "1", "yes")
+
+    has_data_file = data_file is not None and getattr(data_file, "filename", "")
+    has_doi = bool(dataset_doi)
+
+    # If the Data Extension Layer flag is set, data is mandatory
+    if use_data_layer and not has_data_file and not has_doi:
+        appendMessage(messagesToUser,
+                      "Data Extension Layer is enabled but no data was provided. "
+                      "Please upload a data file or provide a Zenodo DOI.",
+                      stage="Start")
+        return makeResponse(messagesToUser, 201, True)
+
+    # Cannot provide both — choose one mode
+    if has_data_file and has_doi:
+        appendMessage(messagesToUser,
+                      "Please provide either a data file (Mode A) or a Zenodo DOI (Mode C), not both.",
+                      stage="Start")
         return makeResponse(messagesToUser, 201, True)
 
     try:
-        filename = secure_filename(file.filename)
-        ext = os.path.splitext(filename)[1].lower()
         now_str = datetime.now(cfg.timezone).strftime("%d%m_%H%M")
 
-        if ext == '.zip':
-            # Save zip temporarily
-            temp_path = os.path.join(cfg.PROJECTS_LOCATION, filename)
-            file.save(temp_path)
+        # --------------------------------------------------------------
+        # 3. Extract / save code (same logic as before)
+        # --------------------------------------------------------------
+        projectUuid, projectLocation, projectFilesLocation = _extract_code_zip(
+            file, cfg.PROJECTS_LOCATION, now_str
+        )
 
-            with zipfile.ZipFile(temp_path, 'r') as zip_ref:
-                namelist = zip_ref.namelist()
-                top_levels = set(name.split('/')[0] for name in namelist if not name.startswith('__MACOSX'))
+        # --------------------------------------------------------------
+        # 4. Handle data upload (Mode A with data)
+        # --------------------------------------------------------------
+        data_dir = None
+        local_data_size = 0
 
-                if len(top_levels) == 1 and all(name.startswith(f"{list(top_levels)[0]}/") for name in namelist):
-                    # One folder inside zip (use its name) + append timestamp
-                    clean_name = re.sub(r'[^\w.-]', '', list(top_levels)[0]).lower()  # safe folder name
-                    projectUuid = f"{clean_name}_{now_str}"
-                else:
-                    # Multiple files/folders — use filename base, sanitized
-                    name_no_ext = os.path.splitext(filename)[0]
-                    clean_name = re.sub(r'[^\w.-]', '', name_no_ext).lower()  # safe file base name
-                    projectUuid = f"{clean_name}_{now_str}"
+        if has_data_file:
+            data_dir = _save_data_upload(data_file, projectLocation)
+            local_data_size = _get_folder_size(data_dir)
+        elif not has_doi:
+            # Original approach: user zipped code + data/ together.
+            # If data/ is large (> embed threshold), move it out of files/
+            # so it goes through the Zenodo externalize pipeline instead of
+            # being baked into a huge Docker image.
+            _files_data = os.path.join(projectFilesLocation, "data")
+            if os.path.isdir(_files_data):
+                _auto_size = _get_folder_size(_files_data)
+                if _auto_size > EMBED_THRESHOLD_BYTES:
+                    _dest_data = os.path.join(projectLocation, "data")
+                    shutil.move(_files_data, _dest_data)
+                    data_dir = _dest_data
+                    local_data_size = _auto_size
+                    print(f"  [original] data/ ({_auto_size} bytes) > embed threshold, "
+                          f"moved to data/ for externalize pipeline")
 
-            projectLocation = os.path.join(cfg.PROJECTS_LOCATION, projectUuid)
-            projectFilesLocation = os.path.join(projectLocation, "files")
+        # --------------------------------------------------------------
+        # 5. Resolve Zenodo DOI (Mode C)
+        # --------------------------------------------------------------
+        dataset_reference = None
 
-            # Extract zip
-            with zipfile.ZipFile(temp_path, 'r') as zip_ref:
-                zip_ref.extractall(projectLocation)
-            os.remove(temp_path)
+        if has_doi:
+            try:
+                dataset_reference = _resolve_zenodo_doi(dataset_doi)
+                if dataset_reference is None:
+                    appendMessage(
+                        messagesToUser, f"Could not parse Zenodo identifier: {dataset_doi}",
+                        stage="Start",
+                    )
+                    return makeResponse(messagesToUser, 201, True)
+            except Exception as doi_err:
+                appendMessage(
+                    messagesToUser, f"Failed to resolve DOI: {str(doi_err)}",
+                    stage="Start",
+                )
+                return makeResponse(messagesToUser, 201, True)
 
-            if len(top_levels) == 1:
-                extracted_root = os.path.join(projectLocation, list(top_levels)[0])
-                os.rename(extracted_root, projectFilesLocation)
-            else:
-                os.makedirs(projectFilesLocation, exist_ok=True)
-                for item in os.listdir(projectLocation):
-                    src = os.path.join(projectLocation, item)
-                    if item != "files":
-                        os.rename(src, os.path.join(projectFilesLocation, item))
-
+        # --------------------------------------------------------------
+        # 6. Determine mode and save project_info.json
+        # --------------------------------------------------------------
+        if has_doi:
+            mode = "C"   # code + DOI (data already on Zenodo)
         else:
-            # Single file upload
-            name_no_ext = re.sub(r'[^\w.-]', '', os.path.splitext(filename)[0]).lower()
-            projectUuid = f"{name_no_ext}_{now_str}"
-            projectLocation = os.path.join(cfg.PROJECTS_LOCATION, projectUuid)
-            projectFilesLocation = os.path.join(projectLocation, "files")
-            os.makedirs(projectFilesLocation, exist_ok=True)
-            file.save(os.path.join(projectFilesLocation, filename))
+            mode = "A"   # code only, or code + local data file
 
-        # Validate Docker tag name
+        project_info = _save_project_info(
+            project_location=projectLocation,
+            project_uuid=projectUuid,
+            mode=mode,
+            local_files_size=local_data_size,
+            dataset_doi=dataset_doi or None,
+            dataset_reference=dataset_reference,
+            data_dir=data_dir,
+        )
+
+        # --------------------------------------------------------------
+        # 6b. Auto-generate manifest for strategies that skip Step 3
+        # (no_data, embed, external_doi — externalize/chunk handled
+        #  in externalize-data endpoint)
+        # --------------------------------------------------------------
+        strategy = project_info.get("data_strategy", "no_data")
+        if strategy in ("no_data", "embed", "external_doi"):
+            # These strategies don't need externalize-data — build manifest now
+            _build_manifest(projectLocation, projectUuid)
+        # externalize_files / externalize / chunk_and_externalize: manifest
+        # is built after externalize-data completes
+
+        # --------------------------------------------------------------
+        # 7. Validate Docker tag name
+        # --------------------------------------------------------------
         message1 = {
             "role": "system",
             "jsonObject": False,
@@ -104,21 +424,736 @@ def upload_file():
         }
 
         messagesToChat.append(message1)
-        gpt_result = callGPTModel(messagesToChat)
+        gpt_result = callGPTModel(messagesToChat).strip()
 
-        if gpt_result == "YES":
+        if gpt_result.upper() == "YES" or gpt_result == projectUuid:
             appendMessage(messagesToUser, content=projectUuid, stage="FindProjectFiles")
         else:
-            newProjectLocation = os.path.join(cfg.PROJECTS_LOCATION, gpt_result)
-            os.rename(projectLocation, newProjectLocation)
-            appendMessage(messagesToUser, content=gpt_result, stage="FindProjectFiles")
+            # Sanitize: only keep characters valid for Docker tags / folder names
+            safe_result = re.sub(r'[^\w.-]', '', gpt_result)
+            if not safe_result:
+                safe_result = projectUuid  # fallback to original if GPT returned garbage
+            if safe_result != projectUuid:
+                newProjectLocation = os.path.join(cfg.PROJECTS_LOCATION, safe_result)
+                os.rename(projectLocation, newProjectLocation)
+                projectUuid = safe_result
+            appendMessage(messagesToUser, content=projectUuid, stage="FindProjectFiles")
 
         return makeResponse(messagesToUser, 201, True)
 
     except Exception as e:
         print("Ups! There's an error:", str(e))
-        appendMessage(messagesToUser, contentShort="Ups! There's an error: " + str(e), stage="Start")
+        appendMessage(messagesToUser, "Ups! There's an error: " + str(e), stage="Start")
         return makeResponse(messagesToUser, 201, True)
+
+
+# ---------------------------------------------------------------------------
+# Step 4 — Manifest Construction
+# ---------------------------------------------------------------------------
+
+def _build_manifest(project_location, project_uuid):
+    """
+    Build reproducibility_manifest.json from project_info.json and
+    optionally dataset_reference.json.
+
+    This manifest is the single source of truth for Steps 5-6.
+    It is placed in the project root so it gets packaged into the
+    research artifact ZIP alongside the Docker image and run scripts.
+    """
+    info_path = os.path.join(project_location, "project_info.json")
+    if not os.path.isfile(info_path):
+        raise FileNotFoundError("project_info.json not found")
+
+    with open(info_path, "r", encoding="utf-8") as f:
+        project_info = json.load(f)
+
+    strategy = project_info.get("data_strategy", "no_data")
+
+    manifest = {
+        "manifest_version": "1.0",
+        "project_uuid": project_uuid,
+        "created_at": datetime.utcnow().isoformat() + "Z",
+        "data_strategy": strategy,
+        "dataset": None,
+        "reconstruction": None,
+    }
+
+    if strategy in ("no_data", "embed"):
+        manifest["dataset"] = {
+            "external": False,
+            "total_size_bytes": project_info.get("local_files_size_bytes", 0),
+        }
+        manifest["reconstruction"] = {
+            "method": "docker_embed" if strategy == "embed" else "none",
+            "steps": [] if strategy == "no_data" else [
+                "Data is embedded inside the Docker image.",
+                "No additional download is required.",
+            ],
+        }
+
+    elif strategy in ("externalize", "chunk_and_externalize"):
+        depositions = project_info.get("zenodo_depositions", [])
+        chunked = project_info.get("chunked", False)
+
+        chunks = []
+        for dep in depositions:
+            chunk_entry = {
+                "doi": dep.get("doi"),
+                "record_id": dep.get("record_id"),
+                "filename": dep.get("filename"),
+                "md5": dep.get("chunk_md5") or dep.get("tar_md5"),
+                "size_bytes": dep.get("chunk_size") or project_info.get("tar_size"),
+            }
+            if chunked:
+                chunk_entry["chunk_id"] = dep.get("chunk_id")
+            chunks.append(chunk_entry)
+
+        manifest["dataset"] = {
+            "external": True,
+            "total_size_bytes": project_info.get("total_data_size_bytes", 0),
+            "tar_md5": project_info.get("tar_md5"),
+            "tar_size_bytes": project_info.get("tar_size"),
+            "chunked": chunked,
+            "num_chunks": len(chunks) if chunked else 0,
+            "depositions": chunks,
+        }
+
+        if chunked:
+            manifest["reconstruction"] = {
+                "method": "rclone_copy",
+                "steps": [
+                    "Download each chunk file via rclone or Zenodo API.",
+                    "Verify each chunk MD5 against the manifest.",
+                    "Concatenate chunks in order to reassemble dataset.tar.",
+                    "Verify reassembled tar MD5 against tar_md5.",
+                    "Extract: tar xf dataset.tar -C /data",
+                    "Mount /data as read-only volume.",
+                ],
+            }
+        else:
+            manifest["reconstruction"] = {
+                "method": "rclone_copy",
+                "steps": [
+                    "Download dataset.tar from Zenodo via rclone or API.",
+                    "Verify tar MD5 against tar_md5.",
+                    "Extract: tar xf dataset.tar -C /data",
+                    "Mount /data as read-only volume.",
+                ],
+            }
+
+    elif strategy == "externalize_files":
+        zenodo_files = project_info.get("zenodo_files", [])
+        manifest["dataset"] = {
+            "external": True,
+            "individual_files": True,
+            "doi": project_info.get("zenodo_doi"),
+            "record_id": project_info.get("zenodo_record_id"),
+            "total_size_bytes": project_info.get("total_data_size_bytes", 0),
+            "num_files": len(zenodo_files),
+            "files": zenodo_files,
+        }
+        manifest["reconstruction"] = {
+            "method": "rclone_mount",
+            "steps": [
+                "Mount the Zenodo record via rclone (no download required).",
+                "Files are accessible directly — no extraction step needed.",
+                "Mount as read-only volume into the Docker container.",
+            ],
+        }
+
+    elif strategy == "external_doi":
+        ref_path = os.path.join(project_location, "dataset_reference.json")
+        dataset_ref = {}
+        if os.path.isfile(ref_path):
+            with open(ref_path, "r", encoding="utf-8") as f:
+                dataset_ref = json.load(f)
+
+        files_listing = []
+        for fl in dataset_ref.get("files", []):
+            files_listing.append({
+                "filename": fl.get("filename"),
+                "size_bytes": fl.get("size"),
+                "md5": fl.get("checksum", "").replace("md5:", ""),
+                "download_url": fl.get("download_url"),
+            })
+
+        doi_files_are_archives = dataset_ref.get("doi_files_are_archives", False)
+
+        manifest["dataset"] = {
+            "external": True,
+            "doi": dataset_ref.get("doi") or project_info.get("dataset_doi"),
+            "record_id": dataset_ref.get("record_id"),
+            "total_size_bytes": dataset_ref.get("total_size_bytes", 0),
+            "chunked": False,
+            "doi_files_are_archives": doi_files_are_archives,
+            "files": files_listing,
+        }
+
+        if doi_files_are_archives:
+            manifest["reconstruction"] = {
+                "method": "download_extract",
+                "steps": [
+                    "Download archive file(s) from Zenodo record via rclone copy or API.",
+                    "Verify each file MD5 against the manifest.",
+                    "Extract archive into /data directory.",
+                    "Mount /data as read-only volume.",
+                ],
+            }
+        else:
+            manifest["reconstruction"] = {
+                "method": "rclone_mount",
+                "steps": [
+                    "Mount the Zenodo record via rclone doi backend (no download required).",
+                    "Falls back to rclone copy, then direct download if mount unavailable.",
+                    "Mount as read-only volume into the Docker container.",
+                ],
+            }
+
+    manifest_path = os.path.join(project_location, "reproducibility_manifest.json")
+    with open(manifest_path, "w", encoding="utf-8") as f:
+        json.dump(manifest, f, indent=2, ensure_ascii=False)
+
+    return manifest
+
+
+@project_bp.route("/project/<projectUuid>/build-manifest", methods=['POST'])
+@cross_origin()
+@require_auth
+def build_manifest(projectUuid):
+    """
+    Step 4 — Generate reproducibility_manifest.json from project state.
+    Works for all data strategies.
+    """
+    messagesToUser = []
+    projectLocation = os.path.join(cfg.PROJECTS_LOCATION, projectUuid)
+
+    if not os.path.isdir(projectLocation):
+        appendMessage(messagesToUser, "Project not found.", stage="Start")
+        return makeResponse(messagesToUser, 404, True)
+
+    try:
+        manifest = _build_manifest(projectLocation, projectUuid)
+        appendMessage(messagesToUser, manifest,
+                      contentShort="Reproducibility manifest generated successfully.",
+                      jsonObject=True, stage="FindProjectFiles")
+        return makeResponse(messagesToUser, 200, True)
+    except Exception as e:
+        print(f"Manifest build error: {e}")
+        appendMessage(messagesToUser,
+                      f"Error building manifest: {str(e)}",
+                      stage="Start")
+        return makeResponse(messagesToUser, 500, True)
+
+
+@project_bp.route("/project/<projectUuid>/manifest", methods=['GET'])
+@cross_origin()
+@require_auth
+def get_manifest(projectUuid):
+    """Retrieve the reproducibility_manifest.json for a project."""
+    messagesToUser = []
+    projectLocation = os.path.join(cfg.PROJECTS_LOCATION, projectUuid)
+    manifest_path = os.path.join(projectLocation, "reproducibility_manifest.json")
+
+    if not os.path.isfile(manifest_path):
+        appendMessage(messagesToUser,
+                      "Manifest not found. Call build-manifest first.",
+                      stage="Start")
+        return makeResponse(messagesToUser, 404, True)
+
+    with open(manifest_path, "r", encoding="utf-8") as f:
+        manifest = json.load(f)
+
+    appendMessage(messagesToUser, manifest,
+                  contentShort="Manifest retrieved.",
+                  jsonObject=True, stage="FindProjectFiles")
+    return makeResponse(messagesToUser, 200, True)
+
+
+# ---------------------------------------------------------------------------
+# Step 3 — Data Delegation: tar, chunk, upload to Zenodo
+# ---------------------------------------------------------------------------
+
+ZENODO_API_BASE = "https://zenodo.org/api"
+
+
+def _upload_file_to_bucket(upload_url, file_path, token, max_retries=5):
+    """
+    Upload a file to a Zenodo bucket URL.
+
+    Prefers curl (available on Windows 10+ natively) because it uses TCP
+    keepalive and built-in retry logic, which avoids the ConnectionAbortedError
+    10053 that Python's requests library triggers on Windows during long uploads.
+    Falls back to requests if curl is not in PATH.
+    """
+    import time as _time
+    import urllib.parse
+
+    # Build the full URL with the access token as a query param
+    sep = "&" if "?" in upload_url else "?"
+    full_url = f"{upload_url}{sep}access_token={token}"
+
+    # --- curl path (preferred on Windows) ---
+    if shutil.which("curl"):
+        print(f"  Uploading via curl: {os.path.basename(file_path)}")
+        for attempt in range(max_retries):
+            result = subprocess.run(
+                [
+                    "curl",
+                    "--upload-file", file_path,
+                    "--keepalive-time", "20",   # send TCP keepalive every 20 s
+                    "--retry", "0",             # our own outer loop handles retries
+                    "--progress-bar",           # show live progress in server terminal
+                    "--write-out", "\nHTTP_STATUS:%{http_code}",
+                    full_url,
+                ],
+                stdout=subprocess.PIPE,  # capture stdout (HTTP status) for parsing
+                stderr=None,             # let stderr (progress bar) go to terminal
+                text=True, timeout=None,
+            )
+            output = result.stdout or ""
+            if "HTTP_STATUS:200" in output or "HTTP_STATUS:201" in output:
+                print(f"  Upload complete.")
+                return
+            stderr_snippet = ""  # stderr goes to terminal, not captured
+            if attempt < max_retries - 1:
+                print(f"  curl attempt {attempt + 1} failed "
+                      f"(exit {result.returncode}: {stderr_snippet}), retrying in 20s...")
+                _time.sleep(20)
+            else:
+                raise RuntimeError(
+                    f"curl upload failed after {max_retries} attempts: {stderr_snippet}"
+                )
+
+    # --- requests fallback ---
+    print(f"  curl not found — uploading via requests: {os.path.basename(file_path)}")
+    import requests as _req
+    for attempt in range(max_retries):
+        with open(file_path, "rb") as f:
+            try:
+                put_resp = _req.put(upload_url, params={"access_token": token},
+                                    data=f, timeout=None)
+                put_resp.raise_for_status()
+                return
+            except _req.exceptions.ConnectionError as conn_err:
+                if attempt < max_retries - 1:
+                    print(f"  requests attempt {attempt + 1} failed ({conn_err}), retrying in 20s...")
+                    _time.sleep(20)
+                else:
+                    raise
+
+
+def _write_run_progress(progress_path, **kwargs):
+    """Write run_progress.json atomically. Never raises."""
+    try:
+        with open(progress_path, "w", encoding="utf-8") as f:
+            json.dump(kwargs, f)
+    except Exception:
+        pass
+
+
+def _provision_data(manifest, project_uuid, project_location, progress_path):
+    """
+    Provision dataset files required by the experiment and return the host
+    path to mount as /data inside the container.
+
+    Handles external_doi (with DOI cache), externalize, externalize_files,
+    and chunk_and_externalize strategies.  Returns None for no_data/embed.
+
+    Raises RuntimeError / ValueError on provisioning failure.
+    """
+    from helpers.data_provisioning import provision_data as _prov
+
+    strategy = manifest.get("data_strategy", "no_data")
+    if strategy == "no_data":
+        return None
+    if strategy == "embed":
+        _data_dir = os.path.join(project_location, "data")
+        if os.path.isdir(_data_dir):
+            return os.path.normpath(
+                os.path.join(cfg.HOST_VOLUME_PATH, project_uuid, "data"))
+        return None
+
+    if strategy == "external_doi":
+        _dataset_info = manifest.get("dataset", {})
+        _record_id = str(_dataset_info.get("record_id", "")).strip()
+        if _record_id:
+            _cache_base = os.path.join(cfg.PROJECTS_LOCATION, "_doi_cache")
+            _cache_entry = os.path.join(_cache_base, _record_id)
+            _data_output = os.path.join(_cache_entry, "data")
+            _host_data_path = os.path.normpath(
+                os.path.join(cfg.HOST_VOLUME_PATH, "_doi_cache", _record_id, "data"))
+            _complete_marker = os.path.join(_cache_entry, "_complete")
+        else:
+            _data_output = os.path.join(project_location, "data_provisioned")
+            _host_data_path = os.path.normpath(
+                os.path.join(cfg.HOST_VOLUME_PATH, project_uuid, "data_provisioned"))
+            _complete_marker = os.path.join(_data_output, "_complete")
+
+        _cache_valid = (
+            os.path.isfile(_complete_marker)
+            and os.path.isdir(_data_output)
+            and any(True for _ in os.scandir(_data_output))
+        )
+        if _cache_valid:
+            print(f"  [provision] DOI cache hit: {_data_output}")
+            _write_run_progress(progress_path, phase="running", detail="Using cached dataset...")
+        else:
+            _zenodo_token = os.getenv("ZENODO_API_TOKEN")
+            _manifest_path = os.path.join(project_location, "reproducibility_manifest.json")
+            _write_run_progress(progress_path, phase="provisioning", detail="Connecting to Zenodo...")
+            _prov(_manifest_path, _data_output, zenodo_token=_zenodo_token,
+                  progress_path=progress_path)
+            try:
+                with open(_complete_marker, "w") as _cm:
+                    _cm.write(project_uuid)
+            except Exception:
+                pass
+        return _host_data_path
+    else:
+        # externalize / externalize_files / chunk_and_externalize
+        # Prefer original uploaded data/ if it still exists (avoids re-download from Zenodo)
+        _original_data = os.path.join(project_location, "data")
+        if os.path.isdir(_original_data) and any(True for _ in os.scandir(_original_data)):
+            print(f"  [provision] Using original uploaded data dir: {_original_data}")
+            _write_run_progress(progress_path, phase="running", detail="Using local data...")
+            return os.path.normpath(
+                os.path.join(cfg.HOST_VOLUME_PATH, project_uuid, "data"))
+
+        _data_output = os.path.join(project_location, "data_provisioned")
+        _host_data_path = os.path.normpath(
+            os.path.join(cfg.HOST_VOLUME_PATH, project_uuid, "data_provisioned"))
+        _complete_marker = os.path.join(_data_output, "_complete")
+        _cache_valid = (
+            os.path.isfile(_complete_marker)
+            and os.path.isdir(_data_output)
+            and any(True for _ in os.scandir(_data_output))
+        )
+        if not _cache_valid:
+            _manifest_path = os.path.join(project_location, "reproducibility_manifest.json")
+            _write_run_progress(progress_path, phase="provisioning", detail="Provisioning data...")
+            _prov(_manifest_path, _data_output,
+                  zenodo_token=os.getenv("ZENODO_API_TOKEN"),
+                  progress_path=progress_path)
+            try:
+                with open(_complete_marker, "w") as _cm:
+                    _cm.write(project_uuid)
+            except Exception:
+                pass
+        return _host_data_path
+
+
+def _create_zenodo_deposition_from_path(file_path, filename, metadata_json):
+    """
+    Create a Zenodo deposition, upload a single local file, and publish.
+
+    *metadata_json* must be {"metadata": {...}}.
+    Returns the published deposition JSON (contains DOI, files with checksums).
+    """
+    import requests
+
+    token = os.getenv("ZENODO_API_TOKEN")
+    if not token:
+        raise RuntimeError("ZENODO_API_TOKEN environment variable is not set")
+
+    headers = {"Content-Type": "application/json", "Authorization": f"Bearer {token}"}
+
+    # 1) Create empty deposition
+    resp = requests.post(f"{ZENODO_API_BASE}/deposit/depositions",
+                         data="{}", headers=headers, timeout=60)
+    resp.raise_for_status()
+    deposition = resp.json()
+
+    # 2) Set metadata
+    dep_url = f"{ZENODO_API_BASE}/deposit/depositions/{deposition['id']}"
+    resp = requests.put(dep_url, data=json.dumps(metadata_json),
+                        headers=headers, timeout=60)
+    resp.raise_for_status()
+    deposition = resp.json()
+
+    # 3) Upload file to bucket
+    bucket_url = deposition["links"]["bucket"]
+    upload_url = f"{bucket_url}/{filename}"
+    _upload_file_to_bucket(upload_url, file_path, token)
+
+    # 4) Publish
+    publish_url = f"{ZENODO_API_BASE}/deposit/depositions/{deposition['id']}/actions/publish"
+    pub_resp = requests.post(publish_url, headers=headers, timeout=120)
+    pub_resp.raise_for_status()
+    deposition = pub_resp.json()
+
+    return deposition
+
+
+def _create_zenodo_deposition_multi_file(file_paths, metadata_json):
+    """
+    Create a Zenodo deposition, upload multiple local files to it, and publish.
+
+    *file_paths* is a list of dicts: [{"path": "/abs/path", "zenodo_name": "subdir/file.csv"}, ...]
+    *metadata_json* must be {"metadata": {...}}.
+    Returns the published deposition JSON.
+    """
+    import requests
+
+    token = os.getenv("ZENODO_API_TOKEN")
+    if not token:
+        raise RuntimeError("ZENODO_API_TOKEN environment variable is not set")
+
+    headers = {"Content-Type": "application/json", "Authorization": f"Bearer {token}"}
+
+    # 1) Create empty deposition
+    resp = requests.post(f"{ZENODO_API_BASE}/deposit/depositions",
+                         data="{}", headers=headers, timeout=60)
+    resp.raise_for_status()
+    deposition = resp.json()
+
+    # 2) Set metadata
+    dep_url = f"{ZENODO_API_BASE}/deposit/depositions/{deposition['id']}"
+    resp = requests.put(dep_url, data=json.dumps(metadata_json),
+                        headers=headers, timeout=60)
+    resp.raise_for_status()
+    deposition = resp.json()
+
+    # 3) Upload each file to the bucket
+    bucket_url = deposition["links"]["bucket"]
+    for finfo in file_paths:
+        upload_url = f"{bucket_url}/{finfo['zenodo_name']}"
+        _upload_file_to_bucket(upload_url, finfo["path"], token)
+
+    # 4) Publish
+    publish_url = f"{ZENODO_API_BASE}/deposit/depositions/{deposition['id']}/actions/publish"
+    pub_resp = requests.post(publish_url, headers=headers, timeout=120)
+    pub_resp.raise_for_status()
+    deposition = pub_resp.json()
+
+    return deposition
+
+
+def _build_zenodo_metadata(project_uuid, creator_name=None, description=None,
+                           chunk_label=None):
+    """
+    Build a minimal Zenodo metadata payload for the dataset upload.
+    """
+    title = f"Dataset for experiment: {project_uuid}"
+    if chunk_label:
+        title = f"{title} ({chunk_label})"
+
+    md = {
+        "metadata": {
+            "title": title,
+            "upload_type": "dataset",
+            "description": description or (
+                f"Externalized dataset for reproducible experiment {project_uuid}. "
+                "Uploaded automatically by SciConv Data Extension Layer."
+            ),
+            "creators": [{"name": creator_name or "Unknown"}],
+            "access_right": "open",
+            "license": "cc-by-4.0",
+            "keywords": ["reproducibility", "computational experiment", "SciConv"],
+        }
+    }
+    return md
+
+
+@project_bp.route("/project/<projectUuid>/externalize-data", methods=['POST'])
+@cross_origin()
+@require_auth
+def externalize_data(projectUuid):
+    """
+    Step 3 — Data Delegation and Automated Externalization.
+
+    Reads project_info.json, and if data_strategy is "externalize" or
+    "chunk_and_externalize":
+      1) Tars the data/ folder
+      2) Chunks if > 50 GB
+      3) Uploads to Zenodo (one deposition per chunk, or one for the whole tar)
+      4) Saves deposition info + checksums to project_info.json
+
+    Optional form fields:
+      - creator_name:  author name for Zenodo metadata (e.g. "Costa, Lázaro")
+      - description:   dataset description for Zenodo
+
+    Strategies that skip this step: "no_data", "embed", "external_doi".
+    """
+    from helpers.dataset_chunker import prepare_dataset_for_upload
+
+    messagesToUser = []
+
+    projectLocation = os.path.join(cfg.PROJECTS_LOCATION, projectUuid)
+    info_path = os.path.join(projectLocation, "project_info.json")
+
+    if not os.path.isfile(info_path):
+        appendMessage(messagesToUser,
+                      "Project info not found. Upload a project first.",
+                      stage="Start")
+        return makeResponse(messagesToUser, 400, True)
+
+    with open(info_path, "r", encoding="utf-8") as f:
+        project_info = json.load(f)
+
+    strategy = project_info.get("data_strategy")
+
+    # Strategies that don't need externalization
+    if strategy in ("no_data", "embed", "external_doi", None):
+
+        appendMessage(
+            messagesToUser,
+            f"Data strategy is '{strategy}' — no externalization needed.",
+            stage="FindProjectFiles",
+        )
+        return makeResponse(messagesToUser, 200, True)
+
+    # All three externalize strategies reach here
+    data_dir = os.path.join(projectLocation, "data")
+    if not os.path.isdir(data_dir):
+        appendMessage(messagesToUser,
+                      "No data/ folder found in project.",
+                      stage="Start")
+        return makeResponse(messagesToUser, 400, True)
+
+    # Read optional metadata from form
+    creator_name = (request.form.get("creator_name") or "").strip() or None
+    description = (request.form.get("description") or "").strip() or None
+
+    try:
+        # ---- Branch A: externalize_files — upload individually, no tar ----
+        if strategy == "externalize_files":
+            # Collect all files with paths relative to data_dir (used as Zenodo names)
+            file_paths = []
+            for root, _dirs, filenames in os.walk(data_dir):
+                for fname in filenames:
+                    abs_path = os.path.join(root, fname)
+                    rel_name = os.path.relpath(abs_path, data_dir).replace("\\", "/")
+                    file_paths.append({"path": abs_path, "zenodo_name": rel_name})
+
+            metadata_json = _build_zenodo_metadata(
+                projectUuid, creator_name, description
+            )
+            dep = _create_zenodo_deposition_multi_file(file_paths, metadata_json)
+
+            # Build file list from published deposition response
+            zenodo_files = []
+            for zf in dep.get("files", []):
+                zenodo_files.append({
+                    "filename": zf.get("filename") or zf.get("key", ""),
+                    "size_bytes": zf.get("filesize", zf.get("size", 0)),
+                    "md5": zf.get("checksum", "").replace("md5:", ""),
+                    "download_url": (zf.get("links") or {}).get("download", ""),
+                })
+
+            project_info["zenodo_doi"] = dep.get("doi")
+            project_info["zenodo_record_id"] = str(dep.get("id", ""))
+            project_info["zenodo_files"] = zenodo_files
+
+            with open(info_path, "w", encoding="utf-8") as f:
+                json.dump(project_info, f, indent=2, ensure_ascii=False)
+
+            _build_manifest(projectLocation, projectUuid)
+
+            doi = dep.get("doi", "")
+            summary = (
+                f"Dataset uploaded to Zenodo as {len(file_paths)} individual file(s).\n"
+                f"DOI: {doi}"
+            )
+            appendMessage(messagesToUser, content={
+                "summary": summary,
+                "doi": doi,
+                "num_files": len(file_paths),
+                "zenodo_files": zenodo_files,
+                "data_strategy": strategy,
+            }, contentShort=summary, stage="FindProjectFiles")
+
+            return makeResponse(messagesToUser, 200, True)
+
+        # ---- Branch B: externalize / chunk_and_externalize — tar + upload ----
+        # ---- 1) Tar and chunk ----
+        work_dir = os.path.join(projectLocation, "_upload_work")
+        prep = prepare_dataset_for_upload(data_dir, work_dir)
+
+        depositions = []
+
+        if not prep["chunked"]:
+            # ---- 2a) Single tar upload ----
+            metadata_json = _build_zenodo_metadata(
+                projectUuid, creator_name, description
+            )
+            tar_info = prep["files_to_upload"][0]
+            dep = _create_zenodo_deposition_from_path(
+                tar_info["path"], tar_info["filename"], metadata_json
+            )
+            depositions.append({
+                "deposition_id": dep.get("id"),
+                "doi": dep.get("doi"),
+                "record_id": str(dep.get("record_id", dep.get("id", ""))),
+                "filename": tar_info["filename"],
+                "tar_md5": prep["tar_md5"],
+                "files": dep.get("files", []),
+            })
+        else:
+            # ---- 2b) Chunked upload — one deposition per chunk ----
+            for i, chunk in enumerate(prep["chunks"], 1):
+                label = f"chunk {i} of {len(prep['chunks'])}"
+                metadata_json = _build_zenodo_metadata(
+                    projectUuid, creator_name, description,
+                    chunk_label=label
+                )
+                dep = _create_zenodo_deposition_from_path(
+                    chunk["path"], chunk["filename"], metadata_json
+                )
+                depositions.append({
+                    "deposition_id": dep.get("id"),
+                    "doi": dep.get("doi"),
+                    "record_id": str(dep.get("record_id", dep.get("id", ""))),
+                    "chunk_id": chunk["chunk_id"],
+                    "filename": chunk["filename"],
+                    "chunk_md5": chunk["md5"],
+                    "chunk_size": chunk["size"],
+                    "files": dep.get("files", []),
+                })
+
+        # ---- 3) Update project_info.json ----
+        project_info["zenodo_depositions"] = depositions
+        project_info["tar_md5"] = prep["tar_md5"]
+        project_info["tar_size"] = prep["tar_size"]
+        project_info["chunked"] = prep["chunked"]
+        project_info["num_chunks"] = len(prep["chunks"]) if prep["chunked"] else 0
+
+        with open(info_path, "w", encoding="utf-8") as f:
+            json.dump(project_info, f, indent=2, ensure_ascii=False)
+
+        # ---- 4) Clean up work directory ----
+        shutil.rmtree(work_dir, ignore_errors=True)
+
+        # ---- 5) Build reproducibility manifest (Step 4) ----
+        _build_manifest(projectLocation, projectUuid)
+
+        # ---- 6) Return result ----
+        doi_list = [d["doi"] for d in depositions if d.get("doi")]
+        summary = (
+            f"Dataset uploaded to Zenodo successfully.\n"
+            f"{'Chunked into ' + str(len(depositions)) + ' records' if prep['chunked'] else '1 record'}.\n"
+            f"DOI(s): {', '.join(doi_list)}"
+        )
+
+        appendMessage(messagesToUser, content={
+            "summary": summary,
+            "depositions": depositions,
+            "data_strategy": strategy,
+        }, contentShort=summary, stage="FindProjectFiles")
+
+        return makeResponse(messagesToUser, 200, True)
+
+    except Exception as e:
+        import traceback
+        # Clean up the work directory to avoid leaving huge tar/chunk files on disk
+        work_dir = os.path.join(projectLocation, "_upload_work")
+        shutil.rmtree(work_dir, ignore_errors=True)
+        print(f"Externalization error: {e}")
+        traceback.print_exc()
+        appendMessage(messagesToUser,
+                      f"Error externalizing data: {str(e)}",
+                      stage="Start")
+        return makeResponse(messagesToUser, 500, True)
+
 
 @project_bp.route("/project/find_files", methods=['POST'])
 @cross_origin()
@@ -130,7 +1165,7 @@ def find_files_project():
 
     if "possibleProjectUuid" not in requestData:
         print("I can’t select your folder")
-        appendMessage(messagesToUser, contentShort="I can’t select your folder", stage="Start")
+        appendMessage(messagesToUser, "I can’t select your folder", stage="Start")
         return makeResponse(messagesToUser, 201, True)
 
     possibleProjectUuid = requestData["possibleProjectUuid"]
@@ -149,14 +1184,13 @@ def find_files_project():
 
         if projectUuid == "NO":
             print("possibleProjectUuid: No")
-            appendMessage(messagesToUser, contentShort="Please enter a valid location", stage="Start")
+            appendMessage(messagesToUser, "Please enter a valid location", stage="Start")
             return makeResponse(messagesToUser)
 
         directoryPath = f"projects/{projectUuid}/files"
         if not os.path.exists(directoryPath):
             print(f"Project '{directoryPath}' does not exist.")
-            appendMessage(messagesToUser,
-                          contentShort=f"Project '{projectUuid}' does not exist.\n Please enter a valid location",
+            appendMessage(messagesToUser, f"Project '{projectUuid}' does not exist.\n Please enter a valid location",
                           stage="Start")
             return makeResponse(messagesToUser)
     else:
@@ -266,11 +1300,11 @@ def parameters_to_use_confirmation(projectUuid):
         messageText = callGPTModel(messagesToChat)
 
         if messageText == "ParametersToUse":
-            appendMessage(messagesToUser, contentShort="Please give me a valid command.", stage="ParametersToUse")
+            appendMessage(messagesToUser, "Please give me a valid command.", stage="ParametersToUse")
         else:
             appendMessage(messagesToUser, content=messageText,
                           contentShort="I will use this command to execute the experiment.\n Command: " + messageText,
-                          stage="FindConfigurations")
+                          stage="SpecifyOutputs")
         return makeResponse(messagesToUser)
 
     except Exception as error:
@@ -278,6 +1312,66 @@ def parameters_to_use_confirmation(projectUuid):
         appendMessage(messagesToUser, content="Ups! There's an error " + str(error),
                       contentShort="Ups! There's an error " + str(error), stage="Start")
         return makeResponse(messagesToUser)
+
+
+@project_bp.route('/project/<projectUuid>/specify-outputs', methods=['POST'])
+@cross_origin()
+@require_auth
+@swag_from("../swagger/project/specify-outputs.yml")
+def specify_outputs(projectUuid):
+    """Save the researcher's output file specification for this experiment."""
+    requestData = json.loads(request.data)
+    messagesToUser = []
+
+    # Skip path: frontend sends skip=true when user clicks "Skip"
+    if requestData.get("skip"):
+        print(f"[specify-outputs] Skipped for {projectUuid}")
+        appendMessage(messagesToUser,
+                      content="No output files will be captured.",
+                      contentShort="Output capture skipped.",
+                      stage="FindConfigurations")
+        return makeResponse(messagesToUser)
+
+    messages = requestData.get("messages", [])
+    if not messages:
+        appendMessage(messagesToUser, "Please specify the output files or directory.", stage="SpecifyOutputs")
+        return makeResponse(messagesToUser)
+
+    # Extract the raw spec from the last user message
+    output_spec = ""
+    for msg in reversed(messages):
+        if msg.get("role") not in ("assistant",):
+            output_spec = (msg.get("content") or "").strip()
+            break
+
+    if not output_spec:
+        appendMessage(messagesToUser, "Please specify the output files or directory.", stage="SpecifyOutputs")
+        return makeResponse(messagesToUser)
+
+    # Save to project folder
+    spec_path = os.path.join(cfg.PROJECTS_LOCATION, projectUuid, "output_spec.txt")
+    with open(spec_path, "w", encoding="utf-8") as f:
+        f.write(output_spec)
+
+    print(f"[specify-outputs] Saved output spec for {projectUuid}: {output_spec!r}")
+
+    appendMessage(messagesToUser,
+                  content=output_spec,
+                  contentShort=f"Output specification saved: {output_spec}",
+                  stage="FindConfigurations")
+    return makeResponse(messagesToUser)
+
+
+@project_bp.route('/project/<projectUuid>/run-progress', methods=['GET'])
+@cross_origin()
+@require_auth
+def get_run_progress(projectUuid):
+    """Return current run_progress.json for the project (polled by the frontend)."""
+    progress_path = os.path.join(cfg.PROJECTS_LOCATION, projectUuid, "run_progress.json")
+    if os.path.isfile(progress_path):
+        with open(progress_path, "r", encoding="utf-8") as f:
+            return jsonify(json.load(f))
+    return jsonify({"phase": "waiting", "detail": ""})
 
 
 @project_bp.route('/project/<projectUuid>/find-configurations', methods=['POST'])
@@ -291,7 +1385,7 @@ def find_configurations(projectUuid):
     messagesToChat = []
 
     if "filenames" not in requestData:
-        appendMessage(messagesToUser, contentShort='filenames are missing', stage="Start")
+        appendMessage(messagesToUser, 'filenames are missing', stage="Start")
         return makeResponse(messagesToUser)
     filenames = requestData["filenames"]
 
@@ -307,7 +1401,7 @@ def find_configurations(projectUuid):
             else:
                 print(f"File not found: {filename}")
     except Exception as error:
-        appendMessage(messagesToUser, contentShort=str(error), stage="Start")
+        appendMessage(messagesToUser, str(error), stage="Start")
         return makeResponse(messagesToUser)
 
     # Convert the content to JSON format
@@ -401,7 +1495,7 @@ def find_configurations_change(projectUuid):
     messagesToChat = []
 
     if "myMessage" not in requestData:
-        appendMessage(messagesToUser, contentShort='I can’t find the messages', stage="Start")
+        appendMessage(messagesToUser, 'I can’t find the messages', stage="Start")
         return makeResponse(messagesToUser)
 
     myMessage = requestData["myMessage"]
@@ -571,6 +1665,19 @@ def buildDockerFileChat(projectUuid):
     # RUN pip install shap==0.41.0 numpy==1.23.4 pandas==1.5.2 scipy==1.9.3 matplotlib==3.6.2 tqdm==4.64.1"""
 
     write_file(projectPath + "Dockerfile", messageText)
+
+    # For embed strategy: append COPY data/ /data so the dataset is baked
+    # into the Docker image (only when data was uploaded as a separate file)
+    _project_info_path = projectPath + "project_info.json"
+    if os.path.isfile(_project_info_path):
+        with open(_project_info_path, "r", encoding="utf-8") as _pf:
+            _pinfo = json.load(_pf)
+        if _pinfo.get("data_strategy") == "embed":
+            _data_dir = os.path.join(projectPath, "data")
+            if os.path.isdir(_data_dir) and os.listdir(_data_dir):
+                with open(projectPath + "Dockerfile", "a", encoding="utf-8") as _df:
+                    _df.write("\nCOPY data/ /data\n")
+
     try:
         appendMessage(messagesToUser, content=json.loads(messageText), jsonObject=True, stage="BuildDockerImage")
     except Exception as e:
@@ -595,7 +1702,7 @@ def chat_interation(projectUuid):
     if "nextStep" in requestData:
         nextStep = requestData["nextStep"]
     else:
-        appendMessage(messagesToUser, contentShort='NextStep is missing', stage="Start")
+        appendMessage(messagesToUser, 'NextStep is missing', stage="Start")
         return makeResponse(messagesToUser)
 
     numberInteractions = 3
@@ -693,6 +1800,19 @@ def buildDockerImageChat(projectUuid):
         # except Exception as e:
         #     raise Exception(str(e))
 
+        # For embed strategy: copy data/ into files/data/ so it gets baked
+        # into the Docker image via "COPY files/ ." in the Dockerfile.
+        _proj_info_path = os.path.join(projectPath, "project_info.json")
+        if os.path.isfile(_proj_info_path):
+            with open(_proj_info_path) as _pf:
+                _pi = json.load(_pf)
+            if _pi.get("data_strategy") == "embed":
+                _data_src = os.path.join(projectPath, "data")
+                _data_dst = os.path.join(projectPath, "files", "data")
+                if os.path.isdir(_data_src) and not os.path.exists(_data_dst):
+                    shutil.copytree(_data_src, _data_dst)
+                    print(f"  [embed] Copied data/ into files/data/ for Docker build")
+
         dockerImageBuilt = dockerClient.images.build(path=projectPath, tag=projectUuid + ":" + number, rm=True)
         dockerImageBuiltFiltered = [s for s in dockerImageBuilt[0].tags if projectUuid in s]
         dockerTagslength = len(dockerImageBuiltFiltered) - 1
@@ -738,7 +1858,7 @@ def buildDockerImageChat(projectUuid):
                         "I want to change the project location.\n"
                         "I want to change the computing environment used (programming languages, dependencies).\n"
                         )
-            appendMessage(messagesToUser, contentShort=errorMessage, stage="WaitChatInteraction", examples=examples)
+            appendMessage(messagesToUser, errorMessage, stage="WaitChatInteraction", examples=examples)
 
         return makeResponse(messagesToUser)
 
@@ -748,8 +1868,8 @@ def buildDockerImageChat(projectUuid):
 @require_auth
 @swag_from("../swagger/project/run-container-chat.yml")
 def runDockerContainerChat(projectUuid):
-    projectPath = f"/projects/{projectUuid}/"
-    directoryPath = f"/projects/{projectUuid}/files"
+    projectPath = cfg.PROJECTS_LOCATION + "/" + projectUuid + "/"
+    directoryPath = f"/projects/{projectUuid}/files"  # path inside the container
 
     requestData = json.loads(request.data)
     messagesToUser = []
@@ -757,7 +1877,7 @@ def runDockerContainerChat(projectUuid):
     commandToRun = return_commands_to_use(requestData, messagesToUser)
 
     if "dockerImageId" not in requestData:
-        appendMessage(messagesToUser, contentShort="The dockerImageId is required", stage="BuildDockerFile")
+        appendMessage(messagesToUser, "The dockerImageId is required", stage="BuildDockerFile")
         return makeResponse(messagesToUser)
 
     dockerImageId = requestData["dockerImageId"]
@@ -774,7 +1894,43 @@ def runDockerContainerChat(projectUuid):
 
             volumes = {cfg.HOST_VOLUME_PATH: {'bind': directoryPath, 'mode': 'rw'}}
 
+            # ------------------------------------------------------------------
+            # Step 5: Data Provisioning (server-side, before container launch)
+            # ------------------------------------------------------------------
+            _manifest_path = os.path.join(f"projects/{projectUuid}", "reproducibility_manifest.json")
+            _progress_path = os.path.join(cfg.PROJECTS_LOCATION, projectUuid, "run_progress.json")
+            if os.path.isfile(_manifest_path):
+                with open(_manifest_path, "r", encoding="utf-8") as _mf:
+                    _manifest = json.load(_mf)
+                _strategy = _manifest.get("data_strategy", "no_data")
+                _project_location = os.path.join(cfg.PROJECTS_LOCATION, projectUuid)
+                _host_data_path = None
+
+                if _strategy == "no_data":
+                    # Original approach: user may have included a data/ folder
+                    # in the code zip → it lands at files/data/ after extraction
+                    _files_data_dir = os.path.join(_project_location, "files", "data")
+                    if os.path.isdir(_files_data_dir):
+                        _host_data_path = os.path.normpath(
+                            os.path.join(cfg.HOST_VOLUME_PATH, projectUuid, "files", "data"))
+                else:
+                    try:
+                        _host_data_path = _provision_data(
+                            _manifest, projectUuid, _project_location, _progress_path)
+                    except (RuntimeError, ValueError) as prov_err:
+                        _write_run_progress(_progress_path, phase="error",
+                                            detail=f"Provisioning failed: {prov_err}")
+                        appendMessage(messagesToUser,
+                                      f"Data provisioning failed: {prov_err}",
+                                      stage="Start")
+                        return makeResponse(messagesToUser)
+
+                if _host_data_path:
+                    volumes[_host_data_path] = {'bind': '/data', 'mode': 'ro'}
+
             # Run the container
+            _write_run_progress(_progress_path, phase="running",
+                                detail="Running experiment...")
             container = dockerClient.containers.run(
                 image=projectImage,
                 name=projectUuid + "_" + number,
@@ -797,6 +1953,43 @@ def runDockerContainerChat(projectUuid):
             containerLogs += exit_code
 
             print(containerLogs)
+
+            # ------------------------------------------------------------------
+            # Output file extraction (if experiment succeeded + spec provided)
+            # ------------------------------------------------------------------
+            if exec_first.exit_code == 0:
+                _write_run_progress(_progress_path, phase="extracting",
+                                    detail="Extracting output files...")
+                spec_path = os.path.join(cfg.PROJECTS_LOCATION, projectUuid, "output_spec.txt")
+                if os.path.isfile(spec_path):
+                    with open(spec_path, "r", encoding="utf-8") as _sf:
+                        output_specs = [s.strip() for s in _sf.read().split() if s.strip()]
+
+                    workdir = "/files"
+                    output_dir = os.path.join(cfg.PROJECTS_LOCATION, projectUuid, "output")
+                    os.makedirs(output_dir, exist_ok=True)
+                    extracted = []
+
+                    for pattern in output_specs:
+                        cpath = workdir + '/' + pattern.strip('/')
+                        try:
+                            bits, _ = container.get_archive(cpath)
+                            with tarfile.open(fileobj=io.BytesIO(b''.join(bits))) as tf:
+                                tf.extractall(output_dir, filter="data")
+                            extracted.append(pattern.strip('/'))
+                            print(f"  Extracted: {cpath}")
+                        except Exception as ex:
+                            print(f"  Could not extract {cpath}: {ex}")
+                            containerLogs += f"\n[extraction error] {cpath}: {ex}\n"
+
+                    if extracted:
+                        containerLogs += (
+                            f"\nOutput files captured ({len(extracted)}):\n"
+                            + "\n".join(f"  - {f}" for f in extracted) + "\n"
+                        )
+                    else:
+                        containerLogs += "\nNo output files matched the specified pattern.\n"
+
             try:
                 container.stop()
                 container.remove()
@@ -838,7 +2031,7 @@ def runDockerContainerChat(projectUuid):
                             "I want to change the computing environment used (programming languages, dependencies).\n"
                             )
 
-                appendMessage(messagesToUser, contentShort=errorMessage, stage="WaitChatInteraction", examples=examples)
+                appendMessage(messagesToUser, errorMessage, stage="WaitChatInteraction", examples=examples)
             else:
                 messagesToUser = [
                     {"role": "assistant",
@@ -917,7 +2110,7 @@ def researchArtifactChat(projectUuid):
     messagesToUser = []
 
     if "dockerImageId" not in requestData:
-        appendMessage(messagesToUser, contentShort="The dockerImageId is required", stage="BuildDockerFile")
+        appendMessage(messagesToUser, "The dockerImageId is required", stage="BuildDockerFile")
         return makeResponse(messagesToUser)
     dockerImageID = requestData["dockerImageId"]
     # dockerImageID = "20240820192103"
@@ -927,10 +2120,38 @@ def researchArtifactChat(projectUuid):
 
     commandToRun = return_commands_to_use(requestData, messagesToUser)
     commandToRun1 = [commandToRun]
-    # commandToRun = ["python ./main2.py"]
 
-    arrayFiles = writeWindowsFIle(projectPath + "/", projectUuid, commandToRun1, dockerImageID, False, None)
-    arrayFiles += writeLinuxFile(projectPath + "/", projectUuid, commandToRun1, dockerImageID, False, None)
+    # Persist commandToRun into project_info.json so reproduce-from-doi can recover it
+    _proj_info_path = os.path.join(projectPath, "project_info.json")
+    if os.path.isfile(_proj_info_path):
+        try:
+            with open(_proj_info_path, "r", encoding="utf-8") as _pf:
+                _proj_info = json.load(_pf)
+            _proj_info["command_to_run"] = commandToRun
+            with open(_proj_info_path, "w", encoding="utf-8") as _pf:
+                json.dump(_proj_info, _pf, indent=2)
+        except Exception:
+            pass
+
+    # Load manifest so run scripts know which data provisioning strategy to embed
+    manifest = None
+    manifest_path = os.path.join(projectPath, "reproducibility_manifest.json")
+    if os.path.isfile(manifest_path):
+        with open(manifest_path, "r", encoding="utf-8") as _mf:
+            manifest = json.load(_mf)
+
+    arrayFiles = writeWindowsFIle(projectPath + "/", projectUuid, commandToRun1, dockerImageID, False, None,
+                                  manifest=manifest)
+    arrayFiles += writeLinuxFile(projectPath + "/", projectUuid, commandToRun1, dockerImageID, False, None,
+                                 manifest=manifest)
+
+    # Copy provision_data.py only for strategies that need runtime data provisioning
+    _needs_provisioning = (manifest or {}).get("data_strategy", "no_data") not in ("no_data", "embed")
+    if _needs_provisioning:
+        provision_src = os.path.join(os.path.dirname(__file__), "..", "helpers", "data_provisioning.py")
+        provision_dst = os.path.join(projectPath, "provision_data.py")
+        if os.path.isfile(provision_src) and not os.path.isfile(provision_dst):
+            shutil.copy2(os.path.normpath(provision_src), provision_dst)
 
     try:
         saveDockerImage(projectPath, projectUuid, dockerImageID)
@@ -946,20 +2167,15 @@ def researchArtifactChat(projectUuid):
         raise FileExistsError(f"The zip file '{zipFilePath}' already exists.")
 
     def ignore_myfolder(directory, files):
-        # List of items to ignore
         ignore_list = []
-
-        # Add 'myfolder' to ignore list if it's in the directory
+        # Source code — already baked into Docker image tar
         if 'files' in files:
             ignore_list.append('files')
-
-        # Add 'myfile.txt' to ignore list if it's in the directory
-        if 'Dockerfile' in files:
-            ignore_list.append('Dockerfile')
-
-        if projectUuid + ".zip" in files:
-            ignore_list.append(projectUuid + ".zip")
-
+        # Exclude final zip (avoid nesting), scratch dirs, provisioned data; keep output/ for comparison
+        for _skip in (projectUuid + ".zip", "data", "data_provisioned",
+                      "_upload_work"):
+            if _skip in files:
+                ignore_list.append(_skip)
         return ignore_list
 
     # Create a temporary directory
@@ -977,7 +2193,336 @@ def researchArtifactChat(projectUuid):
     shutil.move(zipFilePath, finalZipPath)
 
     print(f"All files and folders from '{projectPath}' have been zipped into '{finalZipPath}'.")
-    appendMessage(messagesToUser,
-                  contentShort=f"The research artifact has been generated and is located in the root directory of our project '{finalZipPath}'",
+    appendMessage(messagesToUser, f"The research artifact has been generated and is located in the root directory of our project '{finalZipPath}'",
                   stage="Completed")
     return makeResponse(messagesToUser)
+
+
+@project_bp.route('/project/<projectUuid>/upload-artifact-to-zenodo', methods=['POST'])
+@cross_origin()
+@require_auth
+def upload_artifact_to_zenodo(projectUuid):
+    """Upload the project's artifact zip to a new Zenodo record and return its DOI."""
+    requestData = json.loads(request.data) if request.data else {}
+    messagesToUser = []
+
+    zip_path = os.path.join(cfg.PROJECTS_LOCATION, projectUuid, f"{projectUuid}.zip")
+    if not os.path.isfile(zip_path):
+        appendMessage(messagesToUser,
+                      "Artifact zip not found. Please generate the research artifact first.",
+                      stage="Completed")
+        return makeResponse(messagesToUser)
+
+    creator_name = requestData.get("creator_name")
+    description = requestData.get("description")
+
+    # Read project_info to find any dataset DOI for linking
+    _proj_info_path = os.path.join(cfg.PROJECTS_LOCATION, projectUuid, "project_info.json")
+    _dataset_doi = None
+    _info = {}
+    if os.path.isfile(_proj_info_path):
+        try:
+            with open(_proj_info_path, "r", encoding="utf-8") as _pf:
+                _info = json.load(_pf)
+            # externalize_files sets zenodo_doi; externalize sets zenodo_depositions[0].doi
+            _dataset_doi = (
+                _info.get("zenodo_doi")
+                or (_info.get("zenodo_depositions") or [{}])[0].get("doi")
+                or (_info.get("dataset") or {}).get("doi")
+            )
+        except Exception:
+            pass
+
+    metadata = {
+        "title": f"Research artifact: {projectUuid}",
+        "upload_type": "software",
+        "description": description or (
+            f"Reproducible research artifact for experiment {projectUuid}. "
+            "Contains the Docker environment, run scripts, and reproducibility manifest."
+        ),
+        "creators": [{"name": creator_name or "Unknown"}],
+    }
+    if _dataset_doi:
+        metadata["related_identifiers"] = [{
+            "identifier": _dataset_doi,
+            "relation": "isDerivedFrom",
+            "resource_type": "dataset",
+        }]
+
+    metadata_json = {"metadata": metadata}
+
+    try:
+        dep = _create_zenodo_deposition_from_path(zip_path, f"{projectUuid}.zip", metadata_json)
+    except Exception as e:
+        appendMessage(messagesToUser, f"Upload failed: {e}", stage="Completed")
+        return makeResponse(messagesToUser)
+
+    doi = dep.get("doi") or dep.get("metadata", {}).get("doi", "")
+    zenodo_id = dep.get("id", "")
+    zenodo_url = dep.get("links", {}).get("html", "")
+
+    # Persist artifact DOI in project_info.json
+    if _proj_info_path:
+        try:
+            _info["artifact_doi"] = doi
+            _info["artifact_zenodo_id"] = zenodo_id
+            with open(_proj_info_path, "w", encoding="utf-8") as _pf:
+                json.dump(_info, _pf, indent=2)
+        except Exception:
+            pass
+
+    _msg = f"Artifact uploaded to Zenodo. DOI: {doi}"
+    if _dataset_doi:
+        _msg += f"\nLinked to dataset DOI: {_dataset_doi}"
+    appendMessage(messagesToUser,
+                  content={"doi": doi, "zenodo_id": zenodo_id, "zenodo_url": zenodo_url},
+                  contentShort=_msg,
+                  stage="Completed")
+    return makeResponse(messagesToUser)
+
+
+@project_bp.route('/project/reproduce-from-doi/init', methods=['POST'])
+@cross_origin()
+@require_auth
+def reproduce_from_doi_init():
+    """
+    Step 1 of reproduce-from-doi: resolve the artifact DOI, download the zip,
+    extract it to a new project folder, and return the new project UUID.
+    The client can then start polling run-progress and call /reproduce-run.
+    """
+    import requests as _req
+    requestData = json.loads(request.data)
+    artifact_doi = (requestData.get("artifact_doi") or "").strip()
+    if not artifact_doi:
+        return jsonify({"error": "artifact_doi is required"}), 400
+
+    token = os.getenv("ZENODO_API_TOKEN")
+
+    # Resolve DOI → Zenodo record
+    try:
+        parsed = _extract_zenodo_identifier(artifact_doi)
+        if parsed.get("record_id"):
+            record = _zenodo_fetch_by_id(parsed["record_id"], token)
+        else:
+            record = _zenodo_fetch_by_doi(parsed["doi"], token)
+    except Exception as e:
+        return jsonify({"error": f"Could not resolve DOI: {e}"}), 400
+
+    # Find the artifact zip file in the record
+    files = record.get("files") or record.get("entries") or []
+    zip_entry = next((f for f in files if f.get("key", f.get("filename", "")).endswith(".zip")), None)
+    if not zip_entry:
+        return jsonify({"error": "No zip file found in the Zenodo record"}), 400
+
+    download_url = (zip_entry.get("links", {}).get("self")
+                    or zip_entry.get("links", {}).get("download")
+                    or zip_entry.get("download_url", ""))
+    zip_filename = zip_entry.get("key") or zip_entry.get("filename", "artifact.zip")
+
+    # Create new project UUID
+    new_uuid = "repro_" + datetime.now(cfg.timezone).strftime("%d%m_%H%M%S")
+    new_project_location = os.path.join(cfg.PROJECTS_LOCATION, new_uuid)
+    os.makedirs(new_project_location, exist_ok=True)
+
+    # Write initial progress
+    progress_path = os.path.join(new_project_location, "run_progress.json")
+    _write_run_progress(progress_path, phase="downloading", detail="Downloading artifact from Zenodo...")
+
+    # Download zip
+    zip_local = os.path.join(new_project_location, zip_filename)
+    try:
+        headers = {"Authorization": f"Bearer {token}"} if token else {}
+        with _req.get(download_url, headers=headers, stream=True, timeout=300) as r:
+            r.raise_for_status()
+            with open(zip_local, "wb") as fout:
+                for chunk in r.iter_content(chunk_size=8 * 1024 * 1024):
+                    fout.write(chunk)
+    except Exception as e:
+        shutil.rmtree(new_project_location, ignore_errors=True)
+        return jsonify({"error": f"Download failed: {e}"}), 500
+
+    # Extract zip
+    _write_run_progress(progress_path, phase="extracting", detail="Extracting artifact...")
+    try:
+        with zipfile.ZipFile(zip_local, 'r') as zf:
+            zf.extractall(new_project_location)
+        os.remove(zip_local)
+    except Exception as e:
+        shutil.rmtree(new_project_location, ignore_errors=True)
+        return jsonify({"error": f"Extraction failed: {e}"}), 500
+
+    _write_run_progress(progress_path, phase="ready", detail="Ready to run experiment...")
+    return jsonify({"new_project_uuid": new_uuid}), 200
+
+
+@project_bp.route('/project/<projectUuid>/reproduce-run', methods=['POST'])
+@cross_origin()
+@require_auth
+def reproduce_run(projectUuid):
+    """
+    Step 2 of reproduce-from-doi: load Docker image, provision data, run experiment.
+    Long-running — frontend polls GET /project/<projectUuid>/run-progress in parallel.
+    """
+    project_location = os.path.join(cfg.PROJECTS_LOCATION, projectUuid)
+    progress_path = os.path.join(project_location, "run_progress.json")
+    messagesToUser = []
+
+    # Read project_info to get original UUID (needed to find the .tar) and command
+    proj_info_path = os.path.join(project_location, "project_info.json")
+    if not os.path.isfile(proj_info_path):
+        appendMessage(messagesToUser, "project_info.json not found in extracted artifact.",
+                      stage="ReproFromDoi_Completed")
+        return makeResponse(messagesToUser)
+
+    with open(proj_info_path, "r", encoding="utf-8") as pf:
+        proj_info = json.load(pf)
+
+    original_uuid = proj_info.get("projectUuid", projectUuid)
+    command_to_run = proj_info.get("command_to_run", "")
+    if not command_to_run:
+        appendMessage(messagesToUser,
+                      "command_to_run not found in artifact. Cannot reproduce.",
+                      stage="ReproFromDoi_Completed")
+        return makeResponse(messagesToUser)
+
+    # Read manifest
+    manifest_path = os.path.join(project_location, "reproducibility_manifest.json")
+    manifest = {}
+    if os.path.isfile(manifest_path):
+        with open(manifest_path, "r", encoding="utf-8") as mf:
+            manifest = json.load(mf)
+
+    # Load Docker image from tar
+    tar_path = os.path.join(project_location, f"{original_uuid}.tar")
+    if not os.path.isfile(tar_path):
+        # Try any .tar file in the project folder
+        tars = [f for f in os.listdir(project_location) if f.endswith(".tar")]
+        if not tars:
+            appendMessage(messagesToUser, "Docker image tar not found in artifact.",
+                          stage="ReproFromDoi_Completed")
+            return makeResponse(messagesToUser)
+        tar_path = os.path.join(project_location, tars[0])
+
+    _write_run_progress(progress_path, phase="loading", detail="Loading Docker image...")
+    try:
+        dockerClientResult = startDockerClient()
+        dockerClient = dockerClientResult["dockerClient"]
+        with open(tar_path, "rb") as tf:
+            images = dockerClient.images.load(tf.read())
+        loaded_image = images[0]
+        image_tag = f"{projectUuid}:repro"
+        loaded_image.tag(projectUuid, tag="repro")
+    except Exception as e:
+        appendMessage(messagesToUser, f"Failed to load Docker image: {e}",
+                      stage="ReproFromDoi_Completed")
+        return makeResponse(messagesToUser)
+
+    # Provision data
+    volumes = {cfg.HOST_VOLUME_PATH: {'bind': f"/projects/{projectUuid}/files", 'mode': 'rw'}}
+    strategy = manifest.get("data_strategy", "no_data")
+    if strategy not in ("no_data", "embed"):
+        _write_run_progress(progress_path, phase="provisioning", detail="Provisioning data...")
+        try:
+            host_data_path = _provision_data(manifest, projectUuid, project_location, progress_path)
+            if host_data_path:
+                volumes[host_data_path] = {'bind': '/data', 'mode': 'ro'}
+        except (RuntimeError, ValueError) as prov_err:
+            _write_run_progress(progress_path, phase="error",
+                                detail=f"Provisioning failed: {prov_err}")
+            appendMessage(messagesToUser, f"Data provisioning failed: {prov_err}",
+                          stage="ReproFromDoi_Completed")
+            return makeResponse(messagesToUser)
+
+    # For no_data/embed: data is baked into the Docker image at /files/data.
+    # Prepend a symlink so experiments reading from /data work transparently.
+    run_command = command_to_run
+    if strategy in ("no_data", "embed"):
+        run_command = f"ln -sfn /files/data /data 2>/dev/null; {command_to_run}"
+
+    # Run experiment
+    _write_run_progress(progress_path, phase="running", detail="Running experiment...")
+    now = datetime.now()
+    container_name = projectUuid + "_" + now.strftime("%Y%m%d%H%M%S")
+    container = None
+    try:
+        container = dockerClient.containers.run(
+            image=image_tag,
+            name=container_name,
+            volumes=volumes,
+            detach=True,
+            command="/bin/sh",
+            tty=True
+        )
+        exec_result = container.exec_run(f'/bin/sh -c "{run_command}"')
+        container_logs = "Command Output:" + exec_result.output.decode("utf-8", errors="replace") + "\n\n"
+        container_logs += f"Exit Code: {exec_result.exit_code}\n"
+        print(container_logs)
+
+        # Extract output files
+        extracted = []
+        if exec_result.exit_code == 0:
+            _write_run_progress(progress_path, phase="extracting", detail="Extracting output files...")
+            spec_path = os.path.join(project_location, "output_spec.txt")
+            if os.path.isfile(spec_path):
+                with open(spec_path, "r", encoding="utf-8") as sf:
+                    output_specs = [s.strip() for s in sf.read().split() if s.strip()]
+                output_dir = os.path.join(project_location, "output")
+                os.makedirs(output_dir, exist_ok=True)
+                for pattern in output_specs:
+                    cpath = "/files/" + pattern.strip("/")
+                    try:
+                        bits, _ = container.get_archive(cpath)
+                        with tarfile.open(fileobj=io.BytesIO(b"".join(bits))) as tf:
+                            tf.extractall(output_dir, filter="data")
+                        extracted.append(pattern.strip("/"))
+                    except Exception as ex:
+                        container_logs += f"\n[extraction error] {cpath}: {ex}\n"
+
+                if extracted:
+                    container_logs += f"\nOutput files captured ({len(extracted)}):\n"
+                    container_logs += "\n".join(f"  - {f}" for f in extracted) + "\n"
+                else:
+                    container_logs += "\nNo output files matched the specified pattern.\n"
+    except Exception as e:
+        container_logs = f"Container run failed: {e}"
+        appendMessage(messagesToUser, container_logs, stage="ReproFromDoi_Completed")
+        return makeResponse(messagesToUser)
+    finally:
+        if container:
+            try:
+                container.stop()
+                container.remove()
+            except Exception:
+                pass
+
+    appendMessage(messagesToUser,
+                  content={
+                      "new_project_uuid": projectUuid,
+                      "original_uuid": original_uuid,
+                      "command_to_run": command_to_run,
+                      "data_strategy": strategy,
+                      "logs": container_logs,
+                      "output_files": extracted,
+                  },
+                  contentShort=container_logs,
+                  stage="ReproFromDoi_Completed",
+                  jsonObject=False)
+    return makeResponse(messagesToUser)
+
+
+@project_bp.route('/project/<projectUuid>/download-output/<path:filename>', methods=['GET'])
+@cross_origin()
+@require_auth
+def download_output_file(projectUuid, filename):
+    """Serve a single output file from projects/<uuid>/output/ for download."""
+    output_dir = os.path.abspath(os.path.join(cfg.PROJECTS_LOCATION, projectUuid, "output"))
+    file_path = os.path.abspath(os.path.join(output_dir, filename))
+
+    # Prevent path traversal
+    if not file_path.startswith(output_dir):
+        return jsonify({"error": "Invalid path"}), 400
+
+    if not os.path.isfile(file_path):
+        return jsonify({"error": "File not found"}), 404
+
+    return send_from_directory(output_dir, filename, as_attachment=True)

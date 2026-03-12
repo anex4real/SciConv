@@ -47,7 +47,7 @@ def appendMessage(messages, content, contentShort=None, stage=None, role="assist
 
 def return_messages(requestData, messagesToUser):
     if "messages" not in requestData:
-        appendMessage(messagesToUser, contentShort="I can’t find the messages", stage="Start")
+        appendMessage(messagesToUser, "I can’t find the messages", stage="Start")
         return makeResponse(messagesToUser, status=200, isJson=True)
 
     return requestData["messages"]

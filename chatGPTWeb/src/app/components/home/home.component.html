@@ -201,17 +201,56 @@
                             <li>A single source file (e.g., <code>.py</code>, <code>.cpp</code>)</li>
                             <li>A <code>.zip</code> file containing a project folder</li>
                         </ul>
-                        <p>The system will automatically assign a project name based on your upload and the current
-                            date.</p>
                     </div>
 
                     <form class="upload-form" (ngSubmit)="onSubmitRepro()" #fileUploadFormRepro="ngForm">
+                        <!-- Code file (always required) -->
+                        <label class="form-label">Code file</label>
                         <input type="file" (change)="onFileChangeRepro($event)">
-                        <button type="submit" [disabled]="s.isLoading">
+
+                        <!-- Data Extension Layer toggle -->
+                        <label class="data-layer-toggle">
+                            <input type="checkbox" [(ngModel)]="useDataLayer" name="useDataLayer">
+                            <span>Include Dataset</span>
+                        </label>
+
+                        <!-- Data options (shown when toggle is on) -->
+                        <div *ngIf="useDataLayer" class="data-layer-options">
+                            <div class="mode-selector">
+                                <label>
+                                    <input type="radio" name="dataMode" value="file"
+                                           [(ngModel)]="dataMode">
+                                    Upload Data File (Mode A)
+                                </label>
+                                <label>
+                                    <input type="radio" name="dataMode" value="doi"
+                                           [(ngModel)]="dataMode">
+                                    Provide Zenodo DOI (Mode C)
+                                </label>
+                            </div>
+
+                            <!-- Mode A: data file upload -->
+                            <div *ngIf="dataMode === 'file'" class="data-input">
+                                <label class="form-label">Data file (.zip or single file)</label>
+                                <input type="file" (change)="onFileChangeData($event)">
+                            </div>
+
+                            <!-- Mode C: DOI input -->
+                            <div *ngIf="dataMode === 'doi'" class="data-input">
+                                <label class="form-label">Zenodo DOI, URL, or Record ID</label>
+                                <input type="text" [(ngModel)]="datasetDoi" name="datasetDoi"
+                                       placeholder="e.g. 10.5281/zenodo.1234567">
+                            </div>
+                        </div>
+
+                        <button type="submit"
+                                [disabled]="s.isLoading || !fileToUploadRepro
+                                    || (useDataLayer && dataMode === 'file' && !fileToUploadData)
+                                    || (useDataLayer && dataMode === 'doi' && !datasetDoi.trim())">
                             <span *ngIf="!s.isLoading">Upload</span>
                             <span *ngIf="s.isLoading">
-                <i class="fa fa-spinner fa-spin"></i> Loading...
-              </span>
+                                <i class="fa fa-spinner fa-spin"></i> Loading...
+                            </span>
                         </button>
                     </form>
                 </div>
@@ -252,7 +291,57 @@
                 </div>
             </div>
 
+            <!-- Reproduce from Artifact DOI -->
+            <div class="chat-input">
+                <div class="upload-container">
+                    <div class="info-message">
+                        <h2>Reproduce from Artifact DOI</h2>
+                        <p>Provide a Zenodo DOI for a published research artifact to reproduce the experiment automatically.</p>
+                    </div>
+                    <form class="upload-form" (ngSubmit)="onReproduceFromDoi()">
+                        <label class="form-label">Artifact DOI or Zenodo URL</label>
+                        <input type="text" [(ngModel)]="artifactDoiInput" name="artifactDoi"
+                               placeholder="e.g. 10.5281/zenodo.1234567">
+                        <button type="submit"
+                                [disabled]="!artifactDoiInput.trim() || reproFromDoiState.phase === 'init' || reproFromDoiState.phase === 'running'">
+                            <span *ngIf="reproFromDoiState.phase !== 'init' && reproFromDoiState.phase !== 'running'">Reproduce</span>
+                            <span *ngIf="reproFromDoiState.phase === 'init' || reproFromDoiState.phase === 'running'">
+                                <i class="fa fa-spinner fa-spin"></i> Running...
+                            </span>
+                        </button>
+                    </form>
+                </div>
+            </div>
+
         </ng-container>
+
+        <!-- ReproFromDoi results -->
+        <ng-container *ngIf="appStage === appStages.ReproFromDoi">
+            <div *ngIf="reproFromDoiState.phase === 'init' || reproFromDoiState.phase === 'running'"
+                 class="run-progress-detail">
+                <i class="fa fa-spinner fa-spin"></i>
+                {{ reproFromDoiState.runProgressDetail ||
+                   (reproFromDoiState.phase === 'init' ? 'Downloading artifact...' : 'Running experiment...') }}
+            </div>
+            <div *ngIf="reproFromDoiState.phase === 'error'" style="color:red; margin: 8px 0;">
+                {{ reproFromDoiState.errorMessage }}
+            </div>
+            <div *ngIf="reproFromDoiState.phase === 'completed'" class="chat-window">
+                <div class="chat-message">
+                    <strong>assistant</strong>
+                    <span style="white-space:pre-wrap">{{ reproFromDoiState.logs }}</span>
+                    <div *ngIf="reproFromDoiState.outputFiles?.length" style="margin-top: 8px;">
+                        <strong>Output files:</strong>
+                        <ul>
+                            <li *ngFor="let f of reproFromDoiState.outputFiles">
+                                <a [href]="getOutputFileUrl(f)" target="_blank" download>{{ f }}</a>
+                            </li>
+                        </ul>
+                    </div>
+                </div>
+            </div>
+        </ng-container>
+
         <!-- Actions from backend (Dataset mode) -->
         <div
                 *ngIf="appStage === appStages.Dataset
@@ -445,11 +534,13 @@
 
 
 
-        <!-- Chat input (when not in App Start) -->
+        <!-- Chat input (when not in App Start or ReproFromDoi, and not at Completed stage) -->
         <div
                 class="chat-input"
                 *ngIf="appStage != appStages.Start
-      && (!isDataState(s) || s.stage !== dataStages.EditZenodoMetadata)"
+      && appStage != appStages.ReproFromDoi
+      && (!isDataState(s) || s.stage !== dataStages.EditZenodoMetadata)
+      && (isDataState(s) || s.stage !== reproStages.Completed)"
         >
 
             <input [(ngModel)]="userMessage" placeholder="Type your message here..." (keydown.enter)="sendMessage()"/>
@@ -459,6 +550,42 @@
           <i class="fa fa-spinner fa-spin"></i> Loading...
         </span>
             </button>
+            <button
+                *ngIf="!isDataState(s) && s.stage === reproStages.SpecifyOutputs"
+                type="button"
+                class="skip-btn"
+                [disabled]="s.isLoading"
+                (click)="workflow.skipOutputSpec()">
+                Skip
+            </button>
+        </div>
+
+        <!-- Upload artifact to Zenodo (shown at Completed stage) -->
+        <div *ngIf="appStage === appStages.Repro && !isDataState(s) && s.stage === reproStages.Completed"
+             class="chat-input" style="flex-direction: column; align-items: flex-start; gap: 8px;">
+            <div style="display: flex; align-items: center; gap: 10px;">
+                <button type="button"
+                        [disabled]="s.artifactIsUploading || s.isLoading || !!s.artifactZenodoDoi"
+                        (click)="workflow.uploadArtifact()">
+                    <span *ngIf="!s.artifactIsUploading && !s.artifactZenodoDoi">Upload Artifact to Zenodo</span>
+                    <span *ngIf="s.artifactIsUploading">
+                        <i class="fa fa-spinner fa-spin"></i> Uploading...
+                    </span>
+                    <span *ngIf="s.artifactZenodoDoi">Uploaded</span>
+                </button>
+                <span *ngIf="s.artifactZenodoDoi" style="font-size:13px;">
+                    DOI: <a [href]="'https://doi.org/' + s.artifactZenodoDoi" target="_blank">{{ s.artifactZenodoDoi }}</a>
+                </span>
+            </div>
+            <div *ngIf="s.artifactIsUploading" class="run-progress-detail">
+                <i class="fa fa-spinner fa-spin"></i>
+                Uploading artifact to Zenodo — this may take several minutes for large Docker images...
+            </div>
+        </div>
+
+        <!-- Run progress detail (shown during container execution) -->
+        <div *ngIf="s.isLoading && !isDataState(s) && s.runProgressDetail" class="run-progress-detail">
+            <i class="fa fa-spinner fa-spin"></i> {{ s.runProgressDetail }}
         </div>
 
         <!-- Mostrar erro do workflow -->

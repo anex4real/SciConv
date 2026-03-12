@@ -3,15 +3,17 @@ import { Observable } from 'rxjs';
 
 import { ReproWorkflowService } from '../../service/repro-workflow/repro-workflow.service';
 import { DatasetAnalysisService } from '../../service/dataset-analysis/dataset-analysis.service';
+import { BackendService } from '../../service/backend.service';
 
-import { ReproStages, ReproState } from '../../service/repro-workflow/repro-workflow.types';
+import { ReproStages, ReproState, ReproFromDoiState } from '../../service/repro-workflow/repro-workflow.types';
 import { DataStages, DataState,  } from '../../service/dataset-analysis/dataset-analysis.types';
 
 
 enum AppStage {
     Start = 'Start',
     Repro = 'Repro',
-    Dataset = 'Dataset'
+    Dataset = 'Dataset',
+    ReproFromDoi = 'ReproFromDoi'
 }
 
 /** JSON keys that should NOT be displayed as labels */
@@ -42,8 +44,14 @@ export class HomeComponent {
 
 
     // Uploads (separados)
-    private fileToUploadRepro: File | null = null;
+    fileToUploadRepro: File | null = null;
     private fileToUploadPdf: File | null = null;
+
+    // Data Extension Layer
+    useDataLayer = false;
+    dataMode: 'file' | 'doi' = 'file';
+    fileToUploadData: File | null = null;
+    datasetDoi = '';
 
     // Auth
     password: string = '';
@@ -57,12 +65,18 @@ export class HomeComponent {
     // Input do chat
     userMessage: string = '';
 
+    // Reproduce from Artifact DOI
+    artifactDoiInput: string = '';
+    reproFromDoiState: ReproFromDoiState = { phase: 'idle' };
+    private _reproFromDoiPollId?: number;
+
     // Active state for the template (switches between Repro and Dataset)
     state$: Observable<ReproState | DataState>;
 
     constructor(
         public workflow: ReproWorkflowService,
-        public analysis: DatasetAnalysisService
+        public analysis: DatasetAnalysisService,
+        private backend: BackendService
     ) {
         // default (Start screen only needs isLoading/error/messages, so any state works)
         this.state$ = this.workflow.state$;
@@ -126,11 +140,25 @@ export class HomeComponent {
         if (this.fileToUploadRepro) console.log('Accepted repro file:', this.fileToUploadRepro.name);
     }
 
+    onFileChangeData(event: any) {
+        const file = event?.target?.files?.[0];
+        this.fileToUploadData = file ?? null;
+    }
+
     onSubmitRepro() {
         if (!this.fileToUploadRepro) return;
 
         const formData = new FormData();
         formData.append('file', this.fileToUploadRepro);
+
+        if (this.useDataLayer) {
+            formData.append('use_data_layer', 'true');
+            if (this.dataMode === 'file' && this.fileToUploadData) {
+                formData.append('data_file', this.fileToUploadData);
+            } else if (this.dataMode === 'doi' && this.datasetDoi.trim()) {
+                formData.append('dataset_doi', this.datasetDoi.trim());
+            }
+        }
 
         this.appStage = AppStage.Repro;
         this.state$ = this.workflow.state$;
@@ -192,6 +220,73 @@ export class HomeComponent {
     }
 
 
+
+    getOutputFileUrl(filename: string): string {
+        const uuid = this.reproFromDoiState.newProjectUuid ?? '';
+        return this.backend.getOutputFileUrl(uuid, filename);
+    }
+
+    onReproduceFromDoi() {
+        const doi = this.artifactDoiInput.trim();
+        if (!doi) return;
+
+        this.appStage = AppStage.ReproFromDoi;
+        this.reproFromDoiState = { phase: 'init' };
+
+        // Step 1: init (resolve DOI, download & extract zip)
+        this.backend.reproduceFromDoiInit(doi).subscribe({
+            next: (res: any) => {
+                const newUuid = res?.new_project_uuid;
+                if (!newUuid) {
+                    this.reproFromDoiState = { phase: 'error', errorMessage: 'Init failed: no project UUID returned.' };
+                    return;
+                }
+                this.reproFromDoiState = { phase: 'running', newProjectUuid: newUuid };
+
+                // Start polling run-progress
+                this._reproFromDoiPollId = window.setInterval(() => {
+                    this.backend.getRunProgress(newUuid).subscribe({
+                        next: (p: any) => {
+                            if (p?.detail) {
+                                this.reproFromDoiState = { ...this.reproFromDoiState, runProgressDetail: p.detail };
+                            }
+                        }
+                    });
+                }, 2000);
+
+                // Step 2: run experiment
+                this.backend.reproduceRun(newUuid).subscribe({
+                    next: (response: any) => {
+                        window.clearInterval(this._reproFromDoiPollId);
+                        const last = response?.[response.length - 1];
+                        const c = last?.content ?? {};
+                        this.reproFromDoiState = {
+                            phase: 'completed',
+                            newProjectUuid: newUuid,
+                            logs: typeof c === 'string' ? c : c.logs ?? last?.contentShort,
+                            outputFiles: c.output_files ?? [],
+                            commandToRun: c.command_to_run,
+                            dataStrategy: c.data_strategy,
+                        };
+                    },
+                    error: (err: any) => {
+                        window.clearInterval(this._reproFromDoiPollId);
+                        this.reproFromDoiState = {
+                            phase: 'error',
+                            newProjectUuid: newUuid,
+                            errorMessage: `Experiment run failed (HTTP ${err?.status})`,
+                        };
+                    }
+                });
+            },
+            error: (err: any) => {
+                this.reproFromDoiState = {
+                    phase: 'error',
+                    errorMessage: err?.error?.error || `Init failed (HTTP ${err?.status})`,
+                };
+            }
+        });
+    }
 
     goToAppStart(resetWorkflows: boolean = false) {
         this.appStage = this.appStages.Start;

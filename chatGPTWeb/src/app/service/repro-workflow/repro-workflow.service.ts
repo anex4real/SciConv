@@ -14,6 +14,8 @@ export class ReproWorkflowService {
         messages: [],
         projectUuid: '',
         commandToRun: '',
+        outputSpec: '',
+        runProgressDetail: '',
         executableFiles: undefined,
         configurationFiles: {},
         configurations: undefined,
@@ -29,6 +31,8 @@ export class ReproWorkflowService {
         errorMessage: undefined,
         GO_BACK_NUMBER: 3,
         goBack: 3,
+        artifactZenodoDoi: undefined,
+        artifactIsUploading: false,
     };
 
     private readonly stateSubject = new BehaviorSubject<ReproState>(this.initialState);
@@ -72,6 +76,10 @@ export class ReproWorkflowService {
                 this.parametersToUseConfirmation();
                 break;
 
+            case ReproStages.SpecifyOutputs:
+                this.specifyOutputsConfirmation();
+                break;
+
             case ReproStages.WaitChatInteraction:
                 this.chatInteraction();
                 break;
@@ -102,16 +110,19 @@ export class ReproWorkflowService {
 
                 if (last.stage === ReproStages.FindProjectFiles) {
                     this.patch({ projectUuid: last.content });
-                    this.changeStage(ReproStages.FindProjectFiles);
+                    // Always call externalize-data next; the backend skips it
+                    // automatically for strategies that don't need Zenodo upload.
+                    this.changeStage(ReproStages.ExternalizeData);
                 } else if (last.stage) {
                     this.pushMessages(...response);
                     this.changeStage(last.stage);
                 }
             },
-            error: () => {
+            error: (err: any) => {
+                console.error('[UploadProject] HTTP', err?.status, err?.error);
                 this.patch({
                     isLoading: false,
-                    errorMessage: 'Upload failed. Please check your connection or authentication.',
+                    errorMessage: `Upload failed (HTTP ${err?.status ?? 'network error'}). Please check your connection or authentication.`,
                 });
             }
         });
@@ -122,11 +133,17 @@ export class ReproWorkflowService {
             case ReproStages.ProjectLocation:
                 this.projectLocation();
                 break;
+            case ReproStages.ExternalizeData:
+                this.externalizeData();
+                break;
             case ReproStages.FindProjectFiles:
                 this.findProjectFiles();
                 break;
             case ReproStages.ParametersToUse:
                 this.parametersToUseFunc();
+                break;
+            case ReproStages.SpecifyOutputs:
+                this.specifyOutputsFunc();
                 break;
             case ReproStages.FindConfigurations:
                 this.findConfigurations();
@@ -167,6 +184,37 @@ export class ReproWorkflowService {
                 "Examples:\n" +
                 "The root folder of the project is located at example_folder_name\n" +
                 "example_folder_name"
+        });
+    }
+
+    private externalizeData() {
+        this.patch({ isLoading: true, errorMessage: undefined });
+
+        this.pushMessages({
+            role: 'assistant',
+            content: 'Processing dataset (this may take a few minutes for large files)...',
+            contentShort: 'Processing dataset...',
+            jsonObject: false,
+        });
+
+        this.backend.externalizeData(this.state.projectUuid).subscribe({
+            next: (response: any) => {
+                this.patch({ isLoading: false });
+                this.pushMessages(...response);
+                this.changeStage(ReproStages.FindProjectFiles);
+            },
+            error: (err: any) => {
+                const status = err?.status ?? 'network error';
+                const body = err?.error;
+                const detail = Array.isArray(body)
+                    ? body.map((m: any) => m.contentShort || m.content).join(' | ')
+                    : (typeof body === 'string' ? body : JSON.stringify(body ?? {}));
+                console.error('[ExternalizeData] HTTP', status, detail);
+                this.patch({
+                    isLoading: false,
+                    errorMessage: `Dataset upload failed (HTTP ${status}): ${detail}`,
+                });
+            }
         });
     }
 
@@ -228,7 +276,7 @@ export class ReproWorkflowService {
                 const len = response.length;
                 const last = response[len - 1];
 
-                if (last.stage === ReproStages.FindConfigurations) {
+                if (last.stage === ReproStages.SpecifyOutputs) {
                     this.patch({ commandToRun: last.content });
                 }
                 if (last.stage) this.changeStage(last.stage);
@@ -237,6 +285,88 @@ export class ReproWorkflowService {
                 this.patch({
                     isLoading: false,
                     errorMessage: "Failed to confirm parameters. Please check your input or authentication.",
+                });
+            }
+        });
+    }
+
+    private specifyOutputsFunc() {
+        this.pushMessages({
+            role: 'assistant',
+            content:
+                'Please specify the output files or directories your experiment creates.\n' +
+                'Use space-separated paths or glob patterns relative to the working directory.\n' +
+                'Example: results/ models/*.pkl report.pdf',
+            contentShort: 'Please specify the output files or directories your experiment creates.',
+            jsonObject: false,
+            examples:
+                'Examples:\n' +
+                'results/\n' +
+                'output/*.csv\n' +
+                'results/ models/*.pkl report.pdf'
+        });
+    }
+
+    private specifyOutputsConfirmation() {
+        this.patch({ isLoading: true, errorMessage: undefined });
+
+        this.backend.specifyOutputs(this.state.projectUuid, this.state.messages).subscribe({
+            next: (response: any) => {
+                this.patch({ isLoading: false });
+                this.pushMessages(...response);
+
+                const len = response.length;
+                const last = response[len - 1];
+
+                if (last.stage === ReproStages.FindConfigurations) {
+                    this.patch({ outputSpec: last.content });
+                }
+                if (last.stage) this.changeStage(last.stage);
+            },
+            error: () => {
+                this.patch({
+                    isLoading: false,
+                    errorMessage: 'Failed to save output specification.',
+                });
+            }
+        });
+    }
+
+    skipOutputSpec() {
+        this.patch({ isLoading: true, errorMessage: undefined });
+
+        this.backend.skipOutputs(this.state.projectUuid).subscribe({
+            next: (response: any) => {
+                this.patch({ isLoading: false });
+                this.pushMessages(...response);
+
+                const last = response[response.length - 1];
+                if (last.stage) this.changeStage(last.stage);
+            },
+            error: () => {
+                this.patch({
+                    isLoading: false,
+                    errorMessage: 'Failed to skip output specification.',
+                });
+            }
+        });
+    }
+
+    uploadArtifact() {
+        this.patch({ artifactIsUploading: true, errorMessage: undefined });
+
+        this.backend.uploadArtifactToZenodo(this.state.projectUuid).subscribe({
+            next: (response: any) => {
+                this.patch({ artifactIsUploading: false });
+                this.pushMessages(...response);
+                const last = response[response.length - 1];
+                const doi = last?.content?.doi || last?.contentShort?.match(/DOI: (.+)/)?.[1];
+                if (doi) this.patch({ artifactZenodoDoi: doi });
+            },
+            error: () => {
+                this.patch({
+                    artifactIsUploading: false,
+                    errorMessage: 'Failed to upload artifact to Zenodo.',
                 });
             }
         });
@@ -414,7 +544,18 @@ export class ReproWorkflowService {
             jsonObject: false
         });
 
-        this.patch({ isLoading: true, errorMessage: undefined });
+        this.patch({ isLoading: true, errorMessage: undefined, runProgressDetail: '' });
+
+        // Poll run_progress.json every 2 s while the request is in-flight
+        const pollId = window.setInterval(() => {
+            this.backend.getRunProgress(this.state.projectUuid).subscribe({
+                next: (p: any) => {
+                    if (p?.detail) {
+                        this.patch({ runProgressDetail: p.detail });
+                    }
+                }
+            });
+        }, 2000);
 
         this.backend.RunContainer(
             this.state.projectUuid,
@@ -423,7 +564,8 @@ export class ReproWorkflowService {
             this.state.messages
         ).subscribe({
             next: (response: any) => {
-                this.patch({ isLoading: false });
+                window.clearInterval(pollId);
+                this.patch({ isLoading: false, runProgressDetail: '' });
                 this.pushMessages(...response);
 
                 const last = response[response.length - 1];
@@ -449,8 +591,10 @@ export class ReproWorkflowService {
                 }
             },
             error: () => {
+                window.clearInterval(pollId);
                 this.patch({
                     isLoading: false,
+                    runProgressDetail: '',
                     errorMessage: "Failed to run container. Please review the command or image and try again.",
                 });
             }
