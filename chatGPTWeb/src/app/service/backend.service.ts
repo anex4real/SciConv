@@ -141,6 +141,12 @@ export class BackendService {
             {headers: this.headers});
     }
 
+    inferArtifactMetadata(projectUuid: string) {
+        return this.http.get(
+            `${this.baseUrl}/project/${projectUuid}/infer-artifact-metadata`,
+            {headers: this.headers});
+    }
+
     uploadArtifactToZenodo(projectUuid: string, body: any = {}) {
         return this.http.post(
             `${this.baseUrl}/project/${projectUuid}/upload-artifact-to-zenodo`,
@@ -176,10 +182,18 @@ export class BackendService {
             {headers: this.headers});
     }
 
-    externalizeData(projectUuid: string) {
+    inferDatasetMetadata(projectUuid: string) {
+        return this.http.post(
+            `${this.baseUrl}/project/${projectUuid}/infer-dataset-metadata`,
+            {},
+            {headers: this.headers}
+        );
+    }
+
+    externalizeData(projectUuid: string, metadata?: any) {
         return this.http.post(
             `${this.baseUrl}/project/${projectUuid}/externalize-data`,
-            {},
+            metadata ? {metadata} : {},
             {headers: this.headers}
         );
     }

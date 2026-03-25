@@ -33,6 +33,11 @@ export class ReproWorkflowService {
         goBack: 3,
         artifactZenodoDoi: undefined,
         artifactIsUploading: false,
+        datasetMetadataDraft: undefined,
+        datasetMetadataTemplate: undefined,
+        datasetMetadataReady: false,
+        artifactMetadataDraft: undefined,
+        artifactMetadataReady: false,
     };
 
     private readonly stateSubject = new BehaviorSubject<ReproState>(this.initialState);
@@ -110,9 +115,9 @@ export class ReproWorkflowService {
 
                 if (last.stage === ReproStages.FindProjectFiles) {
                     this.patch({ projectUuid: last.content });
-                    // Always call externalize-data next; the backend skips it
-                    // automatically for strategies that don't need Zenodo upload.
-                    this.changeStage(ReproStages.ExternalizeData);
+                    // Try to infer dataset metadata first; backend returns skip:true
+                    // for strategies that don't upload to Zenodo.
+                    this.changeStage(ReproStages.InferDatasetMetadata);
                 } else if (last.stage) {
                     this.pushMessages(...response);
                     this.changeStage(last.stage);
@@ -132,6 +137,9 @@ export class ReproWorkflowService {
         switch (stage) {
             case ReproStages.ProjectLocation:
                 this.projectLocation();
+                break;
+            case ReproStages.InferDatasetMetadata:
+                this.inferDatasetMetadata();
                 break;
             case ReproStages.ExternalizeData:
                 this.externalizeData();
@@ -185,6 +193,75 @@ export class ReproWorkflowService {
                 "The root folder of the project is located at example_folder_name\n" +
                 "example_folder_name"
         });
+    }
+
+    private inferDatasetMetadata() {
+        this.patch({ isLoading: true, errorMessage: undefined, datasetMetadataReady: false });
+
+        this.pushMessages({
+            role: 'assistant',
+            content: 'Analysing dataset to infer Zenodo metadata...',
+            contentShort: 'Analysing dataset to infer Zenodo metadata...',
+            jsonObject: false,
+        });
+
+        this.backend.inferDatasetMetadata(this.state.projectUuid).subscribe({
+            next: (response: any) => {
+                this.patch({ isLoading: false });
+                if (response.skip) {
+                    // Strategy doesn't need Zenodo upload — proceed automatically
+                    this.changeStage(ReproStages.ExternalizeData);
+                    return;
+                }
+                const metadataList = response.zenodo_metadata || [];
+                const draft = metadataList.length > 0 ? metadataList[0].metadata : {};
+                this.patch({
+                    datasetMetadataDraft: draft,
+                    datasetMetadataTemplate: response.template,
+                    datasetMetadataReady: true,
+                });
+            },
+            error: () => {
+                // On inference failure, skip metadata and proceed
+                this.patch({ isLoading: false });
+                this.changeStage(ReproStages.ExternalizeData);
+            }
+        });
+    }
+
+    confirmDatasetMetadata(metadata: any) {
+        this.patch({ datasetMetadataReady: false, isLoading: true, errorMessage: undefined });
+
+        this.pushMessages({
+            role: 'assistant',
+            content: 'Processing dataset (this may take a few minutes for large files)...',
+            contentShort: 'Processing dataset...',
+            jsonObject: false,
+        });
+
+        this.backend.externalizeData(this.state.projectUuid, metadata).subscribe({
+            next: (response: any) => {
+                this.patch({ isLoading: false });
+                this.pushMessages(...response);
+                this.changeStage(ReproStages.FindProjectFiles);
+            },
+            error: (err: any) => {
+                const status = err?.status ?? 'network error';
+                const body = err?.error;
+                const detail = Array.isArray(body)
+                    ? body.map((m: any) => m.contentShort || m.content).join(' | ')
+                    : (typeof body === 'string' ? body : JSON.stringify(body ?? {}));
+                this.patch({
+                    isLoading: false,
+                    errorMessage: `Dataset upload failed (HTTP ${status}): ${detail}`,
+                });
+            }
+        });
+    }
+
+    skipDatasetMetadata() {
+        this.patch({ datasetMetadataReady: false });
+        this.changeStage(ReproStages.ExternalizeData);
     }
 
     private externalizeData() {
@@ -353,9 +430,42 @@ export class ReproWorkflowService {
     }
 
     uploadArtifact() {
-        this.patch({ artifactIsUploading: true, errorMessage: undefined });
+        // Step 1: infer metadata via GPT, show editor before uploading
+        this.patch({ artifactIsUploading: true, errorMessage: undefined, artifactMetadataReady: false });
 
-        this.backend.uploadArtifactToZenodo(this.state.projectUuid).subscribe({
+        this.backend.inferArtifactMetadata(this.state.projectUuid).subscribe({
+            next: (res: any) => {
+                this.patch({
+                    artifactIsUploading: false,
+                    artifactMetadataDraft: {
+                        title: res.title || '',
+                        description: res.description || '',
+                        creator_name: '',
+                    },
+                    artifactMetadataReady: true,
+                    stage: ReproStages.InferArtifactMetadata,
+                });
+            },
+            error: () => {
+                // Fall back to uploading with generic metadata
+                this.patch({ artifactIsUploading: false });
+                this._doUploadArtifact({});
+            }
+        });
+    }
+
+    confirmArtifactMetadata(draft: { title: string; description: string; creator_name: string }) {
+        this._doUploadArtifact(draft);
+    }
+
+    skipArtifactMetadata() {
+        this._doUploadArtifact({});
+    }
+
+    private _doUploadArtifact(body: any) {
+        this.patch({ artifactIsUploading: true, errorMessage: undefined, stage: ReproStages.Completed });
+
+        this.backend.uploadArtifactToZenodo(this.state.projectUuid, body).subscribe({
             next: (response: any) => {
                 this.patch({ artifactIsUploading: false });
                 this.pushMessages(...response);

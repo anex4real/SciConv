@@ -15,7 +15,6 @@ from werkzeug.utils import secure_filename
 from helpers.article.metadata_template import ZENODO_METADATA_TEMPLATE
 from helpers.index import appendMessage, callGPTModel, _extract_json_safe
 
-ALLOWED_EXTENSIONS = None  # or set: {"zip","pdf","txt","csv","json","yaml","yml","png","jpg"} etc.
 ZENODO_API_BASE = "https://zenodo.org/api"
 BASE = "https://www.f-uji.net"
 
@@ -627,67 +626,6 @@ def _deep_merge(base: Any, patch: Any) -> Any:
         return out
     return copy.deepcopy(patch)
 
-
-def _strip_license_urls_from_text_fields(metadata: Dict[str, Any]) -> Dict[str, Any]:
-    url_rx = re.compile(r"https?://creativecommons\.org/licenses/[^\s<>\"]+", re.IGNORECASE)
-
-    def _clean(s: Any) -> Any:
-        if not isinstance(s, str):
-            return s
-        return url_rx.sub("", s).strip()
-
-    for k in ("description", "notes", "access_conditions"):
-        if k in metadata:
-            metadata[k] = _clean(metadata[k])
-
-    if isinstance(metadata.get("references"), list):
-        metadata["references"] = [_clean(x) for x in metadata["references"]]
-
-    return metadata
-
-
-def _validate_minimal_zenodo_metadata(metadata: Dict[str, Any]) -> None:
-    if not isinstance(metadata, dict):
-        raise ValueError("metadata must be a dict")
-
-    required = ["title", "upload_type", "publication_date", "description", "access_right"]
-    missing = [k for k in required if not metadata.get(k)]
-    if missing:
-        raise ValueError(f"Missing required metadata fields: {missing}")
-
-    ar = metadata.get("access_right")
-    if ar not in ("open", "embargoed", "restricted", "closed"):
-        raise ValueError(f"Invalid access_right='{ar}'")
-
-    if ar in ("open", "embargoed"):
-        if not metadata.get("license"):
-            raise ValueError("license is required when access_right is open/embargoed")
-
-
-def _safe_list_article_files(article_uuid: str, max_files: int = 40) -> List[Dict[str, Any]]:
-    """
-    Lists files under articles/<article_uuid>/.
-    Sends only filenames + basic info to the LLM (not file contents).
-    """
-    base_dir = os.path.join("articles", article_uuid)
-    out: List[Dict[str, Any]] = []
-    if not os.path.isdir(base_dir):
-        return out
-
-    for name in sorted(os.listdir(base_dir)):
-        p = os.path.join(base_dir, name)
-        if not os.path.isfile(p):
-            continue
-        try:
-            size = os.path.getsize(p)
-        except Exception:
-            size = None
-        out.append({"filename": name, "path": p, "size_bytes": size})
-        if len(out) >= max_files:
-            break
-    return out
-
-
 def _filter_patch_to_template(metadata_patch: Dict[str, Any], template: Dict[str, Any]) -> Dict[str, Any]:
     """
     Drop keys not present in the template (prevents hallucinated fields).
@@ -814,6 +752,412 @@ def propose_zenodo_metadata_patch_with_openai(
     return patch
 
 
+def _sample_code_files(files_dir: str, max_total_chars: int = 3000) -> Dict[str, Any]:
+    """
+    Extract useful context from code files in files_dir for metadata inference:
+    - README content (first 1000 chars)
+    - Script file names
+    - Imports + module docstring from .py files (up to 3 files)
+    """
+    if not os.path.isdir(files_dir):
+        return {}
+
+    result: Dict[str, Any] = {}
+    chars_used = 0
+
+    # Collect all filenames for the inventory
+    all_names: List[str] = []
+    readme_path: Optional[str] = None
+    py_paths: List[str] = []
+
+    for root, _, files in os.walk(files_dir):
+        for fname in sorted(files):
+            path = os.path.join(root, fname)
+            rel = os.path.relpath(path, files_dir).replace("\\", "/")
+            all_names.append(rel)
+            lower = fname.lower()
+            if lower.startswith("readme") and readme_path is None:
+                readme_path = path
+            if fname.endswith(".py"):
+                py_paths.append(path)
+
+    result["script_names"] = all_names
+
+    # README — highest signal
+    if readme_path and chars_used < max_total_chars:
+        try:
+            with open(readme_path, "r", encoding="utf-8", errors="replace") as f:
+                content = f.read(min(1000, max_total_chars - chars_used))
+            result["readme"] = content
+            chars_used += len(content)
+        except Exception:
+            pass
+
+    # .py files — extract imports + module docstring
+    py_samples: List[Dict[str, Any]] = []
+    for py_path in py_paths[:3]:
+        if chars_used >= max_total_chars:
+            break
+        try:
+            with open(py_path, "r", encoding="utf-8", errors="replace") as f:
+                lines = f.readlines()
+
+            imports = [l.rstrip() for l in lines if l.startswith("import ") or l.startswith("from ")]
+            # Module docstring: look for leading triple-quoted string
+            docstring = ""
+            src = "".join(lines[:10])
+            import ast as _ast
+            try:
+                tree = _ast.parse("".join(lines))
+                if (tree.body and isinstance(tree.body[0], _ast.Expr)
+                        and isinstance(tree.body[0].value, _ast.Constant)
+                        and isinstance(tree.body[0].value.value, str)):
+                    docstring = tree.body[0].value.value[:300]
+            except Exception:
+                pass
+
+            snippet: Dict[str, Any] = {"filename": os.path.basename(py_path)}
+            if imports:
+                snippet["imports"] = imports[:20]
+            if docstring:
+                snippet["docstring"] = docstring
+
+            chunk = str(snippet)
+            if chars_used + len(chunk) <= max_total_chars:
+                py_samples.append(snippet)
+                chars_used += len(chunk)
+        except Exception:
+            pass
+
+    if py_samples:
+        result["python_files"] = py_samples
+
+    return result
+
+
+def _sample_data_files(data_dir: str, max_total_chars: int = 8000) -> List[Dict[str, Any]]:
+    """
+    Walk data_dir, sample one file per extension type for GPT context.
+    Returns list of sample dicts with filename, size, and a content preview
+    where possible. Caps total characters sent to avoid overloading the LLM.
+    """
+    import csv as _csv_mod
+
+    # One representative file per extension
+    by_ext: Dict[str, str] = {}
+    for root, _, files in os.walk(data_dir):
+        for fname in sorted(files):
+            ext = os.path.splitext(fname)[1].lower() or ".bin"
+            if ext not in by_ext:
+                by_ext[ext] = os.path.join(root, fname)
+
+    samples: List[Dict[str, Any]] = []
+    chars_used = 0
+
+    for ext, path in by_ext.items():
+        if chars_used >= max_total_chars:
+            break
+        fname = os.path.basename(path)
+        try:
+            size = os.path.getsize(path)
+        except Exception:
+            size = 0
+        remaining = max_total_chars - chars_used
+        sample: Dict[str, Any] = {"filename": fname, "extension": ext, "size_bytes": size}
+
+        try:
+            if ext in ('.csv', '.tsv'):
+                sep = '\t' if ext == '.tsv' else ','
+                rows: List[Any] = []
+                with open(path, 'r', encoding='utf-8', errors='replace') as f:
+                    reader = _csv_mod.reader(f, delimiter=sep)
+                    for i, row in enumerate(reader):
+                        if i >= 4:
+                            break
+                        rows.append(row)
+                sample['preview'] = rows
+                chars_used += sum(len(' '.join(str(c) for c in r)) for r in rows)
+
+            elif ext == '.json':
+                with open(path, 'r', encoding='utf-8', errors='replace') as f:
+                    content = f.read(min(1000, remaining))
+                sample['preview'] = content
+                chars_used += len(content)
+
+            elif ext in ('.txt', '.md', '.rst'):
+                with open(path, 'r', encoding='utf-8', errors='replace') as f:
+                    content = f.read(min(600, remaining))
+                sample['preview'] = content
+                chars_used += len(content)
+
+            elif ext == '.npy':
+                try:
+                    import numpy as np
+                    arr = np.load(path, allow_pickle=False)
+                    sample['shape'] = list(arr.shape)
+                    sample['dtype'] = str(arr.dtype)
+                    if arr.size > 0:
+                        flat = arr.flatten()
+                        sample['value_range'] = {
+                            'min': float(flat.min()),
+                            'max': float(flat.max()),
+                            'mean': float(flat.mean()),
+                        }
+                        sample['values_preview'] = flat[:5].tolist()
+                    chars_used += 100
+                except ImportError:
+                    pass
+
+            elif ext in ('.h5', '.hdf5'):
+                try:
+                    import h5py
+                    with h5py.File(path, 'r') as hf:
+                        sample['keys'] = list(hf.keys())[:20]
+                    chars_used += 100
+                except ImportError:
+                    pass
+
+            elif ext == '.nc':
+                try:
+                    import netCDF4 as nc4
+                    with nc4.Dataset(path, 'r') as ds:
+                        sample['variables'] = list(ds.variables.keys())[:20]
+                        sample['dimensions'] = {k: len(v) for k, v in list(ds.dimensions.items())[:10]}
+                    chars_used += 100
+                except ImportError:
+                    pass
+
+        except Exception:
+            pass
+
+        samples.append(sample)
+
+    return samples
+
+
+def infer_dataset_metadata_from_data(
+        data_dir: str,
+        project_uuid: str,
+        files_dir: Optional[str] = None,
+) -> Dict[str, Any]:
+    """
+    Sample files from data_dir (and optionally code files from files_dir)
+    and ask GPT to infer Zenodo metadata.
+
+    Returns:
+        {"zenodo_metadata": [{"metadata": {...}}], "template": ZENODO_METADATA_TEMPLATE}
+        or {"skip": True} if no data or GPT fails.
+    """
+    TOBE = "<TOBeFilledByUser>"
+    MAX_TRIES = 3
+
+    if not os.path.isdir(data_dir):
+        return {"skip": True}
+
+    # Full file inventory (names + sizes only, no content)
+    file_inventory: List[Dict[str, Any]] = []
+    for root, _, files in os.walk(data_dir):
+        for fname in files:
+            p = os.path.join(root, fname)
+            rel = os.path.relpath(p, data_dir).replace("\\", "/")
+            try:
+                file_inventory.append({"path": rel, "size_bytes": os.path.getsize(p)})
+            except Exception:
+                file_inventory.append({"path": rel})
+
+    if not file_inventory:
+        return {"skip": True}
+
+    samples = _sample_data_files(data_dir)
+    code_context = _sample_code_files(files_dir) if files_dir else {}
+
+    # Fields relevant for a dataset upload — used to return a focused template
+    # so the editor doesn't show conference/journal/thesis fields to every user.
+    DATASET_TEMPLATE_FIELDS = {
+        "upload_type", "publication_date", "title", "creators", "description",
+        "access_right", "license", "embargo_date", "access_conditions",
+        "keywords", "notes", "related_identifiers", "version", "language", "method",
+    }
+    dataset_template = {k: v for k, v in ZENODO_METADATA_TEMPLATE.items()
+                        if k in DATASET_TEMPLATE_FIELDS}
+
+    # --- Normalization helpers ---
+    def _is_placeholder(v: Any) -> bool:
+        return isinstance(v, str) and v.strip() == TOBE
+
+    def _make_tobe(field: str) -> Dict[str, Any]:
+        spec = ZENODO_METADATA_TEMPLATE.get(field, {})
+        obj: Dict[str, Any] = {"_tobefilledbyuser": True, "field": field}
+        enum_vals = spec.get("enum")
+        if isinstance(enum_vals, list) and enum_vals:
+            obj["allowed_values"] = enum_vals
+        fmt = spec.get("format")
+        if fmt == "date":
+            obj["expected_format"] = "YYYY-MM-DD"
+            obj["example"] = "2025-01-31"
+        if "allowed_values" in obj:
+            obj["message"] = "Select one of the allowed values."
+        elif "expected_format" in obj:
+            obj["message"] = "Fill in the value using the expected format."
+        else:
+            obj["message"] = "Fill in this field."
+        return obj
+
+    def _normalize(md: Dict[str, Any]) -> Dict[str, Any]:
+        import datetime
+        md = _filter_metadata_to_template(md, ZENODO_METADATA_TEMPLATE)
+        md["upload_type"] = "dataset"
+
+        if not isinstance(md.get("title"), str) or not md["title"].strip() or _is_placeholder(md["title"]):
+            md["title"] = _make_tobe("title")
+
+        # Use today's date as default (template says "default": "today")
+        pd = md.get("publication_date")
+        if not isinstance(pd, str) or not pd.strip() or _is_placeholder(pd):
+            md["publication_date"] = datetime.date.today().isoformat()
+
+        if not isinstance(md.get("description"), str) or not md["description"].strip() or _is_placeholder(md.get("description", "")):
+            md["description"] = _make_tobe("description")
+
+        # Fix creators — handle both missing list and placeholder names inside list
+        creators = md.get("creators")
+        if not isinstance(creators, list) or not creators:
+            md["creators"] = [{
+                "_tobefilledbyuser": True,
+                "field": "creators[0].name",
+                "required_fields": ["name"],
+                "optional_fields": ["affiliation", "orcid"],
+                "message": "At least one creator is required."
+            }]
+        else:
+            fixed = []
+            for i, c in enumerate(creators):
+                if not isinstance(c, dict):
+                    continue
+                if _is_placeholder(c.get("name", "")):
+                    fixed.append({
+                        "_tobefilledbyuser": True,
+                        "field": f"creators[{i}].name",
+                        "required": True,
+                        "message": "Fill creator name (e.g. 'Last, First')."
+                    })
+                else:
+                    # Strip placeholder orcid/gnd if present
+                    for k in ("orcid", "gnd"):
+                        if k in c and _is_placeholder(c[k]):
+                            c.pop(k)
+                    fixed.append(c)
+            md["creators"] = fixed if fixed else [{
+                "_tobefilledbyuser": True,
+                "field": "creators[0].name",
+                "required_fields": ["name"],
+                "optional_fields": ["affiliation", "orcid"],
+                "message": "At least one creator is required."
+            }]
+
+        # Data samples don't reveal open sharing intent — mark as required choice
+        ar = md.get("access_right")
+        if not isinstance(ar, str) or not ar.strip() or _is_placeholder(ar):
+            md["access_right"] = _make_tobe("access_right")
+
+        # Remove hallucinated DOIs
+        if "doi" in md and (_is_placeholder(md.get("doi", "")) or not md.get("doi", "").strip()):
+            md.pop("doi", None)
+
+        return md
+
+    # --- GPT prompt ---
+    system = (
+        "You are a research data curator creating Zenodo deposit metadata.\n"
+        "You will be given a file inventory and data samples from a scientific experiment dataset, "
+        "plus code context (README, script names, imports) from the experiment code.\n"
+        "Goal: infer metadata suitable to CREATE a Zenodo deposit for this dataset.\n\n"
+        "STRICT RULES:\n"
+        "- Return ONLY valid JSON.\n"
+        "- Output MUST be exactly: {\"metadata_list\": [{\"metadata\": {...}}]}\n"
+        "- Follow allowed_metadata_template keys/types only.\n"
+        "- Do NOT invent DOIs, ORCIDs, URLs, grant IDs, or licenses.\n"
+        "- If unsure about a field, set it to the literal string \"<TOBeFilledByUser>\".\n"
+        "- access_right: use \"restricted\" unless data samples or README clearly indicate open sharing.\n"
+        "- Infer title and description from file names, data content, README, and script imports.\n"
+        "- Use code imports to identify the scientific domain (e.g. Bio → bioinformatics, netCDF4 → climate).\n"
+        "- Return exactly 1 metadata object.\n"
+    )
+
+    user_payload = {
+        "project_uuid": project_uuid,
+        "file_inventory": file_inventory,
+        "data_samples": samples,
+        "code_context": code_context,
+        "allowed_metadata_template": ZENODO_METADATA_TEMPLATE,
+        "required_output_schema": {
+            "metadata_list": [{"metadata": {
+                "title": "", "upload_type": "dataset",
+                "description": "", "creators": [], "access_right": ""
+            }}]
+        }
+    }
+
+    def _try_parse(raw: str) -> Optional[Dict[str, Any]]:
+        parsed = _extract_json_safe(raw)
+        if parsed is None:
+            m = re.search(r"\{.*\}", raw or "", flags=re.DOTALL)
+            if not m:
+                return None
+            try:
+                parsed = json.loads(m.group(0))
+            except Exception:
+                return None
+        if not isinstance(parsed, dict):
+            return None
+        ml = parsed.get("metadata_list")
+        if not isinstance(ml, list) or not ml:
+            return None
+        for it in ml:
+            if not isinstance(it, dict) or not isinstance(it.get("metadata"), dict):
+                return None
+        return parsed
+
+    parsed = None
+    for attempt in range(1, MAX_TRIES + 1):
+        msgs = [
+            {"role": "system", "content": system},
+            {"role": "user", "content": json.dumps(user_payload, ensure_ascii=False)},
+        ]
+        if attempt > 1:
+            msgs.append({
+                "role": "user",
+                "content": (
+                    "Your previous output did NOT match the required schema.\n"
+                    "Return ONLY JSON: {\"metadata_list\": [{\"metadata\": {...}}]}"
+                )
+            })
+        raw = callGPTModel(msgs)
+        parsed = _try_parse(raw)
+        if parsed is not None:
+            break
+
+    if parsed is None:
+        return {"skip": True}
+
+    out = []
+    for item in parsed["metadata_list"][:1]:
+        item = _ensure_top_level_metadata(item)
+        md = item.get("metadata", {}) if isinstance(item, dict) else {}
+        if not isinstance(md, dict):
+            continue
+        md = _normalize(md)
+        out.append({"metadata": md})
+
+    if not out:
+        return {"skip": True}
+
+    return {
+        "zenodo_metadata": out,
+        "template": dataset_template,
+    }
+
+
 def _safe_list_article_files(article_uuid: str, max_files: int = 50) -> List[Dict[str, Any]]:
     """
     List local files under articles/<article_uuid>/.
@@ -836,6 +1180,23 @@ def _safe_list_article_files(article_uuid: str, max_files: int = 50) -> List[Dic
         if len(out) >= max_files:
             break
     return out
+
+def fetch_doi_citation(doi: str, style: str = "apa", lang: str = "en-US") -> str:
+    """
+    Fetch formatted citation text from citation.doi.org.
+
+    Example DOI: "10.5281/zenodo.18562168"
+    It will be encoded as: "10.5281%2Fzenodo.18562168"
+    """
+
+    doi_encoded = quote(doi, safe="")  # converts "/" -> "%2F"
+
+    url = f"https://citation.doi.org/format?doi={doi_encoded}&style={style}&lang={lang}"
+
+    resp = requests.get(url, timeout=30)
+    resp.raise_for_status()
+
+    return resp.text.strip()
 
 
 def _extract_text_snippets_from_article_files(
@@ -908,15 +1269,6 @@ def _filter_metadata_to_template(metadata: Dict[str, Any], template: Dict[str, A
     allowed = set(template.keys())
     return {k: v for k, v in (metadata or {}).items() if k in allowed}
 
-def _allowed_file(filename: str) -> bool:
-    if not filename:
-        return False
-    if ALLOWED_EXTENSIONS is None:
-        return True
-    ext = filename.rsplit(".", 1)[-1].lower() if "." in filename else ""
-    return ext in ALLOWED_EXTENSIONS
-
-
 def get_zenodo_metadata_payload_for_article(
     *,
     article_uuid: str,
@@ -986,7 +1338,6 @@ def _list_local_article_files(article_uuid: str) -> List[str]:
 
     return collected
 
-
 def _safe_extract_zip(zip_path: str, dest_dir: str) -> List[str]:
     """
     Extract zip into dest_dir safely (prevents Zip Slip).
@@ -1020,7 +1371,6 @@ def _safe_extract_zip(zip_path: str, dest_dir: str) -> List[str]:
             extracted_paths.append(target_path)
 
     return extracted_paths
-
 
 def _save_uploaded_files_to_article_folder(article_uuid: str, incoming_files: List[FileStorage]) -> List[str]:
     """
@@ -1060,8 +1410,6 @@ def _save_uploaded_files_to_article_folder(article_uuid: str, incoming_files: Li
                 pass
 
     return saved_paths
-
-
 
 def _paths_to_filestorage(paths: List[str]) -> List[FileStorage]:
     """

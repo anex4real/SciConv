@@ -4,6 +4,7 @@ import {ZenodoMetadataView} from "../dataset-analysis/dataset-analysis.types";
 
 export enum ReproStages {
     ProjectLocation = 'ProjectLocation',
+    InferDatasetMetadata = 'InferDatasetMetadata',
     ExternalizeData = 'ExternalizeData',
     FindProjectFiles = 'FindProjectFiles',
     ParametersToUse = 'ParametersToUse',
@@ -15,6 +16,7 @@ export enum ReproStages {
     RunContainer = 'RunContainer',
     ResearchArtifact = 'ResearchArtifact',
     WaitChatInteraction = 'WaitChatInteraction',
+    InferArtifactMetadata = 'InferArtifactMetadata',
     Completed = 'Completed'
 }
 
@@ -44,6 +46,13 @@ export interface ReproState {
     // Artifact upload to Zenodo
     artifactZenodoDoi?: string;
     artifactIsUploading: boolean;
+    // Dataset metadata inference
+    datasetMetadataDraft?: any;
+    datasetMetadataTemplate?: any;
+    datasetMetadataReady: boolean;
+    // Artifact metadata inference
+    artifactMetadataDraft?: { title: string; description: string; creator_name: string };
+    artifactMetadataReady: boolean;
 }
 
 export interface ReproFromDoiState {

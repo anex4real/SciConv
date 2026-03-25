@@ -534,13 +534,54 @@
 
 
 
-        <!-- Chat input (when not in App Start or ReproFromDoi, and not at Completed stage) -->
+        <!-- Dataset metadata editor (InferDatasetMetadata stage in Repro flow) -->
+        <div *ngIf="appStage === appStages.Repro && !isDataState(s)
+                    && s.stage === reproStages.InferDatasetMetadata && s.datasetMetadataReady"
+             class="chat-input">
+            <app-zenodo-metadata-editor
+                [template]="s.datasetMetadataTemplate"
+                [draft]="s.datasetMetadataDraft"
+                [saveLabel]="'Confirm & Upload Dataset to Zenodo'"
+                (save)="onConfirmDatasetMetadata($event)"
+                (cancel)="workflow.skipDatasetMetadata()"
+            ></app-zenodo-metadata-editor>
+        </div>
+
+        <!-- Artifact metadata editor (InferArtifactMetadata stage) -->
+        <div *ngIf="appStage === appStages.Repro && !isDataState(s)
+                    && s.stage === reproStages.InferArtifactMetadata && s.artifactMetadataReady"
+             class="chat-input" style="flex-direction: column; gap: 10px; width: 100%;">
+            <h3 style="margin: 0;">Review Artifact Metadata</h3>
+            <p style="margin: 0; font-size: 13px; color: #555;">
+                GPT has inferred the following metadata for your artifact on Zenodo. Please review and edit before uploading.
+            </p>
+            <label>Title</label>
+            <input type="text" [(ngModel)]="s.artifactMetadataDraft!.title" style="width:100%;"/>
+            <label>Description</label>
+            <textarea [(ngModel)]="s.artifactMetadataDraft!.description" rows="5" style="width:100%;"></textarea>
+            <label>Author name</label>
+            <input type="text" [(ngModel)]="s.artifactMetadataDraft!.creator_name" placeholder="Last, First" style="width:100%;"/>
+            <div style="display:flex; gap: 8px;">
+                <button type="button"
+                        [disabled]="!s.artifactMetadataDraft!.title.trim() || !s.artifactMetadataDraft!.description.trim()"
+                        (click)="onConfirmArtifactMetadata(s.artifactMetadataDraft!)">
+                    Confirm & Upload Artifact to Zenodo
+                </button>
+                <button type="button" (click)="workflow.skipArtifactMetadata()">
+                    Skip
+                </button>
+            </div>
+        </div>
+
+        <!-- Chat input (when not in App Start or ReproFromDoi, and not at Completed or InferDatasetMetadata or InferArtifactMetadata stage) -->
         <div
                 class="chat-input"
                 *ngIf="appStage != appStages.Start
       && appStage != appStages.ReproFromDoi
       && (!isDataState(s) || s.stage !== dataStages.EditZenodoMetadata)
-      && (isDataState(s) || s.stage !== reproStages.Completed)"
+      && (isDataState(s) || s.stage !== reproStages.Completed)
+      && (isDataState(s) || s.stage !== reproStages.InferDatasetMetadata)
+      && (isDataState(s) || s.stage !== reproStages.InferArtifactMetadata)"
         >
 
             <input [(ngModel)]="userMessage" placeholder="Type your message here..." (keydown.enter)="sendMessage()"/>
@@ -569,7 +610,7 @@
                         (click)="workflow.uploadArtifact()">
                     <span *ngIf="!s.artifactIsUploading && !s.artifactZenodoDoi">Upload Artifact to Zenodo</span>
                     <span *ngIf="s.artifactIsUploading">
-                        <i class="fa fa-spinner fa-spin"></i> Uploading...
+                        <i class="fa fa-spinner fa-spin"></i> Inferring metadata...
                     </span>
                     <span *ngIf="s.artifactZenodoDoi">Uploaded</span>
                 </button>

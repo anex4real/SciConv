@@ -129,7 +129,15 @@ export class HomeComponent {
 
     onSaveZenodoMetadata(cleaned: any) {
         const zenodoToken = undefined;
-        this.analysis.saveOrCreateZenodo(cleaned, zenodoToken);   // ✅
+        this.analysis.saveOrCreateZenodo(cleaned, zenodoToken);
+    }
+
+    onConfirmDatasetMetadata(metadata: any) {
+        this.workflow.confirmDatasetMetadata(metadata);
+    }
+
+    onConfirmArtifactMetadata(draft: { title: string; description: string; creator_name: string }) {
+        this.workflow.confirmArtifactMetadata(draft);
     }
 
 

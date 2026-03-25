@@ -954,6 +954,41 @@ def _build_zenodo_metadata(project_uuid, creator_name=None, description=None,
     return md
 
 
+@project_bp.route("/project/<projectUuid>/infer-dataset-metadata", methods=['POST'])
+@cross_origin()
+@require_auth
+def infer_dataset_metadata(projectUuid):
+    """
+    Sample data files from projects/<uuid>/data/ and ask GPT to infer
+    Zenodo metadata. Returns {"zenodo_metadata": [...], "template": {...}}
+    or {"skip": true} for strategies that don't upload to Zenodo.
+    """
+    from helpers.article.articleHelper import infer_dataset_metadata_from_data
+
+    project_location = os.path.join(cfg.PROJECTS_LOCATION, projectUuid)
+    info_path = os.path.join(project_location, "project_info.json")
+
+    if not os.path.isfile(info_path):
+        return jsonify({"skip": True}), 200
+
+    with open(info_path, "r", encoding="utf-8") as f:
+        project_info = json.load(f)
+
+    strategy = project_info.get("data_strategy", "no_data")
+    if strategy not in ("externalize", "externalize_files", "chunk_and_externalize"):
+        return jsonify({"skip": True}), 200
+
+    data_dir = os.path.join(project_location, "data")
+    files_dir = os.path.join(project_location, "files")
+    try:
+        result = infer_dataset_metadata_from_data(data_dir, projectUuid, files_dir=files_dir)
+    except Exception as e:
+        print(f"[infer_dataset_metadata] Error: {e}")
+        result = {"skip": True}
+
+    return jsonify(result), 200
+
+
 @project_bp.route("/project/<projectUuid>/externalize-data", methods=['POST'])
 @cross_origin()
 @require_auth
@@ -1010,9 +1045,13 @@ def externalize_data(projectUuid):
                       stage="Start")
         return makeResponse(messagesToUser, 400, True)
 
-    # Read optional metadata from form
-    creator_name = (request.form.get("creator_name") or "").strip() or None
-    description = (request.form.get("description") or "").strip() or None
+    # Accept full metadata override from JSON body (sent by frontend after inference)
+    req_data = request.get_json(silent=True) or {}
+    metadata_override = req_data.get("metadata") if req_data else None
+
+    # Also support legacy form fields
+    creator_name = (request.form.get("creator_name") or req_data.get("creator_name") or "").strip() or None
+    description = (request.form.get("description") or req_data.get("description") or "").strip() or None
 
     try:
         # ---- Branch A: externalize_files — upload individually, no tar ----
@@ -1025,9 +1064,10 @@ def externalize_data(projectUuid):
                     rel_name = os.path.relpath(abs_path, data_dir).replace("\\", "/")
                     file_paths.append({"path": abs_path, "zenodo_name": rel_name})
 
-            metadata_json = _build_zenodo_metadata(
-                projectUuid, creator_name, description
-            )
+            if metadata_override:
+                metadata_json = {"metadata": metadata_override}
+            else:
+                metadata_json = _build_zenodo_metadata(projectUuid, creator_name, description)
             dep = _create_zenodo_deposition_multi_file(file_paths, metadata_json)
 
             # Build file list from published deposition response
@@ -1067,15 +1107,16 @@ def externalize_data(projectUuid):
         # ---- Branch B: externalize / chunk_and_externalize — tar + upload ----
         # ---- 1) Tar and chunk ----
         work_dir = os.path.join(projectLocation, "_upload_work")
-        prep = prepare_dataset_for_upload(data_dir, work_dir)
+        prep = prepare_dataset_for_upload(data_dir, work_dir, zenodo_limit=ZENODO_RECORD_LIMIT_BYTES)
 
         depositions = []
 
         if not prep["chunked"]:
             # ---- 2a) Single tar upload ----
-            metadata_json = _build_zenodo_metadata(
-                projectUuid, creator_name, description
-            )
+            if metadata_override:
+                metadata_json = {"metadata": metadata_override}
+            else:
+                metadata_json = _build_zenodo_metadata(projectUuid, creator_name, description)
             tar_info = prep["files_to_upload"][0]
             dep = _create_zenodo_deposition_from_path(
                 tar_info["path"], tar_info["filename"], metadata_json
@@ -1092,10 +1133,15 @@ def externalize_data(projectUuid):
             # ---- 2b) Chunked upload — one deposition per chunk ----
             for i, chunk in enumerate(prep["chunks"], 1):
                 label = f"chunk {i} of {len(prep['chunks'])}"
-                metadata_json = _build_zenodo_metadata(
-                    projectUuid, creator_name, description,
-                    chunk_label=label
-                )
+                if metadata_override:
+                    import copy as _copy
+                    _m = _copy.deepcopy(metadata_override)
+                    _m["title"] = str(_m.get("title", projectUuid)) + f" ({label})"
+                    metadata_json = {"metadata": _m}
+                else:
+                    metadata_json = _build_zenodo_metadata(
+                        projectUuid, creator_name, description, chunk_label=label
+                    )
                 dep = _create_zenodo_deposition_from_path(
                     chunk["path"], chunk["filename"], metadata_json
                 )
@@ -2198,6 +2244,109 @@ def researchArtifactChat(projectUuid):
     return makeResponse(messagesToUser)
 
 
+@project_bp.route('/project/<projectUuid>/infer-artifact-metadata', methods=['GET'])
+@cross_origin()
+@require_auth
+def infer_artifact_metadata(projectUuid):
+    """Infer a title and description for the artifact using GPT, without uploading."""
+    from helpers.article.articleHelper import _sample_code_files
+
+    _project_location = os.path.join(cfg.PROJECTS_LOCATION, projectUuid)
+    _proj_info_path = os.path.join(_project_location, "project_info.json")
+    _info = {}
+    if os.path.isfile(_proj_info_path):
+        try:
+            with open(_proj_info_path, "r", encoding="utf-8") as _pf:
+                _info = json.load(_pf)
+        except Exception:
+            pass
+
+    _inferred_title = f"Research artifact: {projectUuid}"
+    _inferred_description = (
+        f"Reproducible research artifact for experiment {projectUuid}. "
+        "Contains the Docker environment, run scripts, and reproducibility manifest."
+    )
+
+    try:
+        _files_dir = os.path.join(_project_location, "files")
+        _code_context = _sample_code_files(_files_dir) if os.path.isdir(_files_dir) else {}
+
+        _output_dir = os.path.join(_project_location, "output")
+        _output_files = []
+        if os.path.isdir(_output_dir):
+            for _root, _dirs, _fnames in os.walk(_output_dir):
+                for _fn in _fnames:
+                    _output_files.append(
+                        os.path.relpath(os.path.join(_root, _fn), _output_dir).replace("\\", "/")
+                    )
+
+        _run_command = _info.get("run_command", "")
+        _dataset_description = _info.get("dataset_zenodo_description", "")
+
+        # Detect which run scripts are present in the artifact
+        _win_scripts = sorted([
+            f for f in os.listdir(_project_location)
+            if f.startswith("runExperiment") and f.endswith(".bat")
+        ])
+        _linux_scripts = sorted([
+            f for f in os.listdir(_project_location)
+            if f.startswith("runExperiment") and f.endswith(".sh")
+        ])
+
+        _gpt_payload = {
+            "project_uuid": projectUuid,
+            "run_command": _run_command,
+            "code_context": _code_context,
+            "output_files": _output_files[:20],
+            "dataset_description": _dataset_description,
+        }
+        _system = (
+            "You are a research data curator writing Zenodo metadata for a reproducibility artifact.\n"
+            "Given context about an experiment (code files, run command, outputs, dataset description), "
+            "generate:\n"
+            "1. A concise, descriptive title (max 15 words) — describe what the experiment does, "
+            "not just that it is a 'research artifact'\n"
+            "2. A clear description (2-4 sentences) explaining: what the experiment does, "
+            "what data it uses, and what outputs it produces. "
+            "Do NOT include run instructions — those will be appended separately.\n"
+            "Return ONLY valid JSON: {\"title\": \"...\", \"description\": \"...\"}\n"
+            "Do not include the project UUID in the title."
+        )
+        _raw = callGPTModel([
+            {"role": "system", "content": _system},
+            {"role": "user", "content": json.dumps(_gpt_payload, ensure_ascii=False)},
+        ])
+        _raw = _raw.strip().lstrip("```json").lstrip("```").rstrip("```").strip()
+        _parsed = json.loads(_raw)
+        if isinstance(_parsed.get("title"), str) and _parsed["title"].strip():
+            _inferred_title = _parsed["title"].strip()
+        if isinstance(_parsed.get("description"), str) and _parsed["description"].strip():
+            _inferred_description = _parsed["description"].strip()
+
+        # Append run instructions
+        _run_section = "\n\n## How to Reproduce\n"
+        _run_section += "Requirements: Docker must be installed and running.\n\n"
+        if _win_scripts:
+            _run_section += "**Windows:**\n"
+            for _s in _win_scripts:
+                _run_section += f"  {_s}\n"
+        if _linux_scripts:
+            _run_section += "**Linux / macOS:**\n"
+            for _s in _linux_scripts:
+                _run_section += f"  bash {_s}\n"
+        if not _win_scripts and not _linux_scripts:
+            _run_section += "Run the included `runExperiment.bat` (Windows) or `runExperiment.sh` (Linux/macOS).\n"
+        _inferred_description += _run_section
+
+    except Exception as _e:
+        print(f"[infer_artifact_metadata] GPT inference failed: {_e}")
+
+    return jsonify({
+        "title": _inferred_title,
+        "description": _inferred_description,
+    })
+
+
 @project_bp.route('/project/<projectUuid>/upload-artifact-to-zenodo', methods=['POST'])
 @cross_origin()
 @require_auth
@@ -2213,8 +2362,13 @@ def upload_artifact_to_zenodo(projectUuid):
                       stage="Completed")
         return makeResponse(messagesToUser)
 
+    # Accept user-reviewed title/description/creator from the frontend editor
     creator_name = requestData.get("creator_name")
-    description = requestData.get("description")
+    title = requestData.get("title") or f"Research artifact: {projectUuid}"
+    description = requestData.get("description") or (
+        f"Reproducible research artifact for experiment {projectUuid}. "
+        "Contains the Docker environment, run scripts, and reproducibility manifest."
+    )
 
     # Read project_info to find any dataset DOI for linking
     _proj_info_path = os.path.join(cfg.PROJECTS_LOCATION, projectUuid, "project_info.json")
@@ -2224,7 +2378,6 @@ def upload_artifact_to_zenodo(projectUuid):
         try:
             with open(_proj_info_path, "r", encoding="utf-8") as _pf:
                 _info = json.load(_pf)
-            # externalize_files sets zenodo_doi; externalize sets zenodo_depositions[0].doi
             _dataset_doi = (
                 _info.get("zenodo_doi")
                 or (_info.get("zenodo_depositions") or [{}])[0].get("doi")
@@ -2234,12 +2387,9 @@ def upload_artifact_to_zenodo(projectUuid):
             pass
 
     metadata = {
-        "title": f"Research artifact: {projectUuid}",
+        "title": title,
         "upload_type": "software",
-        "description": description or (
-            f"Reproducible research artifact for experiment {projectUuid}. "
-            "Contains the Docker environment, run scripts, and reproducibility manifest."
-        ),
+        "description": description,
         "creators": [{"name": creator_name or "Unknown"}],
     }
     if _dataset_doi:
