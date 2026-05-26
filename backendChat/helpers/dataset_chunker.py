@@ -20,7 +20,7 @@ import tarfile
 from typing import List, Dict, Any
 
 # Default chunk size: 5 GB (test — production: 40 GB)
-DEFAULT_CHUNK_SIZE_BYTES = 40 * 1024 * 1024 * 1024  # 40 GB
+DEFAULT_CHUNK_SIZE_BYTES = int(1 * 1024 * 1024)  # 1 MB (temp test)
 
 # Read buffer for hashing and splitting (8 MB)
 _BUF_SIZE = 8 * 1024 * 1024

@@ -1011,10 +1011,8 @@ def infer_dataset_metadata_from_data(
         if not isinstance(md.get("title"), str) or not md["title"].strip() or _is_placeholder(md["title"]):
             md["title"] = _make_tobe("title")
 
-        # Use today's date as default (template says "default": "today")
-        pd = md.get("publication_date")
-        if not isinstance(pd, str) or not pd.strip() or _is_placeholder(pd):
-            md["publication_date"] = datetime.date.today().isoformat()
+        # Always use today's date — GPT hallucinates historical dates from training data
+        md["publication_date"] = datetime.date.today().isoformat()
 
         if not isinstance(md.get("description"), str) or not md["description"].strip() or _is_placeholder(md.get("description", "")):
             md["description"] = _make_tobe("description")
@@ -1079,8 +1077,10 @@ def infer_dataset_metadata_from_data(
         "- Do NOT invent DOIs, ORCIDs, URLs, grant IDs, or licenses.\n"
         "- If unsure about a field, set it to the literal string \"<TOBeFilledByUser>\".\n"
         "- access_right: use \"restricted\" unless data samples or README clearly indicate open sharing.\n"
-        "- Infer title and description from file names, data content, README, and script imports.\n"
-        "- Use code imports to identify the scientific domain (e.g. Bio → bioinformatics, netCDF4 → climate).\n"
+        "- Infer title and description from file names, data content, and README.\n"
+        "- Use code imports and script names ONLY to understand the scientific domain and what the data represents — do NOT mention them in the description.\n"
+        "- The description must read as if written by the dataset author: describe what the data contains, its format, value ranges, measurement type, and scientific domain.\n"
+        "- Do NOT reference any code files, script names, or how to run anything in the title or description.\n"
         "- Return exactly 1 metadata object.\n"
     )
 

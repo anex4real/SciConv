@@ -10,7 +10,7 @@ import { DataStages, DataState,  } from '../../service/dataset-analysis/dataset-
 
 
 enum AppStage {
-    Start = 'Start',
+    Welcome = 'Welcome',
     Repro = 'Repro',
     Dataset = 'Dataset',
     ReproFromDoi = 'ReproFromDoi'
@@ -38,14 +38,15 @@ export class HomeComponent {
 
     // App stage (UI-level)
     appStages = AppStage;
-    appStage: AppStage = AppStage.Start;
+    appStage: AppStage = AppStage.Welcome;
+    selectedMode: 'repro' | 'dataset' | 'doi' | null = null;
     zenodoDraftText: string = '';
     metadataJsonError: string = '';
 
 
     // Uploads (separados)
     fileToUploadRepro: File | null = null;
-    private fileToUploadPdf: File | null = null;
+    fileToUploadPdf: File | null = null;
 
     // Data Extension Layer
     useDataLayer = false;
@@ -65,6 +66,9 @@ export class HomeComponent {
     // Input do chat
     userMessage: string = '';
 
+    // Repro onboarding overview (shown after "Package an experiment" before upload)
+    showReproIntro: boolean = false;
+
     // Reproduce from Artifact DOI
     artifactDoiInput: string = '';
     reproFromDoiState: ReproFromDoiState = { phase: 'idle' };
@@ -76,10 +80,13 @@ export class HomeComponent {
     constructor(
         public workflow: ReproWorkflowService,
         public analysis: DatasetAnalysisService,
-        private backend: BackendService
+        public backend: BackendService
     ) {
         // default (Start screen only needs isLoading/error/messages, so any state works)
         this.state$ = this.workflow.state$;
+
+        // When GPT triggers a reset action, return to the Welcome screen
+        this.workflow.resetRequested$.subscribe(() => this.goToAppStart(true));
     }
 
     isDataState(s: ReproState | DataState): s is DataState {
@@ -108,7 +115,7 @@ export class HomeComponent {
     sendMessage() {
         // If Dataset + an action form is active, submit it and stop.
         if (this.appStage === AppStage.Dataset) {
-            const didSubmit = this.analysis.submitActionForm?.(); // return boolean
+            const didSubmit = this.analysis.submitActionForm?.();
             if (didSubmit) {
                 this.userMessage = '';
                 return;
@@ -119,7 +126,7 @@ export class HomeComponent {
         if (!text) return;
 
         if (this.appStage === AppStage.Repro) {
-            this.workflow.sendUserMessage(text);
+            this.workflow.sendUniversalMessage(text);
         } else if (this.appStage === AppStage.Dataset) {
             this.analysis.sendUserMessage(text);
         }
@@ -153,25 +160,54 @@ export class HomeComponent {
         this.fileToUploadData = file ?? null;
     }
 
+    onSelectMode(mode: 'repro' | 'dataset' | 'doi' | null) {
+        this.selectedMode = mode;
+        this.showReproIntro = mode === 'repro';
+        this.fileToUploadRepro = null;
+        this.fileToUploadPdf = null;
+        this.artifactDoiInput = '';
+    }
+
+    get modeUserMessage(): string {
+        switch (this.selectedMode) {
+            case 'repro': return 'I want to package an experiment.';
+            case 'dataset': return 'I want to analyse a paper\'s datasets.';
+            case 'doi': return 'I want to reproduce an experiment from a DOI.';
+            default: return '';
+        }
+    }
+
+    get modePromptMessage(): string {
+        switch (this.selectedMode) {
+            case 'repro': return (
+                'Please upload one of the following:\n\n' +
+                '• A single code file (.py, .r, .m, .jl, .cpp, etc.)\n' +
+                '• A .zip containing your project folder (code only)\n' +
+                '• A .zip containing both your code and data together\n\n' +
+                'If your data is stored externally, don\'t worry — I\'ll ask you for a Zenodo DOI or let you upload a separate data file after I analyse your code.'
+            );
+            case 'dataset': return 'Please upload the scientific article in PDF format. I\'ll identify all datasets used, check their FAIR compliance, and help you publish any that are missing a proper reference.';
+            case 'doi': return 'Please provide the Zenodo DOI or URL of the published research artifact you want to reproduce (e.g. 10.5281/zenodo.1234567). I\'ll download it, set up the environment, and run the experiment automatically.';
+            default: return '';
+        }
+    }
+
     onSubmitRepro() {
         if (!this.fileToUploadRepro) return;
 
         const formData = new FormData();
         formData.append('file', this.fileToUploadRepro);
 
-        if (this.useDataLayer) {
-            formData.append('use_data_layer', 'true');
-            if (this.dataMode === 'file' && this.fileToUploadData) {
-                formData.append('data_file', this.fileToUploadData);
-            } else if (this.dataMode === 'doi' && this.datasetDoi.trim()) {
-                formData.append('dataset_doi', this.datasetDoi.trim());
-            }
-        }
-
         this.appStage = AppStage.Repro;
         this.state$ = this.workflow.state$;
 
         this.workflow.uploadProject(formData);
+    }
+
+    onProvideDataFile(event: any) {
+        const file: File | null = event?.target?.files?.[0] ?? null;
+        if (!file) return;
+        this.workflow.provideDataFile(file);
     }
 
     /** Upload (PDF Dataset Analysis) */
@@ -232,6 +268,10 @@ export class HomeComponent {
     getOutputFileUrl(filename: string): string {
         const uuid = this.reproFromDoiState.newProjectUuid ?? '';
         return this.backend.getOutputFileUrl(uuid, filename);
+    }
+
+    getReproOutputFileUrl(filename: string, s: any): string {
+        return this.backend.getOutputFileUrl(s.projectUuid, filename);
     }
 
     onReproduceFromDoi() {
@@ -297,14 +337,41 @@ export class HomeComponent {
     }
 
     goToAppStart(resetWorkflows: boolean = false) {
-        this.appStage = this.appStages.Start;
+        this.appStage = this.appStages.Welcome;
+        this.selectedMode = null;
         this.userMessage = '';
-        this.state$ = this.workflow.state$; // pick one so template stays stable
+        this.fileToUploadRepro = null;
+        this.fileToUploadPdf = null;
+        this.artifactDoiInput = '';
+        this.state$ = this.workflow.state$;
 
         if (resetWorkflows) {
             this.workflow.reset();
             this.analysis.reset?.();
         }
+    }
+
+    readonly reproStepLabels = [
+        { label: 'Upload',      desc: 'Upload your experiment code' },
+        { label: 'Dataset',     desc: 'Provide your dataset or skip' },
+        { label: 'Run Command', desc: 'Specify how to run your experiment' },
+        { label: 'Outputs',     desc: 'Specify files your experiment produces' },
+        { label: 'Environment', desc: 'Detect and confirm dependencies' },
+        { label: 'Build & Run', desc: 'Build Docker image and run experiment' },
+        { label: 'Review',      desc: 'Confirm the results look correct' },
+        { label: 'Package',     desc: 'Download or publish to Zenodo' },
+    ];
+
+    currentReproStep(stage: ReproStages): number {
+        if ([ReproStages.ProjectLocation].includes(stage)) return 0;
+        if ([ReproStages.WaitForDataInput, ReproStages.InferDatasetMetadata, ReproStages.ExternalizeData].includes(stage)) return 1;
+        if ([ReproStages.FindProjectFiles, ReproStages.ParametersToUse].includes(stage)) return 2;
+        if ([ReproStages.SpecifyOutputs].includes(stage)) return 3;
+        if ([ReproStages.FindConfigurations, ReproStages.FindConfigurationsInteraction].includes(stage)) return 4;
+        if ([ReproStages.BuildDockerFile, ReproStages.BuildDockerImage, ReproStages.RunContainer, ReproStages.RunFailed].includes(stage)) return 5;
+        if ([ReproStages.WaitChatInteraction].includes(stage)) return 6;
+        if ([ReproStages.ResearchArtifact, ReproStages.InferArtifactMetadata, ReproStages.Completed].includes(stage)) return 7;
+        return 0;
     }
 
     fairLabel(k: string): string {

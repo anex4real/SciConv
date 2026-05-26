@@ -25,8 +25,8 @@ project_bp = Blueprint("project", __name__)
 # ---------------------------------------------------------------------------
 # Data Extension Layer: constants
 # ---------------------------------------------------------------------------
-EMBED_THRESHOLD_BYTES = 5 * 1024 * 1024 * 1024   # 5 GB
-ZENODO_RECORD_LIMIT_BYTES = 50 * 1024 * 1024 * 1024  # 50 GB
+EMBED_THRESHOLD_BYTES = int(500 * 1024)          # 500 KB (temp test)
+ZENODO_RECORD_LIMIT_BYTES = int(1 * 1024 * 1024) # 1 MB (temp test)
 
 
 def _get_folder_size(path):
@@ -38,6 +38,408 @@ def _get_folder_size(path):
             if os.path.isfile(fp):
                 total += os.path.getsize(fp)
     return total
+
+
+def _detect_data_folder_with_gpt(files_location):
+    """
+    Scan immediate subfolders of files_location and ask GPT which one
+    contains the dataset (not code). Returns the full path to the data
+    folder, or None if no data folder is found.
+    """
+    subdirs = [e for e in os.scandir(files_location) if e.is_dir()]
+    if not subdirs:
+        return None
+
+    # Build a compact summary of each subfolder
+    lines = []
+    for entry in subdirs:
+        size_bytes = _get_folder_size(entry.path)
+        size_str = (f"{round(size_bytes / (1024**3), 2)} GB"
+                    if size_bytes >= 1024**3
+                    else f"{round(size_bytes / (1024**2), 1)} MB"
+                    if size_bytes >= 1024**2
+                    else f"{round(size_bytes / 1024, 1)} KB")
+
+        # Collect unique extensions (up to 10 samples)
+        exts = set()
+        samples = []
+        for root, _dirs, files in os.walk(entry.path):
+            for fname in files:
+                ext = os.path.splitext(fname)[1].lower()
+                if ext:
+                    exts.add(ext)
+                if len(samples) < 6:
+                    samples.append(fname)
+
+        lines.append(
+            f"- {entry.name}/ ({size_str}) — "
+            f"extensions: {', '.join(sorted(exts)) or 'none'} — "
+            f"sample files: {', '.join(samples)}"
+        )
+
+    folder_summary = "\n".join(lines)
+
+    prompt = [
+        {
+            "role": "user",
+            "content": (
+                "A researcher uploaded a zip file containing a computational experiment. "
+                "The zip has been extracted and the immediate subfolders are:\n\n"
+                f"{folder_summary}\n\n"
+                "Which folder contains the DATASET (raw data files, not source code)? "
+                "Reply with the folder name only (e.g. 'demo_data'). "
+                "If there is no data folder, reply with 'none'."
+            )
+        }
+    ]
+
+    try:
+        result = callGPTModel(prompt).strip().strip("'\"").rstrip("/")
+        print(f"  [GPT data detection] answer: {result!r}")
+
+        if result.lower() == "none":
+            return None
+
+        candidate = os.path.join(files_location, result)
+        if os.path.isdir(candidate):
+            return candidate
+
+        # GPT may have returned a slightly different name — case-insensitive match
+        for entry in subdirs:
+            if entry.name.lower() == result.lower():
+                return entry.path
+
+    except Exception as e:
+        print(f"  [GPT data detection] failed: {e}")
+
+    return None
+
+
+# ---------------------------------------------------------------------------
+# GPT helper: classify free-text data input intent (#1)
+# ---------------------------------------------------------------------------
+
+def _classify_data_input_with_gpt(text):
+    """
+    Classify the user's free-text reply to "Does your experiment use a dataset?".
+    Returns {"intent": "no_data"|"doi"|"unclear", "doi": str|None}
+    """
+    prompt = [{
+        "role": "user",
+        "content": (
+            f"A researcher was asked: 'Does your experiment use a dataset?'\n"
+            f"They replied: \"{text}\"\n\n"
+            "Classify their intent. Reply with exactly one of:\n"
+            "  no_data           — they have no dataset\n"
+            "  doi:<the_doi>     — they provided a Zenodo DOI/URL (extract just the DOI)\n"
+            "  unclear           — intent cannot be determined\n\n"
+            "Examples:\n"
+            "  'no thanks' → no_data\n"
+            "  'I don't have any data' → no_data\n"
+            "  'https://zenodo.org/record/1234567' → doi:10.5281/zenodo.1234567\n"
+            "  'the dataset is at 10.5281/zenodo.9999' → doi:10.5281/zenodo.9999\n"
+            "  'maybe' → unclear"
+        )
+    }]
+    try:
+        result = callGPTModel(prompt).strip()
+        if result.lower() == "no_data":
+            return {"intent": "no_data", "doi": None}
+        if result.lower().startswith("doi:"):
+            return {"intent": "doi", "doi": result[4:].strip()}
+        return {"intent": "unclear", "doi": None}
+    except Exception as e:
+        print(f"  [GPT data intent] failed: {e}")
+        return {"intent": "unclear", "doi": None}
+
+
+# ---------------------------------------------------------------------------
+# GPT helper: detect data folder name referenced in code (#2)
+# ---------------------------------------------------------------------------
+
+_CODE_EXTENSIONS = {'.py', '.r', '.rmd', '.jl', '.ipynb', '.m', '.sh'}
+
+def _detect_data_folder_alias(files_location):
+    """
+    Scan code files and ask GPT what folder name the code uses to load data.
+    Returns a plain folder name string (e.g. 'mydata') or None if already
+    'data', cannot be determined, or no data folder is referenced.
+    """
+    snippets = []
+    for root, _, filenames in os.walk(files_location):
+        for fname in filenames:
+            if os.path.splitext(fname)[1].lower() in _CODE_EXTENSIONS:
+                fpath = os.path.join(root, fname)
+                try:
+                    with open(fpath, 'r', encoding='utf-8', errors='replace') as f:
+                        content = f.read(4000)
+                    rel = os.path.relpath(fpath, files_location)
+                    snippets.append(f"# {rel}\n{content}")
+                except Exception:
+                    pass
+        if len(snippets) >= 5:
+            break
+
+    if not snippets:
+        return None
+
+    prompt = [{
+        "role": "user",
+        "content": (
+            "Look at the following code files and identify the relative folder path used "
+            "to read or load data files (e.g. pd.read_csv, open, read.csv, load, etc.).\n"
+            "Return ONLY the folder name — no explanation, no quotes.\n"
+            "Examples: 'mydata/file.csv' → mydata | 'raw/data.csv' → raw | './data/x.csv' → data\n"
+            "If no data folder is referenced, or it is already named 'data', return: none\n\n"
+            + "\n\n".join(snippets)
+        )
+    }]
+    try:
+        result = callGPTModel(prompt).strip().strip("'\"./").lower()
+        if result in ("none", "", "n/a", "no", "data"):
+            return None
+        # Sanitize: only plain folder name characters allowed
+        if not re.match(r'^[\w.\-]+$', result):
+            return None
+        return result
+    except Exception as e:
+        print(f"  [GPT data alias] failed: {e}")
+        return None
+
+
+# ---------------------------------------------------------------------------
+# GPT helper: scan code files for output folder (#3)
+# ---------------------------------------------------------------------------
+
+_OUTPUT_EXTENSIONS = {
+    # Tabular / data
+    '.csv', '.tsv', '.xlsx', '.xls', '.ods', '.parquet', '.feather', '.arrow',
+    '.dta', '.sav', '.por',
+    # Serialized arrays / matrices
+    '.npy', '.npz', '.mat', '.h5', '.hdf5', '.nc', '.zarr',
+    # ML models
+    '.pt', '.pth', '.onnx', '.pb', '.tflite', '.pkl', '.pickle', '.joblib',
+    # Documents / reports
+    '.pdf', '.html', '.htm', '.txt', '.log', '.md', '.tex',
+    # Images / figures
+    '.png', '.jpg', '.jpeg', '.svg', '.eps', '.tif', '.tiff', '.gif',
+    '.fig', '.ps',
+    # Structured / config
+    '.json', '.yaml', '.yml', '.xml', '.toml',
+    # R formats
+    '.rds', '.rda', '.rdata',
+    # Bioinformatics
+    '.bam', '.sam', '.vcf', '.bcf', '.fastq', '.fasta', '.fa', '.fq',
+    '.bed', '.gff', '.gtf',
+    # GIS / spatial
+    '.shp', '.geojson', '.kml', '.gpkg',
+    # Generic binary / compressed
+    '.out', '.dat', '.bin', '.db', '.sqlite', '.gz', '.zip',
+    # Video / audio (simulation outputs)
+    '.mp4', '.avi', '.mov', '.wav',
+}
+
+
+def _scan_write_lines(files_location):
+    """
+    Walk all files under files_location.
+    Return lines that contain a quoted string with a known output extension
+    OR that look like file-write operations using variables.
+    Both reads AND writes are included — GPT will distinguish them.
+    """
+    quoted = re.compile(r'["\']([^"\']{1,200}\.[a-zA-Z0-9]{1,6})["\']')
+    # Also catch lines with path-like strings even without extensions (e.g. output dirs)
+    path_like = re.compile(r'["\']([^"\']{1,100}/[^"\']{1,100})["\']')
+    results = []
+
+    for root, _dirs, filenames in os.walk(files_location):
+        for fname in filenames:
+            if fname.startswith('.'):
+                continue
+            fpath = os.path.join(root, fname)
+            rel = os.path.relpath(fpath, files_location).replace("\\", "/")
+            try:
+                with open(fpath, 'r', encoding='utf-8', errors='ignore') as fh:
+                    for line_no, line in enumerate(fh, 1):
+                        added = False
+                        # Primary: quoted string with known output extension
+                        for match in quoted.findall(line):
+                            ext = os.path.splitext(match)[1].lower()
+                            if ext in _OUTPUT_EXTENSIONS:
+                                results.append(f"{rel}:{line_no} → {line.strip()}")
+                                added = True
+                                break
+                        if not added:
+                            low = line.lower()
+                            # Capture os.path.join lines — gives GPT context to reconstruct full paths
+                            if 'os.path.join(' in low or 'path.join(' in low or 'file.path(' in low:
+                                results.append(f"{rel}:{line_no} → {line.strip()}")
+                                added = True
+                            # Fallback: write-keyword lines with path-like strings (contains /)
+                            # Keywords cover Python, R, Julia, MATLAB, shell, etc.
+                            if not added and any(kw in low for kw in (
+                                'open(', 'save(', 'write(', 'dump(', 'export(',
+                                'to_csv', 'to_parquet', 'to_excel', 'to_json',
+                                'savefig', 'imsave', 'imwrite',
+                                'makedirs', 'mkdir',
+                                'writecsv', 'writedlm', 'jldsave',  # Julia
+                                'write.csv', 'write.table', 'saveRDS', 'save(',  # R
+                                'fwrite(', 'fopen(', 'fprintf(',  # MATLAB/C
+                                'np.save', 'torch.save', 'joblib.dump',  # Python libs
+                            )):
+                                for match in path_like.findall(line):
+                                    results.append(f"{rel}:{line_no} → {line.strip()}")
+                                    break
+            except Exception:
+                continue
+
+    return results
+
+
+def _infer_output_folder_with_gpt(files_location):
+    """
+    Ask GPT which specific files/patterns the experiment writes as output.
+    Returns a space-separated pattern string (e.g. 'output/results.csv output/plot.png')
+    or None if nothing identifiable.
+    """
+    lines = _scan_write_lines(files_location)
+    if not lines:
+        return None
+
+    # Keep at most 60 lines to limit prompt size
+    excerpt = "\n".join(lines[:60])
+
+    prompt = [{
+        "role": "user",
+        "content": (
+            "These lines were found in research experiment code files. "
+            "Each line may contain a quoted filename or path — some are READ operations (input), "
+            "some are WRITE operations (output).\n\n"
+            f"{excerpt}\n\n"
+            "Task: identify only the WRITE operations and return the full output file paths.\n\n"
+            "Important rules:\n"
+            "- Return file paths EXACTLY as they appear in the code. Do NOT add a directory "
+            "prefix that is not present in the code. If the code writes 'results.csv' with no "
+            "folder, return 'results.csv', not 'output/results.csv'.\n"
+            "- If a line uses os.path.join(dir_var, 'filename.ext'), look at nearby lines "
+            "to infer what dir_var is (e.g. 'output', 'results'). Reconstruct the full path "
+            "as dir_var/filename.ext.\n"
+            "- If the directory variable cannot be determined, return just the bare filename.\n"
+            "- If the code writes many files to one folder, return a glob like 'output/'.\n"
+            "- Return only the space-separated paths/patterns, "
+            "e.g. 'output/results.csv output/plot.png results/report.txt'.\n"
+            "- Reply with 'none' if no output files are identifiable."
+        )
+    }]
+
+    try:
+        result = callGPTModel(prompt).strip().strip("'\"")
+        print(f"  [GPT output patterns] answer: {result!r}")
+        return None if result.lower() == "none" else result
+    except Exception as e:
+        print(f"  [GPT output patterns] failed: {e}")
+        return None
+
+
+# ---------------------------------------------------------------------------
+# Docker output extraction helper
+# ---------------------------------------------------------------------------
+
+def _resolve_spec_paths(cont, workdir, patterns):
+    """
+    Expand each spec pattern to a list of (container_abs_path, display_name) tuples.
+    Handles: exact files, directories (expanded to all files inside), and glob patterns.
+    Returns (resolved, unresolved_patterns).
+    """
+    resolved = []
+    unresolved = []
+    for pattern in patterns:
+        rel = pattern.strip('/')
+        cpath = workdir + '/' + rel
+        if '*' in rel or '?' in rel:
+            # Glob: use find inside container to expand
+            find_result = cont.exec_run(
+                ["find", workdir, "-path", cpath, "-type", "f"],
+                stderr=False
+            )
+            found = [
+                p.strip() for p in
+                find_result.output.decode('utf-8', errors='replace').splitlines()
+                if p.strip()
+            ]
+            if found:
+                for fp in found:
+                    display = fp.replace(workdir.rstrip('/') + '/', '', 1)
+                    resolved.append((fp, display))
+            else:
+                unresolved.append(rel)
+        else:
+            # Check if path exists
+            check = cont.exec_run(["test", "-e", cpath], stderr=False)
+            if check.exit_code == 0:
+                is_dir = cont.exec_run(["test", "-d", cpath], stderr=False)
+                if is_dir.exit_code == 0:
+                    # Directory: expand to all contained files
+                    find_result = cont.exec_run(
+                        ["find", cpath, "-type", "f"],
+                        stderr=False
+                    )
+                    for fp in find_result.output.decode('utf-8', errors='replace').splitlines():
+                        fp = fp.strip()
+                        if fp:
+                            display = fp.replace(workdir.rstrip('/') + '/', '', 1)
+                            resolved.append((fp, display))
+                else:
+                    resolved.append((cpath, rel))
+            else:
+                # Exact path not found — fall back to searching by filename anywhere in workdir.
+                # This handles cases where the code saves to the working directory root
+                # but the spec was written with a subdirectory prefix (e.g. "output/file.pdf"
+                # when the script actually writes "file.pdf" at the root).
+                fname = rel.rsplit('/', 1)[-1]
+                fallback = cont.exec_run(
+                    ["find", workdir, "-name", fname, "-type", "f"],
+                    stderr=False
+                )
+                fb_paths = [
+                    p.strip()
+                    for p in fallback.output.decode('utf-8', errors='replace').splitlines()
+                    if p.strip()
+                ]
+                if fb_paths:
+                    for fp in fb_paths:
+                        display = fp.replace(workdir.rstrip('/') + '/', '', 1)
+                        resolved.append((fp, display))
+                        print(f"  [resolve] fallback: '{rel}' not found, using '{fp}'")
+                else:
+                    unresolved.append(rel)
+    return resolved, unresolved
+
+
+# ---------------------------------------------------------------------------
+# GPT helper: interpret run error from container logs (#3)
+# ---------------------------------------------------------------------------
+
+def _interpret_run_error_with_gpt(logs, command):
+    """
+    Given container logs from a failed run, ask GPT for a concise diagnosis.
+    Returns a 2-3 sentence explanation string.
+    """
+    excerpt = logs[-3000:] if len(logs) > 3000 else logs
+    prompt = [{
+        "role": "user",
+        "content": (
+            f"A Docker container ran this command and failed:\n  {command}\n\n"
+            f"Container logs:\n{excerpt}\n\n"
+            "In 2-3 sentences, explain specifically what went wrong and suggest the most "
+            "likely fix. Be concrete (e.g. missing package, wrong file path, syntax error, "
+            "permission issue)."
+        )
+    }]
+    try:
+        return callGPTModel(prompt).strip()
+    except Exception:
+        return "An unexpected error occurred. Review the logs above for details."
 
 
 def _resolve_zenodo_doi(dataset_doi):
@@ -259,8 +661,18 @@ def _save_data_upload(data_file, project_location):
     ext = os.path.splitext(filename)[1].lower()
     if ext == '.zip':
         with zipfile.ZipFile(dest, 'r') as zf:
+            top_levels = {n.split('/')[0] for n in zf.namelist() if n.split('/')[0]}
             zf.extractall(data_dir)
         os.remove(dest)
+        # Flatten single top-level folder so .npy/.csv/etc. are directly in data/
+        if len(top_levels) == 1:
+            sole = list(top_levels)[0]
+            sole_path = os.path.join(data_dir, sole)
+            if os.path.isdir(sole_path):
+                for item in os.listdir(sole_path):
+                    os.rename(os.path.join(sole_path, item),
+                              os.path.join(data_dir, item))
+                os.rmdir(sole_path)
 
     return data_dir
 
@@ -338,25 +750,27 @@ def upload_file():
         # --------------------------------------------------------------
         data_dir = None
         local_data_size = 0
+        _embedded_data_size = 0   # set when combined-zip data/ stays inside the image
 
         if has_data_file:
             data_dir = _save_data_upload(data_file, projectLocation)
             local_data_size = _get_folder_size(data_dir)
         elif not has_doi:
             # Original approach: user zipped code + data/ together.
-            # If data/ is large (> embed threshold), move it out of files/
-            # so it goes through the Zenodo externalize pipeline instead of
-            # being baked into a huge Docker image.
-            _files_data = os.path.join(projectFilesLocation, "data")
-            if os.path.isdir(_files_data):
+            # Use GPT to identify which subfolder contains the dataset.
+            _files_data = _detect_data_folder_with_gpt(projectFilesLocation)
+
+            if _files_data and os.path.isdir(_files_data):
                 _auto_size = _get_folder_size(_files_data)
                 if _auto_size > EMBED_THRESHOLD_BYTES:
                     _dest_data = os.path.join(projectLocation, "data")
                     shutil.move(_files_data, _dest_data)
                     data_dir = _dest_data
                     local_data_size = _auto_size
-                    print(f"  [original] data/ ({_auto_size} bytes) > embed threshold, "
-                          f"moved to data/ for externalize pipeline")
+                    print(f"  [GPT detected] {os.path.basename(_files_data)}/ ({_auto_size} bytes) "
+                          f"> embed threshold, moved to data/ for externalize pipeline")
+                else:
+                    _embedded_data_size = _auto_size  # small enough to bake into image
 
         # --------------------------------------------------------------
         # 5. Resolve Zenodo DOI (Mode C)
@@ -410,6 +824,44 @@ def upload_file():
         # is built after externalize-data completes
 
         # --------------------------------------------------------------
+        # 6c. Conversational data detection messages (Stage 1)
+        # --------------------------------------------------------------
+        if not has_data_file and not has_doi:
+            if _embedded_data_size > 0:
+                # Combined zip — small data, embedding in image
+                size_mb = round(_embedded_data_size / (1024 * 1024))
+                appendMessage(
+                    messagesToUser,
+                    f"I found a data/ folder in your project ({size_mb} MB). "
+                    f"It's small enough to embed directly in the reproducibility artifact — "
+                    f"no separate upload needed.",
+                    stage="ProjectLocation"
+                )
+            elif local_data_size > 0 and strategy in (
+                "externalize", "externalize_files", "chunk_and_externalize"
+            ):
+                # Combined zip — large data, will externalize
+                size_gb = round(local_data_size / (1024 ** 3), 2)
+                appendMessage(
+                    messagesToUser,
+                    f"I found a data/ folder in your project ({size_gb} GB). "
+                    f"It's too large to embed in the Docker image. "
+                    f"I'll upload it to Zenodo as a separate dataset after we set up "
+                    f"the experiment environment.",
+                    stage="ProjectLocation"
+                )
+            else:
+                # No data detected — ask the user conversationally
+                appendMessage(
+                    messagesToUser,
+                    "Got it. Does your experiment use a dataset?\n\n"
+                    "• Upload a data file using the button below\n"
+                    "• Provide a Zenodo DOI (e.g. 10.5281/zenodo.1234567)\n"
+                    "• Click \"No dataset\" or type \"no data\" to proceed without one",
+                    stage="WaitForDataInput"
+                )
+
+        # --------------------------------------------------------------
         # 7. Validate Docker tag name
         # --------------------------------------------------------------
         message1 = {
@@ -445,6 +897,210 @@ def upload_file():
         print("Ups! There's an error:", str(e))
         appendMessage(messagesToUser, "Ups! There's an error: " + str(e), stage="Start")
         return makeResponse(messagesToUser, 201, True)
+
+
+# ---------------------------------------------------------------------------
+# Stage 1 follow-up — provide-data (user response to WaitForDataInput)
+# ---------------------------------------------------------------------------
+
+def _clear_stale_data_artifacts(project_location, old_strategy):
+    """
+    Called when the user goes back to WaitForDataInput to change their data.
+    Removes all data-related files that would otherwise conflict with the new submission.
+
+    If old_strategy was 'embed', the Dockerfile had 'COPY data/ /data' baked in and
+    the Docker image contains the old data — both are deleted so the flow forces a rebuild.
+    """
+    # Remove uploaded/extracted data
+    for name in ("data", "data_provisioned"):
+        path = os.path.join(project_location, name)
+        if os.path.isdir(path):
+            shutil.rmtree(path, ignore_errors=True)
+
+    # Remove derived artefacts that depend on the data
+    for name in ("dataset_reference.json", "reproducibility_manifest.json",
+                 "run_progress.json", "output_spec.txt"):
+        path = os.path.join(project_location, name)
+        if os.path.isfile(path):
+            try:
+                os.remove(path)
+            except Exception:
+                pass
+
+    # If data was previously embedded in the Docker image, the image is now stale.
+    # Deleting the Dockerfile forces the flow back through BuildDockerFile →
+    # BuildDockerImage so a fresh image (without the old COPY data/ /data line) is built.
+    if old_strategy == "embed":
+        dockerfile_path = os.path.join(project_location, "Dockerfile")
+        if os.path.isfile(dockerfile_path):
+            try:
+                os.remove(dockerfile_path)
+            except Exception:
+                pass
+
+
+@project_bp.route("/project/<projectUuid>/provide-data", methods=['POST'])
+@cross_origin()
+@require_auth
+def provide_data(projectUuid):
+    """
+    Called when the user responds to the WaitForDataInput conversational prompt.
+
+    Accepts:
+      JSON  { "no_data": true }
+      JSON  { "dataset_doi": "10.5281/zenodo.xxxxx" }
+      FormData with "data_file" (zip or single file)
+    """
+    messagesToUser = []
+
+    projectLocation = os.path.join(cfg.PROJECTS_LOCATION, projectUuid)
+    info_path = os.path.join(projectLocation, "project_info.json")
+
+    if not os.path.isfile(info_path):
+        appendMessage(messagesToUser, "Project not found. Please upload your code first.",
+                      stage="Start")
+        return makeResponse(messagesToUser, 400, True)
+
+    with open(info_path, "r", encoding="utf-8") as fh:
+        project_info = json.load(fh)
+
+    # If the project already had data state, clear it before accepting new data.
+    # This handles the case where the user navigates back to change their dataset.
+    old_strategy = project_info.get("data_strategy")
+    if old_strategy and old_strategy != "no_data":
+        _clear_stale_data_artifacts(projectLocation, old_strategy)
+
+    # Reset data-related fields in project_info so they reflect the new submission
+    for field in ("data_strategy", "dataset_doi", "local_files_size_bytes",
+                  "remote_data_size_bytes", "total_data_size_bytes", "mode"):
+        project_info.pop(field, None)
+
+    req_body = request.get_json(silent=True) or {}
+    data_file = request.files.get("data_file")
+    dataset_doi = (req_body.get("dataset_doi") or request.form.get("dataset_doi") or "").strip()
+    no_data = req_body.get("no_data") or request.form.get("no_data") in ("true", "1", "yes")
+    free_text = (req_body.get("text") or "").strip()
+
+    # ------------------------------------------------------------------
+    # Free-text input: use GPT to classify intent
+    # ------------------------------------------------------------------
+    if free_text and not no_data and not dataset_doi and not (data_file and getattr(data_file, "filename", "")):
+        classified = _classify_data_input_with_gpt(free_text)
+        if classified["intent"] == "no_data":
+            no_data = True
+        elif classified["intent"] == "doi":
+            dataset_doi = classified["doi"] or ""
+        else:
+            appendMessage(messagesToUser,
+                          "I'm not sure I understood. Please say \"no data\", "
+                          "provide a Zenodo DOI, or use the upload button to attach a file.",
+                          stage="WaitForDataInput")
+            return makeResponse(messagesToUser, 200, True)
+
+    # ------------------------------------------------------------------
+    # Case 1: no data
+    # ------------------------------------------------------------------
+    if no_data:
+        project_info["data_strategy"] = "no_data"
+        with open(info_path, "w", encoding="utf-8") as fh:
+            json.dump(project_info, fh, indent=2, ensure_ascii=False)
+        appendMessage(messagesToUser,
+                      "Understood — no dataset. Let's continue with the experiment setup.",
+                      stage="FindProjectFiles")
+        return makeResponse(messagesToUser, 200, True)
+
+    # ------------------------------------------------------------------
+    # Case 2: Zenodo DOI
+    # ------------------------------------------------------------------
+    if dataset_doi:
+        try:
+            dataset_reference = _resolve_zenodo_doi(dataset_doi)
+            if dataset_reference is None:
+                appendMessage(messagesToUser,
+                              f"Could not parse Zenodo identifier: {dataset_doi}",
+                              stage="WaitForDataInput")
+                return makeResponse(messagesToUser, 400, True)
+
+            remote_size = dataset_reference.get("total_size_bytes", 0)
+            project_info["mode"] = "C"
+            project_info["dataset_doi"] = dataset_reference["doi"]
+            project_info["data_strategy"] = "external_doi"
+            project_info["remote_data_size_bytes"] = remote_size
+            project_info["total_data_size_bytes"] = remote_size
+
+            with open(info_path, "w", encoding="utf-8") as fh:
+                json.dump(project_info, fh, indent=2, ensure_ascii=False)
+
+            ref_path = os.path.join(projectLocation, "dataset_reference.json")
+            with open(ref_path, "w", encoding="utf-8") as fh:
+                json.dump(dataset_reference, fh, indent=2, ensure_ascii=False)
+
+            _build_manifest(projectLocation, projectUuid)
+
+            title = dataset_reference.get("zenodo_metadata", {}).get("title", dataset_doi)
+            size_gb = round(remote_size / (1024 ** 3), 2) if remote_size else "unknown"
+            appendMessage(messagesToUser,
+                          f"Got it. Found your dataset on Zenodo: \"{title}\" ({size_gb} GB). "
+                          f"It will be downloaded and mounted at runtime.",
+                          stage="FindProjectFiles")
+            return makeResponse(messagesToUser, 200, True)
+
+        except Exception as e:
+            appendMessage(messagesToUser, f"Failed to resolve DOI: {str(e)}",
+                          stage="WaitForDataInput")
+            return makeResponse(messagesToUser, 400, True)
+
+    # ------------------------------------------------------------------
+    # Case 3: data file upload
+    # ------------------------------------------------------------------
+    if data_file and getattr(data_file, "filename", ""):
+        data_dir = _save_data_upload(data_file, projectLocation)
+        local_data_size = _get_folder_size(data_dir)
+
+        data_strategy = _evaluate_data_strategy("A", local_data_size, 0, data_dir=data_dir)
+
+        # Detect what folder name the code uses to reference data — if it differs
+        # from 'data', a symlink will be added to the Dockerfile so the original
+        # path still resolves at /files/<alias> → /data.
+        files_location = os.path.join(projectLocation, "files")
+        alias = _detect_data_folder_alias(files_location)
+
+        project_info["mode"] = "A"
+        project_info["local_files_size_bytes"] = local_data_size
+        project_info["data_strategy"] = data_strategy
+        project_info["total_data_size_bytes"] = local_data_size
+        if alias:
+            project_info["data_folder_alias"] = alias
+        else:
+            project_info.pop("data_folder_alias", None)
+
+        with open(info_path, "w", encoding="utf-8") as fh:
+            json.dump(project_info, fh, indent=2, ensure_ascii=False)
+
+        if data_strategy == "embed":
+            _build_manifest(projectLocation, projectUuid)
+            size_mb = round(local_data_size / (1024 ** 2))
+            appendMessage(messagesToUser,
+                          f"Your data ({size_mb} MB) fits inside the reproducibility artifact — "
+                          f"no separate upload needed. Let's continue.",
+                          stage="FindProjectFiles")
+        else:
+            size_gb = round(local_data_size / (1024 ** 3), 2)
+            appendMessage(messagesToUser,
+                          f"Your data is {size_gb} GB — too large to embed in the reproducibility artifact "
+                          f"(limit: {round(EMBED_THRESHOLD_BYTES / (1024 ** 3), 1)} GB). "
+                          f"I'll upload it to Zenodo as a standalone dataset.",
+                          stage="InferDatasetMetadata")
+
+        return makeResponse(messagesToUser, 200, True)
+
+    # ------------------------------------------------------------------
+    # Nothing useful provided
+    # ------------------------------------------------------------------
+    appendMessage(messagesToUser,
+                  "Please upload a data file, provide a Zenodo DOI, or type \"no data\".",
+                  stage="WaitForDataInput")
+    return makeResponse(messagesToUser, 400, True)
 
 
 # ---------------------------------------------------------------------------
@@ -863,7 +1519,8 @@ def _create_zenodo_deposition_from_path(file_path, filename, metadata_json):
     resp.raise_for_status()
     deposition = resp.json()
 
-    # 2) Set metadata
+    # 2) Set metadata (sanitize first to satisfy Zenodo publish requirements)
+    _sanitize_zenodo_metadata(metadata_json)
     dep_url = f"{ZENODO_API_BASE}/deposit/depositions/{deposition['id']}"
     resp = requests.put(dep_url, data=json.dumps(metadata_json),
                         headers=headers, timeout=60)
@@ -878,7 +1535,10 @@ def _create_zenodo_deposition_from_path(file_path, filename, metadata_json):
     # 4) Publish
     publish_url = f"{ZENODO_API_BASE}/deposit/depositions/{deposition['id']}/actions/publish"
     pub_resp = requests.post(publish_url, headers=headers, timeout=120)
-    pub_resp.raise_for_status()
+    if not pub_resp.ok:
+        raise RuntimeError(
+            f"Zenodo publish failed ({pub_resp.status_code}): {pub_resp.text[:500]}"
+        )
     deposition = pub_resp.json()
 
     return deposition
@@ -906,7 +1566,8 @@ def _create_zenodo_deposition_multi_file(file_paths, metadata_json):
     resp.raise_for_status()
     deposition = resp.json()
 
-    # 2) Set metadata
+    # 2) Set metadata (sanitize first to satisfy Zenodo publish requirements)
+    _sanitize_zenodo_metadata(metadata_json)
     dep_url = f"{ZENODO_API_BASE}/deposit/depositions/{deposition['id']}"
     resp = requests.put(dep_url, data=json.dumps(metadata_json),
                         headers=headers, timeout=60)
@@ -922,10 +1583,70 @@ def _create_zenodo_deposition_multi_file(file_paths, metadata_json):
     # 4) Publish
     publish_url = f"{ZENODO_API_BASE}/deposit/depositions/{deposition['id']}/actions/publish"
     pub_resp = requests.post(publish_url, headers=headers, timeout=120)
-    pub_resp.raise_for_status()
+    if not pub_resp.ok:
+        raise RuntimeError(
+            f"Zenodo publish failed ({pub_resp.status_code}): {pub_resp.text[:500]}"
+        )
     deposition = pub_resp.json()
 
     return deposition
+
+
+def _sanitize_zenodo_metadata(metadata_json):
+    """
+    Ensure the metadata dict satisfies Zenodo's minimum publish requirements.
+    Mutates and returns the inner metadata dict (not the wrapper).
+
+    Required by Zenodo at publish time:
+      - title (non-empty string)
+      - upload_type (valid value)
+      - creators (list with at least one entry having a non-empty 'name')
+      - access_right ('open', 'embargoed', 'restricted', 'closed')
+      - license (required when access_right is 'open' or 'embargoed')
+      - description (non-empty string)
+    """
+    md = metadata_json.get("metadata", metadata_json)
+
+    # title
+    if not md.get("title", "").strip():
+        md["title"] = "Untitled Dataset"
+
+    # upload_type
+    valid_types = {"publication", "poster", "presentation", "dataset",
+                   "image", "video", "software", "lesson", "physicalobject", "other"}
+    if md.get("upload_type") not in valid_types:
+        md["upload_type"] = "dataset"
+
+    # description
+    if not md.get("description", "").strip():
+        md["description"] = "Dataset uploaded via SciConv Data Extension Layer."
+
+    # creators — must be a list of dicts with non-empty 'name'
+    creators = md.get("creators", [])
+    if not isinstance(creators, list) or not creators:
+        creators = [{"name": "Unknown"}]
+    sanitized_creators = []
+    for c in creators:
+        if isinstance(c, dict) and c.get("name", "").strip():
+            sanitized_creators.append(c)
+    md["creators"] = sanitized_creators if sanitized_creators else [{"name": "Unknown"}]
+
+    # access_right
+    valid_access = {"open", "embargoed", "restricted", "closed"}
+    if md.get("access_right") not in valid_access:
+        md["access_right"] = "open"
+
+    # license (required for open/embargoed)
+    if md.get("access_right") in {"open", "embargoed"} and not md.get("license"):
+        md["license"] = "cc-by-4.0"
+
+    # Remove fields Zenodo rejects at publish time
+    _ZENODO_UNSUPPORTED = {"grants", "thesis_supervisors", "thesis_university",
+                           "partof_title", "partof_pages"}
+    for key in _ZENODO_UNSUPPORTED:
+        md.pop(key, None)
+
+    return md
 
 
 def _build_zenodo_metadata(project_uuid, creator_name=None, description=None,
@@ -1091,8 +1812,9 @@ def externalize_data(projectUuid):
 
             doi = dep.get("doi", "")
             summary = (
-                f"Dataset uploaded to Zenodo as {len(file_paths)} individual file(s).\n"
-                f"DOI: {doi}"
+                f"Upload complete. Your dataset ({len(file_paths)} file(s)) is now on Zenodo.\n"
+                f"DOI: {doi}\n"
+                f"I'll link it to your research artifact automatically."
             )
             appendMessage(messagesToUser, content={
                 "summary": summary,
@@ -1174,11 +1896,19 @@ def externalize_data(projectUuid):
 
         # ---- 6) Return result ----
         doi_list = [d["doi"] for d in depositions if d.get("doi")]
-        summary = (
-            f"Dataset uploaded to Zenodo successfully.\n"
-            f"{'Chunked into ' + str(len(depositions)) + ' records' if prep['chunked'] else '1 record'}.\n"
-            f"DOI(s): {', '.join(doi_list)}"
-        )
+        if prep["chunked"]:
+            summary = (
+                f"Upload complete. Your dataset was split into {len(depositions)} chunk(s) "
+                f"across {len(depositions)} Zenodo record(s).\n"
+                f"DOI(s): {', '.join(doi_list)}\n"
+                f"I'll link all chunks to your research artifact automatically."
+            )
+        else:
+            summary = (
+                f"Upload complete. Your dataset is now on Zenodo.\n"
+                f"DOI: {doi_list[0] if doi_list else 'N/A'}\n"
+                f"I'll link it to your research artifact automatically."
+            )
 
         appendMessage(messagesToUser, content={
             "summary": summary,
@@ -1210,8 +1940,8 @@ def find_files_project():
     messagesToUser = []
 
     if "possibleProjectUuid" not in requestData:
-        print("I can’t select your folder")
-        appendMessage(messagesToUser, "I can’t select your folder", stage="Start")
+        print("I can't select your folder")
+        appendMessage(messagesToUser, "I can't select your folder", stage="Start")
         return makeResponse(messagesToUser, 201, True)
 
     possibleProjectUuid = requestData["possibleProjectUuid"]
@@ -1269,7 +1999,6 @@ def find_files_project():
 
             chatContent = userContent + '\nHere are the name of the files to classify: ' + str(all_files)
 
-            appendMessage(messagesToUser, role="system", content=userContent)
             appendMessage(messagesToChat, role="system", content=chatContent)
 
             # TODO descomentar
@@ -1283,14 +2012,12 @@ def find_files_project():
                 if len(userMessage["ExecutableFiles"]) > 0:
                     userMessage["ProjectUuid"] = projectUuid
                     appendMessage(messagesToUser, content=userMessage,
-                                  contentShort="We've found your project.\n The project is in folder " + projectUuid + "\n",
+                                  contentShort="I've found your project.",
                                   stage="ParametersToUse")
                 else:
-
                     userMessage["ProjectUuid"] = projectUuid
                     appendMessage(messagesToUser, content=userMessage,
-                                  contentShort="We've found your project.\n The project is in folder " + projectUuid +
-                                               "\n \n Verify because there are no files to execute.",
+                                  contentShort="I've found your project, but I couldn't detect any executable files. Please verify your upload.",
                                   stage="ParametersToUse")
                 return makeResponse(messagesToUser)
 
@@ -1330,24 +2057,48 @@ def parameters_to_use_confirmation(projectUuid):
             "jsonObject": False,
             "content": (
                     "The stage of this iteration is: ParametersToUse\n"
-                    "Consider the following message and the available files in the project that you provided in a previous message. "
-                    "These files are stored inside the `ExecutableFiles` variable. Extract the command to run an experiment from the following message and "
-                    "validate whether it is a correct command, taking into account the files in the project and the syntax of the language being used.\n"
+                    "The user has provided a command to run their experiment. "
+                    "The available project files are stored in the `ExecutableFiles` variable from a previous message.\n"
                     "Message: " + myMessage +
-                    "\nYour response should follow one of two options:\n"
-                    "- If this message contains a valid command that can be run inside a container in TTY mode, reply with the command to be used in Unix systems.\n"
-                    "- If it does not contain a valid command, reply with 'ParametersToUse'.\n"
+                    "\n\nYour task:\n"
+                    "1. Extract the run command from the message.\n"
+                    "2. Fix minor issues automatically — for example:\n"
+                    "   - Convert absolute paths to relative (e.g. '/main.py' → './main.py')\n"
+                    "   - Ensure the command uses Unix syntax\n"
+                    "   - Correct obvious typos in filenames if the correct file exists in ExecutableFiles\n"
+                    "3. Reply with ONLY the corrected command string (no explanation).\n"
+                    "4. If the message contains no recognisable command at all (e.g. it is a question or unrelated text), "
+                    "reply with exactly 'ParametersToUse'.\n"
             ),
             "contentShort": None
         }
 
         messagesToChat.append(message1confirmation)
 
-        messageText = callGPTModel(messagesToChat)
+        messageText = callGPTModel(messagesToChat).strip()
 
         if messageText == "ParametersToUse":
-            appendMessage(messagesToUser, "Please give me a valid command.", stage="ParametersToUse")
+            appendMessage(messagesToUser,
+                          "I couldn't find a run command in your message. "
+                          "Please provide the command to execute your experiment, "
+                          "for example: python ./main.py",
+                          stage="ParametersToUse")
         else:
+            # New command confirmed — clear stale run artifacts from any previous run.
+            # Dockerfile, data, output_spec, and reproducibility_manifest are preserved:
+            # the manifest holds Zenodo deposition info that is independent of the command.
+            # It is only cleared when the user goes back to the data stage.
+            _project_location = os.path.join(cfg.PROJECTS_LOCATION, projectUuid)
+            for _name in ("output", "run_progress.json"):
+                _path = os.path.join(_project_location, _name)
+                try:
+                    if os.path.isdir(_path):
+                        shutil.rmtree(_path, ignore_errors=True)
+                    elif os.path.isfile(_path):
+                        os.remove(_path)
+                except Exception:
+                    pass
+
             appendMessage(messagesToUser, content=messageText,
                           contentShort="I will use this command to execute the experiment.\n Command: " + messageText,
                           stage="SpecifyOutputs")
@@ -1383,16 +2134,62 @@ def specify_outputs(projectUuid):
         appendMessage(messagesToUser, "Please specify the output files or directory.", stage="SpecifyOutputs")
         return makeResponse(messagesToUser)
 
-    # Extract the raw spec from the last user message
-    output_spec = ""
+    # Find the last user message and the assistant's suggested paths (if any)
+    user_msg = ""
+    suggested_paths = ""
     for msg in reversed(messages):
-        if msg.get("role") not in ("assistant",):
-            output_spec = (msg.get("content") or "").strip()
-            break
+        role = msg.get("role", "")
+        raw = msg.get("content") or ""
+        content = (raw if isinstance(raw, str) else "").strip()
+        if role != "assistant" and not user_msg:
+            user_msg = content
+        elif role == "assistant" and "detected" in content.lower() and not suggested_paths:
+            # Extract the suggested paths from the detection message
+            import re as _re
+            m = _re.search(r'`([^`]+)`', content)
+            if m:
+                suggested_paths = m.group(1).strip()
 
-    if not output_spec:
+    if not user_msg:
         appendMessage(messagesToUser, "Please specify the output files or directory.", stage="SpecifyOutputs")
         return makeResponse(messagesToUser)
+
+    # Use GPT to extract actual file paths from the user's message
+    context = f"The system previously suggested these output paths: {suggested_paths}\n" if suggested_paths else ""
+    gpt_prompt = [{
+        "role": "user",
+        "content": (
+            f"{context}"
+            f"The user replied: \"{user_msg}\"\n\n"
+            "Extract the output file paths or glob patterns the user wants to capture. "
+            "Rules:\n"
+            "- If the user confirms (e.g. 'yes', 'correct', 'that's right', 'looks good') → return the suggested paths as-is\n"
+            "- If the user provides specific paths → return those\n"
+            "- If the user confirms AND adds more paths → combine all of them\n"
+            "- If the user rejects the suggestion without providing paths "
+            "  (e.g. 'no', 'wrong', 'that's not right', 'incorrect') → return 'REJECTED'\n"
+            "- Return ONLY the space-separated paths/patterns, or 'REJECTED', or 'UNCLEAR'\n"
+            "- If you cannot determine intent at all, return 'UNCLEAR'"
+        )
+    }]
+
+    extracted = callGPTModel(gpt_prompt).strip()
+
+    if extracted == "REJECTED":
+        appendMessage(messagesToUser,
+                      "No problem. Please type the correct output paths or glob patterns directly.\n"
+                      "For example: `output/results.csv output/plot.png` or `results/`",
+                      stage="SpecifyOutputs")
+        return makeResponse(messagesToUser)
+
+    if extracted == "UNCLEAR" or not extracted:
+        appendMessage(messagesToUser,
+                      "I couldn't identify any file paths. Please specify the output files directly.\n"
+                      "For example: `output/results.csv output/plot.png` or `results/`",
+                      stage="SpecifyOutputs")
+        return makeResponse(messagesToUser)
+
+    output_spec = extracted
 
     # Save to project folder
     spec_path = os.path.join(cfg.PROJECTS_LOCATION, projectUuid, "output_spec.txt")
@@ -1406,6 +2203,22 @@ def specify_outputs(projectUuid):
                   contentShort=f"Output specification saved: {output_spec}",
                   stage="FindConfigurations")
     return makeResponse(messagesToUser)
+
+
+@project_bp.route('/project/<projectUuid>/infer-output-folder', methods=['GET'])
+@cross_origin()
+@require_auth
+def infer_output_folder(projectUuid):
+    """
+    Scan code files for file-write patterns and ask GPT which output folder
+    the experiment writes to. Returns { folder: str | null }.
+    """
+    files_location = os.path.join(cfg.PROJECTS_LOCATION, projectUuid, "files")
+    if not os.path.isdir(files_location):
+        return jsonify({"folder": None})
+
+    patterns = _infer_output_folder_with_gpt(files_location)
+    return jsonify({"folder": patterns})
 
 
 @project_bp.route('/project/<projectUuid>/run-progress', methods=['GET'])
@@ -1488,7 +2301,7 @@ def find_configurations(projectUuid):
 
             print(messageText)
             try:
-                appendMessage(messagesToUser, content=json.loads(messageText), jsonObject=True, stage="BuildDockerFile")
+                appendMessage(messagesToUser, content=json.loads(messageText), jsonObject=True, stage="FindConfigurationsInteraction")
                 return makeResponse(messagesToUser)
             except Exception as e:
                 numberInteractions -= 1
@@ -1541,7 +2354,7 @@ def find_configurations_change(projectUuid):
     messagesToChat = []
 
     if "myMessage" not in requestData:
-        appendMessage(messagesToUser, 'I can’t find the messages', stage="Start")
+        appendMessage(messagesToUser, "I can't find the messages", stage="Start")
         return makeResponse(messagesToUser)
 
     myMessage = requestData["myMessage"]
@@ -1568,7 +2381,7 @@ def find_configurations_change(projectUuid):
     messageText = callGPTModel(messagesToChat)
 
     if messageText == "BuildDockerFile" or messageText == "WaitChatInteraction":
-        appendMessage(messagesToUser, content=messageText, stage=messageText)
+        appendMessage(messagesToUser, content=messageText, contentShort=None, stage=messageText)
         return makeResponse(messagesToUser)
     else:
         messageText = messageText.replace("```", "").replace("json", "")
@@ -1665,12 +2478,14 @@ def buildDockerFileChat(projectUuid):
                            '"WORKDIR /files" and "COPY files/ ."'
                            '\nDo not use any additional COPY commands. '
                            'In previous messages, I provided the names of the configuration files (configurationFiles) present in the project. '
-                           'You may use them if relevant, but it’s not necessary to include COPY or ADD commands for these files, because they are inside the "./files" folder and have already been copied. '
+                           'You may use them if relevant, but it is not necessary to include COPY or ADD commands for these files, because they are inside the "./files" folder and have already been copied. '
                            'Please do not infer the names of any files not explicitly provided. '
                            'I only need the Dockerfile required to build the Docker image, so do not include the CMD or ENTRYPOINT commands in this Dockerfile. '
-                           'Provide only the created Dockerfile, as I will use your response directly—no additional text or explanation is needed.'}
-
-    messagesToUser.append(message1)
+                           '\nIMPORTANT base image selection rules:'
+                           '\n- For R projects: ALWAYS use rocker/r-ver:<version> instead of r-base:<version>. The rocker images have properly maintained apt package sources.'
+                           '\n- For Python projects: use python:<version>-slim or python:<version>.'
+                           '\n- For Julia projects: use julia:<version>.'
+                           '\nProvide only the created Dockerfile, as I will use your response directly, no additional text or explanation is needed.'}
     messagesToChat.append(message1)
 
     # messageText = ''
@@ -1692,6 +2507,7 @@ def buildDockerFileChat(projectUuid):
                                 'Do not add any `WORKDIR` commands other than "WORKDIR /files". '
                                 'Remove all other commands that use the `WORKDIR` command. '
                                 'Remove all other commands that use "CMD", "AND", or "ENTRYPOINT" commands. '
+                                'IMPORTANT: If the base image is "r-base:<version>", replace it with "rocker/r-ver:<version>" to ensure apt sources work correctly. '
                                 'Make the necessary changes and provide only the updated Dockerfile. '
                                 'Here is the Dockerfile:' + messageText
                      }
@@ -1702,6 +2518,10 @@ def buildDockerFileChat(projectUuid):
     messageText = callGPTModel(messagesToChat)
     messageText = messageText.replace("Dockerfile", "").replace("dockerfile", "").replace("```", "")
 
+    # Ensure rocker images are used for R instead of r-base (which has broken apt sources)
+    import re as _re
+    messageText = _re.sub(r'FROM\s+r-base:([\w.\-]+)', r'FROM rocker/r-ver:\1', messageText)
+
     # TODO comentar
     #     messageText = """FROM python:3.10
     #
@@ -1711,23 +2531,85 @@ def buildDockerFileChat(projectUuid):
     # RUN pip install shap==0.41.0 numpy==1.23.4 pandas==1.5.2 scipy==1.9.3 matplotlib==3.6.2 tqdm==4.64.1"""
 
     write_file(projectPath + "Dockerfile", messageText)
+    # For R (rocker) images: replace CRAN repos with Posit Package Manager (PPM),
+    # which serves pre-compiled binaries for Ubuntu — no system dev-headers needed.
+    import re as _re2
+    _rocker_match = _re2.search(r'FROM\s+rocker/r-ver:([\d.]+)', messageText)
+    if _rocker_match:
+        _r_ver = _rocker_match.group(1)
+        _major, _minor = int(_r_ver.split('.')[0]), int(_r_ver.split('.')[1]) if '.' in _r_ver else 0
+        if (_major, _minor) >= (4, 3):
+            _ubuntu = 'jammy'
+        elif (_major, _minor) >= (4, 0):
+            _ubuntu = 'focal'
+        else:
+            _ubuntu = 'focal'
+        _ppm_url = f'https://packagemanager.posit.co/cran/__linux__/{_ubuntu}/latest'
+        # Replace any common CRAN mirror URL with PPM binary URL
+        messageText = _re2.sub(
+            r'https://(?:cloud\.r-project\.org|cran\.rstudio\.com|cran\.r-project\.org)[^\'"]*',
+            _ppm_url,
+            messageText
+        )
+        # Add warn=2 to catch silent install failures — matches both R -e and Rscript -e
+        messageText = _re2.sub(
+            r'((?:Rscript|R)\s+-e\s+[\'"])(install\.packages)',
+            r'\1options(warn=2); \2',
+            messageText,
+            flags=_re2.IGNORECASE
+        )
+        write_file(projectPath + "Dockerfile", messageText)
 
-    # For embed strategy: append COPY data/ /data so the dataset is baked
-    # into the Docker image (only when data was uploaded as a separate file)
+
+    # Patch Dockerfile for separately uploaded data:
+    #  - embed strategy: COPY data/ /data bakes the data into the image
+    #  - any strategy: if code references a different folder name (alias),
+    #    add a symlink so /files/<alias> → /data resolves at runtime
     _project_info_path = projectPath + "project_info.json"
     if os.path.isfile(_project_info_path):
         with open(_project_info_path, "r", encoding="utf-8") as _pf:
             _pinfo = json.load(_pf)
-        if _pinfo.get("data_strategy") == "embed":
+        _strategy = _pinfo.get("data_strategy")
+        _alias = _pinfo.get("data_folder_alias", "")
+        # Reject any alias that isn't a plain folder name (safety check)
+        if _alias and not re.match(r'^[\w.\-]+$', _alias):
+            _alias = ""
+
+        _df_lines = []
+        if _strategy == "embed":
             _data_dir = os.path.join(projectPath, "data")
             if os.path.isdir(_data_dir) and os.listdir(_data_dir):
-                with open(projectPath + "Dockerfile", "a", encoding="utf-8") as _df:
-                    _df.write("\nCOPY data/ /data\n")
+                _df_lines.append("COPY data/ /data")
+
+        if _alias:
+            _df_lines.append(f"RUN ln -s /data /files/{_alias}")
+
+        if _df_lines:
+            with open(projectPath + "Dockerfile", "a", encoding="utf-8") as _df:
+                _df.write("\n" + "\n".join(_df_lines) + "\n")
+
+    # Pre-create any output directories referenced in output_spec.txt so the
+    # experiment never fails with "No such file or directory" when writing output.
+    _spec_path = os.path.join(projectPath, "output_spec.txt")
+    if os.path.isfile(_spec_path):
+        with open(_spec_path, "r", encoding="utf-8") as _sf:
+            _spec_paths = [s.strip() for s in _sf.read().split() if s.strip()]
+        _output_dirs = sorted({
+            os.path.dirname(p).strip("/")
+            for p in _spec_paths
+            if os.path.dirname(p).strip("/")  # skip files in root (no parent dir)
+        })
+        if _output_dirs:
+            _mkdir_args = " ".join(f"/files/{d}" for d in _output_dirs)
+            with open(projectPath + "Dockerfile", "a", encoding="utf-8") as _df:
+                _df.write(f"\nRUN mkdir -p {_mkdir_args}\n")
 
     try:
-        appendMessage(messagesToUser, content=json.loads(messageText), jsonObject=True, stage="BuildDockerImage")
+        appendMessage(messagesToUser, content=json.loads(messageText), jsonObject=True,
+                      contentShort="Environment configuration ready.", stage="BuildDockerImage")
     except Exception as e:
-        appendMessage(messagesToUser, content=messageText, stage="BuildDockerImage")
+        appendMessage(messagesToUser, content=messageText,
+                      contentShort="Environment configuration ready.", stage="BuildDockerImage")
     return makeResponse(messagesToUser)
 
 
@@ -1795,14 +2677,14 @@ def chat_interation(projectUuid):
 
                     words = messageText.split()
                     if len(words) == 1:
-                        appendMessage(messagesToUser, content=messageText, stage=messageText)
+                        appendMessage(messagesToUser, content=messageText, contentShort="", stage=messageText)
                         return makeResponse(messagesToUser)
                     else:
                         chatMessage = "The previous result is incorrect. Please consider the following information.\n"
                         numberInteractions -= 1
                         print("numberInteractions" + str(numberInteractions))
                 else:
-                    appendMessage(messagesToUser, content=messageText, stage=messageText)
+                    appendMessage(messagesToUser, content=messageText, contentShort="", stage=messageText)
                     return makeResponse(messagesToUser)
             else:
                 chatMessage = "The previous result is incorrect. The answer should be exactly one word. Please consider the following information.\n"
@@ -1869,7 +2751,8 @@ def buildDockerImageChat(projectUuid):
         # messageText = "e25:20240917151400"
         # raise Exception("gcc: error: -E or -x required when input is from standard input")
 
-        appendMessage(messagesToUser, content=messageText, stage="RunContainer")
+        appendMessage(messagesToUser, content=messageText,
+                      contentShort="Environment built successfully.", stage="RunContainer")
         return makeResponse(messagesToUser)
     except Exception as e:
         print(str(e))
@@ -1943,36 +2826,41 @@ def runDockerContainerChat(projectUuid):
             # ------------------------------------------------------------------
             # Step 5: Data Provisioning (server-side, before container launch)
             # ------------------------------------------------------------------
-            _manifest_path = os.path.join(f"projects/{projectUuid}", "reproducibility_manifest.json")
+            _manifest_path = os.path.join(cfg.PROJECTS_LOCATION, projectUuid, "reproducibility_manifest.json")
             _progress_path = os.path.join(cfg.PROJECTS_LOCATION, projectUuid, "run_progress.json")
-            if os.path.isfile(_manifest_path):
+            _project_location = os.path.join(cfg.PROJECTS_LOCATION, projectUuid)
+            _host_data_path = None
+
+            # Priority 1: locally uploaded data (provide-data endpoint saves here).
+            # Covers all file-upload strategies (embed, externalize, chunk_and_externalize).
+            _local_data = os.path.join(_project_location, "data")
+            _files_data = os.path.join(_project_location, "files", "data")
+
+            if os.path.isdir(_local_data) and any(True for _ in os.scandir(_local_data)):
+                _host_data_path = os.path.normpath(
+                    os.path.join(cfg.HOST_VOLUME_PATH, projectUuid, "data"))
+            elif os.path.isdir(_files_data) and any(True for _ in os.scandir(_files_data)):
+                # Backward compat: data bundled inside the code zip
+                _host_data_path = os.path.normpath(
+                    os.path.join(cfg.HOST_VOLUME_PATH, projectUuid, "files", "data"))
+            elif os.path.isfile(_manifest_path):
+                # Priority 2: no local data — use manifest-based provisioning.
+                # Handles external_doi strategy where data must be downloaded at runtime.
                 with open(_manifest_path, "r", encoding="utf-8") as _mf:
                     _manifest = json.load(_mf)
-                _strategy = _manifest.get("data_strategy", "no_data")
-                _project_location = os.path.join(cfg.PROJECTS_LOCATION, projectUuid)
-                _host_data_path = None
+                try:
+                    _host_data_path = _provision_data(
+                        _manifest, projectUuid, _project_location, _progress_path)
+                except (RuntimeError, ValueError) as prov_err:
+                    _write_run_progress(_progress_path, phase="error",
+                                        detail=f"Provisioning failed: {prov_err}")
+                    appendMessage(messagesToUser,
+                                  f"Data provisioning failed: {prov_err}",
+                                  stage="Start")
+                    return makeResponse(messagesToUser)
 
-                if _strategy == "no_data":
-                    # Original approach: user may have included a data/ folder
-                    # in the code zip → it lands at files/data/ after extraction
-                    _files_data_dir = os.path.join(_project_location, "files", "data")
-                    if os.path.isdir(_files_data_dir):
-                        _host_data_path = os.path.normpath(
-                            os.path.join(cfg.HOST_VOLUME_PATH, projectUuid, "files", "data"))
-                else:
-                    try:
-                        _host_data_path = _provision_data(
-                            _manifest, projectUuid, _project_location, _progress_path)
-                    except (RuntimeError, ValueError) as prov_err:
-                        _write_run_progress(_progress_path, phase="error",
-                                            detail=f"Provisioning failed: {prov_err}")
-                        appendMessage(messagesToUser,
-                                      f"Data provisioning failed: {prov_err}",
-                                      stage="Start")
-                        return makeResponse(messagesToUser)
-
-                if _host_data_path:
-                    volumes[_host_data_path] = {'bind': '/data', 'mode': 'ro'}
+            if _host_data_path:
+                volumes[_host_data_path] = {'bind': '/data', 'mode': 'ro'}
 
             # Run the container
             _write_run_progress(_progress_path, phase="running",
@@ -2003,6 +2891,7 @@ def runDockerContainerChat(projectUuid):
             # ------------------------------------------------------------------
             # Output file extraction (if experiment succeeded + spec provided)
             # ------------------------------------------------------------------
+            extracted = []
             if exec_first.exit_code == 0:
                 _write_run_progress(_progress_path, phase="extracting",
                                     detail="Extracting output files...")
@@ -2015,18 +2904,25 @@ def runDockerContainerChat(projectUuid):
                     output_dir = os.path.join(cfg.PROJECTS_LOCATION, projectUuid, "output")
                     os.makedirs(output_dir, exist_ok=True)
                     extracted = []
+                    missing = []
 
-                    for pattern in output_specs:
-                        cpath = workdir + '/' + pattern.strip('/')
+                    resolved_paths, missing = _resolve_spec_paths(
+                        container, workdir, output_specs
+                    )
+
+                    for cpath, display_name in resolved_paths:
                         try:
                             bits, _ = container.get_archive(cpath)
                             with tarfile.open(fileobj=io.BytesIO(b''.join(bits))) as tf:
-                                tf.extractall(output_dir, filter="data")
-                            extracted.append(pattern.strip('/'))
-                            print(f"  Extracted: {cpath}")
+                                # Preserve relative path under output_dir
+                                dest = os.path.join(output_dir, os.path.dirname(display_name))
+                                os.makedirs(dest, exist_ok=True)
+                                tf.extractall(dest, filter="data")
+                            extracted.append(display_name)
+                            print(f"  Extracted: {cpath} → {display_name}")
                         except Exception as ex:
                             print(f"  Could not extract {cpath}: {ex}")
-                            containerLogs += f"\n[extraction error] {cpath}: {ex}\n"
+                            missing.append(display_name)
 
                     if extracted:
                         containerLogs += (
@@ -2035,6 +2931,11 @@ def runDockerContainerChat(projectUuid):
                         )
                     else:
                         containerLogs += "\nNo output files matched the specified pattern.\n"
+                    if missing:
+                        containerLogs += (
+                            f"\nNot produced ({len(missing)}):\n"
+                            + "\n".join(f"  - {f}" for f in missing) + "\n"
+                        )
 
             try:
                 container.stop()
@@ -2067,25 +2968,21 @@ def runDockerContainerChat(projectUuid):
             # Prepare the message to be sent back to the user
 
             if exec_first.exit_code != 0:
-                # if True:
+                diagnosis = _interpret_run_error_with_gpt(containerLogs, commandToRun)
                 errorMessage = (
-                        "An error occurred during the environment build. \n"
-                        + containerLogs +
-                        "What might have caused this unexpected result?.")
-                examples = ("I want to change the execution parameters.\n"
-                            "I want to change the project location.\n"
-                            "I want to change the computing environment used (programming languages, dependencies).\n"
-                            )
-
-                appendMessage(messagesToUser, errorMessage, stage="WaitChatInteraction", examples=examples)
+                    "The experiment failed.\n\n"
+                    + containerLogs + "\n"
+                    + "**What went wrong:** " + diagnosis
+                )
+                appendMessage(messagesToUser, errorMessage, stage="RunFailed")
             else:
                 messagesToUser = [
                     {"role": "assistant",
                      "content": containerLogs,
                      "contentShort": containerLogs,
                      "jsonObject": False,
+                     "output_files": extracted if extracted else [],
                      }
-
                 ]
 
             # changes = container.diff()
@@ -2144,6 +3041,237 @@ def runDockerContainerChat(projectUuid):
             return makeResponse(messagesToUser)
 
 
+# ---------------------------------------------------------------------------
+# Universal context-aware chat
+# ---------------------------------------------------------------------------
+
+_UNIVERSAL_CHAT_SYSTEM_PROMPT = """\
+You are an intelligent assistant embedded in SciConv, a tool that helps researchers \
+package, reproduce, and publish computational experiments as reproducible artifacts.
+
+=== WORKFLOW STAGES (in order) ===
+
+1. FindProjectFiles
+   The system scans the uploaded code ZIP to identify executable files and project structure.
+   Automatic — no user input needed.
+
+2. WaitForDataInput
+   The system detected no data was included in the uploaded ZIP.
+   The user must decide about their dataset before anything else can proceed:
+     a) Upload a data file using the button already visible in the UI
+     b) Type a Zenodo DOI (e.g. 10.5281/zenodo.1234567)
+     c) Type "no data" or "skip" if no external data is needed
+   Do NOT suggest the run command or any later step until this is resolved.
+
+3. InferDatasetMetadata / ExternalizeData
+   Dataset is archived and uploaded to Zenodo if needed. Automatic.
+
+4. ParametersToUse
+   User specifies the shell command to run the experiment.
+   Example: "python main.py" or "Rscript run.R"
+   Code is at /files/ inside Docker, data (if any) at /data/.
+
+5. SpecifyOutputs
+   User specifies which files/folders the experiment writes as output.
+   Example: "output/results.csv output/plot.png" or "results/" or "output/*.csv"
+   User can skip if no output files.
+
+6. FindConfigurations → FindConfigurationsInteraction
+   System detects required language, packages, system libraries.
+   User confirms or adjusts the detected environment.
+
+7. BuildDockerFile → BuildDockerImage
+   System generates a Dockerfile and builds the Docker image. Both automatic.
+
+8. RunContainer
+   System runs the experiment inside Docker and extracts output files. Automatic.
+
+9. WaitChatInteraction
+   System asks if the result looks correct.
+   User confirms → packaging begins. User reports a problem → recovery options.
+
+10. RunFailed
+    Experiment failed. User can fix run command, fix dependencies, fix output spec, or retry.
+
+11. ResearchArtifact → Completed
+    System packages everything into a ZIP. User can download or publish to Zenodo for a DOI.
+
+=== VALID ACTION TAGS ===
+Only append one of these tags at the END of your reply when you are certain the action \
+is what the user wants:
+
+  [ACTION:navigate:WaitForDataInput]        — go back to change/add the data file or DOI
+  [ACTION:navigate:ParametersToUse]         — change run command
+  [ACTION:navigate:SpecifyOutputs]          — change output file spec
+  [ACTION:navigate:FindConfigurationsInteraction] — review/change environment
+  [ACTION:navigate:BuildDockerFile]         — fix and rebuild Dockerfile
+  [ACTION:navigate:RunContainer]            — retry the run immediately
+  [ACTION:confirm]                          — user confirmed current prompt
+  [ACTION:set_command]                      — user provided a run command
+  [ACTION:set_outputs]                      — user provided output file paths
+  [ACTION:update_config]                    — user wants to change environment config
+  [ACTION:report_issue]                     — user reported a problem after the run
+  [ACTION:reset]                            — user wants to start over and upload a new project file
+
+=== CURRENT PROJECT STATE ===
+{state_block}
+
+=== CURRENT STAGE ===
+The user is at stage: {current_stage}
+
+=== CONVERSATION HISTORY ===
+The messages below show what has already been said. Use them to fully understand the
+context of the user's latest message. Do not repeat information already given.
+
+=== HOW TO RESPOND ===
+Reply in plain natural language, as a helpful assistant would.
+Be concise (1–3 sentences). Be specific to the current stage.
+
+Only append an [ACTION:...] tag when you are CERTAIN it is what the user intends.
+If the message is ambiguous ("ok", "sure", "thanks") just reply naturally — NO action tag.
+If the user is asking a question or needs guidance, reply and explain — NO action tag.
+If the user explicitly asks to go somewhere or do something specific, reply and append the tag.
+
+=== STAGE-SPECIFIC ACTION RULES (ALWAYS apply these) ===
+At stage SpecifyOutputs:
+  - "yes" / "correct" / "looks good" / any affirmative → ALWAYS append [ACTION:confirm]
+  - A file path or glob pattern (e.g. "output/results.csv") → ALWAYS append [ACTION:set_outputs]
+  Never reply at SpecifyOutputs without one of the above actions (unless the user is asking a question).
+
+At stage ParametersToUse:
+  - Any shell command (e.g. "python main.py") → ALWAYS append [ACTION:set_command]
+  Never reply at ParametersToUse without [ACTION:set_command] (unless the user is asking a question).
+
+=== SCOPE RESTRICTION ===
+You are ONLY permitted to assist with tasks directly related to this experiment, the user's \
+project files, or the SciConv packaging workflow described above.
+If the user asks about anything outside this scope — general knowledge, unrelated coding \
+questions, creative writing, opinions, or any other off-topic request — politely decline and \
+redirect them to the current step. Do NOT answer the off-topic question even partially.
+Example:
+  User: "What is the capital of France?"
+  Reply: I'm only able to help with your experiment and the SciConv workflow. \
+Is there anything about your current step I can help with?
+
+Examples:
+  User: "go back and fix the dockerfile"
+  Reply: Sure, taking you back to the Dockerfile. [ACTION:navigate:BuildDockerFile]
+
+  User: "start over" / "upload a new file" / "go back to the beginning"
+  Reply: Sure, taking you back to the start so you can upload a new file. [ACTION:reset]
+
+  User: "python main.py"  (at ParametersToUse)
+  Reply: Got it, I'll use that command to run your experiment. [ACTION:set_command]
+
+  User: "ok"  (after being shown data options)
+  Reply: No problem — whenever you're ready, use the buttons above to upload a file, \
+enter a DOI, or click "No data".
+
+  User: "what do I do here?"
+  Reply: You're at the data step. Before we can proceed you need to tell me about your \
+dataset — upload a file, provide a Zenodo DOI, or say "no data" if none is needed.
+"""
+
+
+def _build_state_block(project_location, project_uuid):
+    """Summarise current project state for the universal chat system prompt."""
+    lines = [f"Project UUID: {project_uuid}"]
+    info_path = os.path.join(project_location, "project_info.json")
+    if os.path.isfile(info_path):
+        try:
+            with open(info_path, "r", encoding="utf-8") as f:
+                info = json.load(f)
+            if info.get("mode"):
+                lines.append(f"Mode: {info['mode']}")
+            if info.get("data_strategy"):
+                lines.append(f"Data strategy: {info['data_strategy']}")
+        except Exception:
+            pass
+    spec_path = os.path.join(project_location, "output_spec.txt")
+    if os.path.isfile(spec_path):
+        try:
+            lines.append(f"Output spec: {open(spec_path).read().strip()}")
+        except Exception:
+            pass
+    manifest_path = os.path.join(project_location, "reproducibility_manifest.json")
+    if os.path.isfile(manifest_path):
+        try:
+            with open(manifest_path, "r", encoding="utf-8") as f:
+                m = json.load(f)
+            cmd = (m.get("reconstruction") or {}).get("command", "")
+            if cmd:
+                lines.append(f"Run command: {cmd}")
+        except Exception:
+            pass
+    progress_path = os.path.join(project_location, "run_progress.json")
+    if os.path.isfile(progress_path):
+        try:
+            with open(progress_path, "r", encoding="utf-8") as f:
+                prog = json.load(f)
+            if prog.get("phase"):
+                lines.append(f"Last run phase: {prog['phase']}")
+            if prog.get("detail"):
+                lines.append(f"Last run detail: {prog['detail']}")
+        except Exception:
+            pass
+    return "\n".join(lines)
+
+
+@project_bp.route("/project/<projectUuid>/universal-chat", methods=['POST'])
+@cross_origin()
+@require_auth
+def universal_chat(projectUuid):
+    """
+    Context-aware chat that understands any user input and routes it to
+    the right action: navigate to a stage, confirm, provide data, or explain.
+    """
+    data = json.loads(request.data)
+    user_message = data.get("message", "").strip()
+    current_stage = data.get("stage", "")
+    recent_messages = data.get("recent_messages", [])  # [{role, content}, ...]
+
+    if not user_message:
+        return jsonify({"intent": "reply", "target_stage": None,
+                        "reply": "Please type a message."}), 200
+
+    project_location = os.path.join(cfg.PROJECTS_LOCATION, projectUuid)
+    state_block = _build_state_block(project_location, projectUuid)
+
+    system_prompt = _UNIVERSAL_CHAT_SYSTEM_PROMPT.format(
+        current_stage=current_stage,
+        state_block=state_block,
+    )
+
+    # Build messages: system prompt + conversation history + new user message
+    messages = [{"role": "system", "content": system_prompt}]
+    for m in recent_messages:
+        role = m.get("role", "user")
+        content = m.get("content", "")
+        if role in ("user", "assistant") and content:
+            messages.append({"role": role, "content": content})
+    messages.append({"role": "user", "content": user_message})
+
+    try:
+        raw = callGPTModel(messages).strip()
+    except Exception as e:
+        print(f"  [universal-chat] GPT error: {e!r}")
+        return jsonify({"reply": "Something went wrong. Please try again.",
+                        "action": None, "target_stage": None}), 200
+
+    # Extract optional [ACTION:...] tag from the end of the reply
+    action = None
+    target_stage = None
+    action_match = re.search(r'\[ACTION:([^\]]+)\]\s*$', raw)
+    if action_match:
+        raw = raw[:action_match.start()].strip()
+        tag_parts = action_match.group(1).split(":")
+        action = tag_parts[0]                              # e.g. "navigate", "confirm"
+        target_stage = tag_parts[1] if len(tag_parts) > 1 else None  # e.g. "BuildDockerFile"
+
+    print(f"  [universal-chat] action={action!r} target={target_stage!r} reply={raw[:80]!r}")
+    return jsonify({"reply": raw, "action": action, "target_stage": target_stage}), 200
+
+
 @project_bp.route("/project/<projectUuid>/research-artifact-chat", methods=['POST'])
 @cross_origin()
 @require_auth
@@ -2161,10 +3289,13 @@ def researchArtifactChat(projectUuid):
     dockerImageID = requestData["dockerImageId"]
     # dockerImageID = "20240820192103"
 
-    messagesToUser = return_messages(requestData, messagesToUser)
-    write_messagesUser_to_file(messagesToUser, projectPath)
+    # Save conversation history to file for persistence, but do NOT include it
+    # in the response — returning the full history causes the frontend to re-push
+    # every message and replay the entire workflow.
+    all_messages = return_messages(requestData, [])
+    write_messagesUser_to_file(all_messages, projectPath)
 
-    commandToRun = return_commands_to_use(requestData, messagesToUser)
+    commandToRun = return_commands_to_use(requestData, all_messages)
     commandToRun1 = [commandToRun]
 
     # Persist commandToRun into project_info.json so reproduce-from-doi can recover it
@@ -2179,9 +3310,17 @@ def researchArtifactChat(projectUuid):
         except Exception:
             pass
 
-    # Load manifest so run scripts know which data provisioning strategy to embed
+    # Load manifest so run scripts know which data provisioning strategy to embed.
+    # If the manifest is missing but project_info has data strategy info, rebuild it
+    # (e.g. user went back to edit the command after Zenodo upload, which used to
+    # delete the manifest as part of stale cleanup).
     manifest = None
     manifest_path = os.path.join(projectPath, "reproducibility_manifest.json")
+    if not os.path.isfile(manifest_path):
+        try:
+            _build_manifest(projectPath, projectUuid)
+        except Exception:
+            pass
     if os.path.isfile(manifest_path):
         with open(manifest_path, "r", encoding="utf-8") as _mf:
             manifest = json.load(_mf)
@@ -2239,7 +3378,7 @@ def researchArtifactChat(projectUuid):
     shutil.move(zipFilePath, finalZipPath)
 
     print(f"All files and folders from '{projectPath}' have been zipped into '{finalZipPath}'.")
-    appendMessage(messagesToUser, f"The research artifact has been generated and is located in the root directory of our project '{finalZipPath}'",
+    appendMessage(messagesToUser, "Your research artifact is ready.",
                   stage="Completed")
     return makeResponse(messagesToUser)
 
@@ -2618,21 +3757,31 @@ def reproduce_run(projectUuid):
                     output_specs = [s.strip() for s in sf.read().split() if s.strip()]
                 output_dir = os.path.join(project_location, "output")
                 os.makedirs(output_dir, exist_ok=True)
-                for pattern in output_specs:
-                    cpath = "/files/" + pattern.strip("/")
+                resolved_repro, missing_repro = _resolve_spec_paths(
+                    container, "/files", output_specs
+                )
+                for cpath, display_name in resolved_repro:
                     try:
                         bits, _ = container.get_archive(cpath)
                         with tarfile.open(fileobj=io.BytesIO(b"".join(bits))) as tf:
-                            tf.extractall(output_dir, filter="data")
-                        extracted.append(pattern.strip("/"))
+                            dest = os.path.join(output_dir, os.path.dirname(display_name))
+                            os.makedirs(dest, exist_ok=True)
+                            tf.extractall(dest, filter="data")
+                        extracted.append(display_name)
                     except Exception as ex:
-                        container_logs += f"\n[extraction error] {cpath}: {ex}\n"
+                        print(f"  Could not extract {cpath}: {ex}")
+                        missing_repro.append(display_name)
 
                 if extracted:
                     container_logs += f"\nOutput files captured ({len(extracted)}):\n"
                     container_logs += "\n".join(f"  - {f}" for f in extracted) + "\n"
                 else:
                     container_logs += "\nNo output files matched the specified pattern.\n"
+                if missing_repro:
+                    container_logs += (
+                        f"\nNot produced ({len(missing_repro)}):\n"
+                        + "\n".join(f"  - {f}" for f in missing_repro) + "\n"
+                    )
     except Exception as e:
         container_logs = f"Container run failed: {e}"
         appendMessage(messagesToUser, container_logs, stage="ReproFromDoi_Completed")
@@ -2662,7 +3811,6 @@ def reproduce_run(projectUuid):
 
 @project_bp.route('/project/<projectUuid>/download-output/<path:filename>', methods=['GET'])
 @cross_origin()
-@require_auth
 def download_output_file(projectUuid, filename):
     """Serve a single output file from projects/<uuid>/output/ for download."""
     output_dir = os.path.abspath(os.path.join(cfg.PROJECTS_LOCATION, projectUuid, "output"))
@@ -2676,3 +3824,20 @@ def download_output_file(projectUuid, filename):
         return jsonify({"error": "File not found"}), 404
 
     return send_from_directory(output_dir, filename, as_attachment=True)
+
+
+@project_bp.route('/project/<projectUuid>/download-artifact', methods=['GET'])
+@cross_origin()
+def download_artifact(projectUuid):
+    """Serve the packaged reproducibility artifact zip for direct download."""
+    project_dir = os.path.abspath(os.path.join(cfg.PROJECTS_LOCATION, projectUuid))
+    zip_name = f"{projectUuid}.zip"
+    zip_path = os.path.abspath(os.path.join(project_dir, zip_name))
+
+    if not zip_path.startswith(project_dir):
+        return jsonify({"error": "Invalid path"}), 400
+
+    if not os.path.isfile(zip_path):
+        return jsonify({"error": "Artifact not found. Run the experiment first."}), 404
+
+    return send_from_directory(project_dir, zip_name, as_attachment=True)

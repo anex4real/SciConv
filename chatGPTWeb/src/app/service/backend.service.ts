@@ -169,6 +169,10 @@ export class BackendService {
         return `${this.baseUrl}/project/${projectUuid}/download-output/${filename}`;
     }
 
+    getArtifactDownloadUrl(projectUuid: string): string {
+        return `${this.baseUrl}/project/${projectUuid}/download-artifact`;
+    }
+
     findConfigurationsFunc(projectUuid: string, messages: Message[], myMessage: any) {
         return this.http.post(`${this.baseUrl}/project/${projectUuid}/find-configurations-change`, {
                 messages: messages,
@@ -180,6 +184,36 @@ export class BackendService {
     uploadProject(formData: FormData) {
         return this.http.post(`${this.baseUrl}/project/upload-project`, formData,
             {headers: this.headers});
+    }
+
+    provideData(projectUuid: string, payload: FormData | object) {
+        if (payload instanceof FormData) {
+            return this.http.post(
+                `${this.baseUrl}/project/${projectUuid}/provide-data`,
+                payload,
+                {headers: this.headers}
+            );
+        }
+        return this.http.post(
+            `${this.baseUrl}/project/${projectUuid}/provide-data`,
+            payload,
+            {headers: this.headers}
+        );
+    }
+
+    universalChat(projectUuid: string, message: string, stage: string, recentMessages: any[]) {
+        return this.http.post<{ reply: string; action: string | null; target_stage: string | null }>(
+            `${this.baseUrl}/project/${projectUuid}/universal-chat`,
+            { message, stage, recent_messages: recentMessages },
+            { headers: this.headers }
+        );
+    }
+
+    inferOutputFolder(projectUuid: string) {
+        return this.http.get<{ folder: string | null }>(
+            `${this.baseUrl}/project/${projectUuid}/infer-output-folder`,
+            {headers: this.headers}
+        );
     }
 
     inferDatasetMetadata(projectUuid: string) {

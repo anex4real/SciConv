@@ -1,6 +1,27 @@
 <div *ngIf="isAuthenticated">
     <ng-container *ngIf="state$ | async as s">
 
+        <!-- Start over (shown in all active workflow stages) -->
+        <div *ngIf="appStage !== appStages.Welcome" class="start-over-bar">
+            <a href="#" (click)="goToAppStart(true); $event.preventDefault();">← Start over</a>
+        </div>
+
+        <!-- Progress stepper (shown during Repro workflow, fixed at top) -->
+        <div *ngIf="appStage === appStages.Repro && !isDataState(s)" class="repro-stepper-spacer"></div>
+        <div *ngIf="appStage === appStages.Repro && !isDataState(s)" class="repro-stepper">
+            <div *ngFor="let step of reproStepLabels; let i = index"
+                 class="stepper-step"
+                 [class.stepper-done]="i < currentReproStep(s.stage)"
+                 [class.stepper-active]="i === currentReproStep(s.stage)"
+                 [class.stepper-upcoming]="i > currentReproStep(s.stage)">
+                <div class="stepper-circle">
+                    <span *ngIf="i < currentReproStep(s.stage)">✓</span>
+                    <span *ngIf="i >= currentReproStep(s.stage)">{{ i + 1 }}</span>
+                </div>
+                <div class="stepper-label">{{ step.label }}</div>
+            </div>
+        </div>
+
         <div *ngIf="s.messages.length > 0" class="chat-window">
             <div *ngFor="let message of s.messages">
                 <div *ngIf="message.contentShort != undefined"
@@ -188,129 +209,105 @@
             </div>
         </div>
 
-        <!-- Start screen controlled by AppStage -->
-        <ng-container *ngIf="appStage == appStages.Start">
+        <!-- Welcome screen — conversational entry point -->
+        <ng-container *ngIf="appStage == appStages.Welcome">
+
+            <!-- Assistant welcome message -->
+            <div class="chat-window">
+                <div class="chat-message">
+                    <strong>assistant</strong>
+                    <div>Hi! I'm SciConv, your research reproducibility assistant. What would you like to do?</div>
+                </div>
+
+                <!-- Echo user choice + assistant prompt after selection -->
+                <ng-container *ngIf="selectedMode">
+                    <div class="user-message">
+                        <strong>researcher</strong>
+                        <div>{{ modeUserMessage }}</div>
+                    </div>
+                    <div class="chat-message">
+                        <strong>assistant</strong>
+                        <div>{{ modePromptMessage }}</div>
+                    </div>
+                </ng-container>
+            </div>
+
+            <!-- Mode selection buttons (before any choice) -->
+            <div *ngIf="!selectedMode" class="chat-input" style="flex-direction: column; align-items: flex-start; gap: 10px;">
+                <button type="button" class="mode-btn" (click)="onSelectMode('repro')">
+                    <div class="mode-btn-title">Package an experiment</div>
+                    <div class="mode-btn-desc">Upload your code (or a .zip), run it inside Docker, and package the results into a reproducibility artifact. You can download it directly or publish it on Zenodo as a citable record.</div>
+                </button>
+                <button type="button" class="mode-btn" (click)="onSelectMode('dataset')">
+                    <div class="mode-btn-title">Analyse a paper's datasets</div>
+                    <div class="mode-btn-desc">Upload a scientific article (PDF) and I'll identify its datasets, check FAIR compliance, and help you publish missing ones on Zenodo.</div>
+                </button>
+                <button type="button" class="mode-btn" (click)="onSelectMode('doi')">
+                    <div class="mode-btn-title">Reproduce from DOI</div>
+                    <div class="mode-btn-desc">Provide a Zenodo DOI for a published artifact and I'll automatically download, run, and reproduce the experiment.</div>
+                </button>
+            </div>
+
+            <!-- Repro onboarding overview -->
+            <div *ngIf="selectedMode === 'repro' && showReproIntro" class="repro-intro">
+                <p class="repro-intro-lead">Here's what will happen, step by step:</p>
+                <ol class="repro-intro-steps">
+                    <li><strong>Upload</strong> — Upload your experiment as a ZIP file (code only) or a single script. If your data is small and already part of the project, include it in a folder named <code>data/</code> inside the ZIP — your code can then reference it as <code>data/filename</code>.</li>
+                    <li><strong>Dataset</strong> — If your data is separate, upload it here or provide a Zenodo DOI. It will be available at <code>/data/</code> inside the container. Skip if your experiment needs no external data.</li>
+                    <li><strong>Run Command</strong> — Tell SciConv the command to run your experiment (e.g. <code>python main.py</code>).</li>
+                    <li><strong>Output Files</strong> — Specify which files your experiment produces so they can be captured.</li>
+                    <li><strong>Environment</strong> — SciConv detects your language and dependencies. You review and confirm.</li>
+                    <li><strong>Build &amp; Run</strong> — A Docker image is built and your experiment runs inside it.</li>
+                    <li><strong>Review</strong> — You confirm the results look correct before packaging.</li>
+                    <li><strong>Package</strong> — Download the reproducibility artifact or publish it to Zenodo with a citable DOI.</li>
+                </ol>
+                <button type="button" class="get-started-btn" (click)="showReproIntro = false">Get Started →</button>
+            </div>
 
             <!-- Upload: Reproducibility Package -->
-            <div class="chat-input">
-                <div class="upload-container">
-                    <div class="info-message">
-                        <h2>Reproducibility Package Generation</h2>
-                        <p><strong>You can upload either:</strong></p>
-                        <ul>
-                            <li>A single source file (e.g., <code>.py</code>, <code>.cpp</code>)</li>
-                            <li>A <code>.zip</code> file containing a project folder</li>
-                        </ul>
-                    </div>
-
-                    <form class="upload-form" (ngSubmit)="onSubmitRepro()" #fileUploadFormRepro="ngForm">
-                        <!-- Code file (always required) -->
-                        <label class="form-label">Code file</label>
-                        <input type="file" (change)="onFileChangeRepro($event)">
-
-                        <!-- Data Extension Layer toggle -->
-                        <label class="data-layer-toggle">
-                            <input type="checkbox" [(ngModel)]="useDataLayer" name="useDataLayer">
-                            <span>Include Dataset</span>
-                        </label>
-
-                        <!-- Data options (shown when toggle is on) -->
-                        <div *ngIf="useDataLayer" class="data-layer-options">
-                            <div class="mode-selector">
-                                <label>
-                                    <input type="radio" name="dataMode" value="file"
-                                           [(ngModel)]="dataMode">
-                                    Upload Data File (Mode A)
-                                </label>
-                                <label>
-                                    <input type="radio" name="dataMode" value="doi"
-                                           [(ngModel)]="dataMode">
-                                    Provide Zenodo DOI (Mode C)
-                                </label>
-                            </div>
-
-                            <!-- Mode A: data file upload -->
-                            <div *ngIf="dataMode === 'file'" class="data-input">
-                                <label class="form-label">Data file (.zip or single file)</label>
-                                <input type="file" (change)="onFileChangeData($event)">
-                            </div>
-
-                            <!-- Mode C: DOI input -->
-                            <div *ngIf="dataMode === 'doi'" class="data-input">
-                                <label class="form-label">Zenodo DOI, URL, or Record ID</label>
-                                <input type="text" [(ngModel)]="datasetDoi" name="datasetDoi"
-                                       placeholder="e.g. 10.5281/zenodo.1234567">
-                            </div>
-                        </div>
-
-                        <button type="submit"
-                                [disabled]="s.isLoading || !fileToUploadRepro
-                                    || (useDataLayer && dataMode === 'file' && !fileToUploadData)
-                                    || (useDataLayer && dataMode === 'doi' && !datasetDoi.trim())">
-                            <span *ngIf="!s.isLoading">Upload</span>
-                            <span *ngIf="s.isLoading">
-                                <i class="fa fa-spinner fa-spin"></i> Loading...
-                            </span>
-                        </button>
-                    </form>
+            <div *ngIf="selectedMode === 'repro' && !showReproIntro" class="chat-input" style="flex-direction: column; align-items: flex-start; gap: 6px;">
+                <div style="display: flex; gap: 8px; width: 100%;">
+                    <input type="file" (change)="onFileChangeRepro($event)" style="flex: 1;">
+                    <button type="button" [disabled]="s.isLoading || !fileToUploadRepro" (click)="onSubmitRepro()">
+                        <span *ngIf="!s.isLoading">Upload</span>
+                        <span *ngIf="s.isLoading"><i class="fa fa-spinner fa-spin"></i> Loading...</span>
+                    </button>
                 </div>
+                <p class="upload-hint">
+                    Upload a ZIP of your code. If your data is already inside the project, place it in a folder named <code>data/</code> — your code should reference it as <code>data/filename</code>. For larger or external datasets, you can upload or link them in the next step.
+                </p>
             </div>
 
             <!-- Upload: Dataset analysis (PDF) -->
-            <div class="chat-input">
-                <div class="upload-container">
-                    <div class="info-message">
-                        <h2>Dataset analysis</h2>
-                        <p><strong>You can upload:</strong></p>
-                        <ul>
-                            <li>A scientific article in PDF format</li>
-                        </ul>
-                        <p>
-                            The system analyzes the article to identify datasets and data-containing artifacts used by
-                            the authors.
-                            It checks whether these datasets are properly referenced or linked.
-                        </p>
-                        <p>
-                            If a dataset is missing a reference or link, a FAIR-compliant dataset package is created
-                            with the required
-                            metadata. If a reference or link is provided, the dataset is validated for FAIR compliance
-                            and metadata
-                            completeness.
-                        </p>
-                    </div>
-
-                    <form class="upload-form" (ngSubmit)="onSubmitDataset()" #fileUploadFormPdf="ngForm">
-                        <input type="file" accept=".pdf" (change)="onFileChangePdf($event)">
-                        <button type="submit" [disabled]="s.isLoading">
-                            <span *ngIf="!s.isLoading">Upload</span>
-                            <span *ngIf="s.isLoading">
-                <i class="fa fa-spinner fa-spin"></i> Loading...
-              </span>
-                        </button>
-                    </form>
-                </div>
+            <div *ngIf="selectedMode === 'dataset'" class="chat-input">
+                <input type="file" accept=".pdf" (change)="onFileChangePdf($event)">
+                <button type="button" [disabled]="s.isLoading || !fileToUploadPdf" (click)="onSubmitDataset()">
+                    <span *ngIf="!s.isLoading">Upload</span>
+                    <span *ngIf="s.isLoading"><i class="fa fa-spinner fa-spin"></i> Loading...</span>
+                </button>
             </div>
 
-            <!-- Reproduce from Artifact DOI -->
-            <div class="chat-input">
-                <div class="upload-container">
-                    <div class="info-message">
-                        <h2>Reproduce from Artifact DOI</h2>
-                        <p>Provide a Zenodo DOI for a published research artifact to reproduce the experiment automatically.</p>
-                    </div>
-                    <form class="upload-form" (ngSubmit)="onReproduceFromDoi()">
-                        <label class="form-label">Artifact DOI or Zenodo URL</label>
-                        <input type="text" [(ngModel)]="artifactDoiInput" name="artifactDoi"
-                               placeholder="e.g. 10.5281/zenodo.1234567">
-                        <button type="submit"
-                                [disabled]="!artifactDoiInput.trim() || reproFromDoiState.phase === 'init' || reproFromDoiState.phase === 'running'">
-                            <span *ngIf="reproFromDoiState.phase !== 'init' && reproFromDoiState.phase !== 'running'">Reproduce</span>
-                            <span *ngIf="reproFromDoiState.phase === 'init' || reproFromDoiState.phase === 'running'">
-                                <i class="fa fa-spinner fa-spin"></i> Running...
-                            </span>
-                        </button>
-                    </form>
-                </div>
+            <!-- DOI input: Reproduce from DOI -->
+            <div *ngIf="selectedMode === 'doi'" class="chat-input">
+                <input type="text" [(ngModel)]="artifactDoiInput" name="artifactDoi"
+                       placeholder="e.g. 10.5281/zenodo.1234567"
+                       (keydown.enter)="onReproduceFromDoi()">
+                <button type="button"
+                        [disabled]="!artifactDoiInput.trim() || reproFromDoiState.phase === 'init' || reproFromDoiState.phase === 'running'"
+                        (click)="onReproduceFromDoi()">
+                    <span *ngIf="reproFromDoiState.phase !== 'init' && reproFromDoiState.phase !== 'running'">Reproduce</span>
+                    <span *ngIf="reproFromDoiState.phase === 'init' || reproFromDoiState.phase === 'running'">
+                        <i class="fa fa-spinner fa-spin"></i> Running...
+                    </span>
+                </button>
+            </div>
+
+            <!-- Back: change mode -->
+            <div *ngIf="selectedMode" class="chat-input" style="padding-top: 0; border-top: none;">
+                <a href="#" style="font-size: 12px; color: #888;"
+                   (click)="onSelectMode(null!); $event.preventDefault();">
+                    ← Choose a different option
+                </a>
             </div>
 
         </ng-container>
@@ -573,19 +570,48 @@
             </div>
         </div>
 
-        <!-- Chat input (when not in App Start or ReproFromDoi, and not at Completed or InferDatasetMetadata or InferArtifactMetadata stage) -->
+        <!-- Run failure recovery buttons -->
+        <div *ngIf="appStage === appStages.Repro && !isDataState(s) && s.stage === reproStages.RunFailed"
+             class="chat-input" style="flex-direction: column; align-items: flex-start; gap: 8px;">
+            <button type="button" class="recovery-btn" [disabled]="s.isLoading" (click)="workflow.fixRunCommand()">
+                Fix the run command
+                <span class="recovery-desc">Change the command — no rebuild needed</span>
+            </button>
+            <button type="button" class="recovery-btn" [disabled]="s.isLoading" (click)="workflow.fixDependencies()">
+                Fix dependencies / Dockerfile
+                <span class="recovery-desc">Edit packages or environment — rebuilds Docker image</span>
+            </button>
+            <button type="button" class="recovery-btn" [disabled]="s.isLoading" (click)="workflow.fixOutputSpec()">
+                Fix output file specification
+                <span class="recovery-desc">Change which files to capture — no rebuild needed</span>
+            </button>
+            <button type="button" class="recovery-btn recovery-btn--secondary" [disabled]="s.isLoading" (click)="workflow.retryRun()">
+                Retry with same settings
+                <span class="recovery-desc">Run again unchanged — useful for transient errors</span>
+            </button>
+        </div>
+
+        <!-- Universal chat input — shown for all active workflows except Welcome/ReproFromDoi/metadata editors -->
         <div
                 class="chat-input"
-                *ngIf="appStage != appStages.Start
+                *ngIf="appStage != appStages.Welcome
       && appStage != appStages.ReproFromDoi
       && (!isDataState(s) || s.stage !== dataStages.EditZenodoMetadata)
-      && (isDataState(s) || s.stage !== reproStages.Completed)
       && (isDataState(s) || s.stage !== reproStages.InferDatasetMetadata)
       && (isDataState(s) || s.stage !== reproStages.InferArtifactMetadata)"
         >
+            <!-- Busy banner shown while a process is running -->
+            <div *ngIf="!isDataState(s) && workflow.isBusy"
+                 style="width:100%; font-size:12px; color:#888; padding: 4px 0; display:flex; align-items:center; gap:6px;">
+                <i class="fa fa-spinner fa-spin"></i>
+                <span>Processing — chat will be available when the current step completes.</span>
+            </div>
 
-            <input [(ngModel)]="userMessage" placeholder="Type your message here..." (keydown.enter)="sendMessage()"/>
-            <button type="submit" [disabled]="s.isLoading" (click)="sendMessage()">
+            <input [(ngModel)]="userMessage"
+                   [disabled]="!isDataState(s) && workflow.isBusy"
+                   [placeholder]="(!isDataState(s) && workflow.isBusy) ? 'Waiting for process to complete...' : 'Ask anything or type your input...'"
+                   (keydown.enter)="sendMessage()"/>
+            <button type="submit" [disabled]="s.isLoading || (!isDataState(s) && workflow.isBusy)" (click)="sendMessage()">
                 <span *ngIf="!s.isLoading">Send</span>
                 <span *ngIf="s.isLoading">
           <i class="fa fa-spinner fa-spin"></i> Loading...
@@ -599,12 +625,49 @@
                 (click)="workflow.skipOutputSpec()">
                 Skip
             </button>
+
+            <!-- Data file upload + skip buttons — visible only at WaitForDataInput stage -->
+            <ng-container *ngIf="!isDataState(s) && s.stage === reproStages.WaitForDataInput">
+                <label class="upload-data-btn" [class.disabled]="s.isLoading">
+                    <i class="fa fa-upload"></i> Upload Data File
+                    <input type="file" hidden [disabled]="s.isLoading" (change)="onProvideDataFile($event)">
+                </label>
+                <button
+                    type="button"
+                    class="skip-btn"
+                    [disabled]="s.isLoading"
+                    (click)="workflow.provideNoData()">
+                    No dataset
+                </button>
+            </ng-container>
         </div>
 
-        <!-- Upload artifact to Zenodo (shown at Completed stage) -->
+        <!-- Output file downloads (shown after experiment runs successfully) -->
+        <div *ngIf="appStage === appStages.Repro && !isDataState(s)
+                    && s.stage === reproStages.WaitChatInteraction && s.outputFiles?.length"
+             class="chat-input" style="flex-direction: column; align-items: flex-start; gap: 6px;">
+            <strong style="font-size: 13px;">Output files</strong>
+            <ul style="margin: 0; padding-left: 18px; list-style: disc;">
+                <li *ngFor="let f of s.outputFiles" style="margin: 2px 0;">
+                    <a [href]="getReproOutputFileUrl(f, s)" target="_blank" download
+                       style="color: #4a9eff; text-decoration: underline; cursor: pointer; font-size: 13px;">
+                        {{ f }}
+                    </a>
+                </li>
+            </ul>
+        </div>
+
+        <!-- Artifact actions (shown at Completed stage) -->
         <div *ngIf="appStage === appStages.Repro && !isDataState(s) && s.stage === reproStages.Completed"
              class="chat-input" style="flex-direction: column; align-items: flex-start; gap: 8px;">
-            <div style="display: flex; align-items: center; gap: 10px;">
+            <div style="display: flex; align-items: center; gap: 10px; flex-wrap: wrap;">
+                <!-- Direct download of artifact zip -->
+                <a [href]="backend.getArtifactDownloadUrl(s.projectUuid)"
+                   download
+                   style="display:inline-block; padding: 8px 16px; background:#28a745; color:#fff;
+                          border-radius:4px; text-decoration:none; font-size:14px;">
+                    Download artifact zip
+                </a>
                 <button type="button"
                         [disabled]="s.artifactIsUploading || s.isLoading || !!s.artifactZenodoDoi"
                         (click)="workflow.uploadArtifact()">
@@ -620,7 +683,7 @@
             </div>
             <div *ngIf="s.artifactIsUploading" class="run-progress-detail">
                 <i class="fa fa-spinner fa-spin"></i>
-                Uploading artifact to Zenodo — this may take several minutes for large Docker images...
+                Uploading artifact to Zenodo...
             </div>
         </div>
 

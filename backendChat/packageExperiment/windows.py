@@ -128,7 +128,8 @@ def writeWindowsFIle(rootPath, projectUuid, commands, dockerTagId, hasDatabase, 
         if needs_data:
             string += " -v %CD%\\data:/data:ro"
 
-        string += " " + dockerTagId + " " + command
+        safe_cmd = command.replace('"', '\\"')
+        string += ' ' + dockerTagId + ' /bin/sh -c "' + safe_cmd + '"'
         file.write(string + "\n")
 
         file.write("@ECHO Copying the content of the Container to %execution%\n")

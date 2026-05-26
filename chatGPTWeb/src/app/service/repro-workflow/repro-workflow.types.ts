@@ -4,6 +4,7 @@ import {ZenodoMetadataView} from "../dataset-analysis/dataset-analysis.types";
 
 export enum ReproStages {
     ProjectLocation = 'ProjectLocation',
+    WaitForDataInput = 'WaitForDataInput',
     InferDatasetMetadata = 'InferDatasetMetadata',
     ExternalizeData = 'ExternalizeData',
     FindProjectFiles = 'FindProjectFiles',
@@ -14,6 +15,7 @@ export enum ReproStages {
     BuildDockerFile = 'BuildDockerFile',
     BuildDockerImage = 'BuildDockerImage',
     RunContainer = 'RunContainer',
+    RunFailed = 'RunFailed',
     ResearchArtifact = 'ResearchArtifact',
     WaitChatInteraction = 'WaitChatInteraction',
     InferArtifactMetadata = 'InferArtifactMetadata',
@@ -43,6 +45,10 @@ export interface ReproState {
     errorMessage?: string;
     goBack: number;
     readonly GO_BACK_NUMBER: number;
+    // Output files from run-container
+    outputFiles?: string[];
+    // Recovery flag: skip rebuild steps and jump straight to RunContainer
+    pendingRerun?: boolean;
     // Artifact upload to Zenodo
     artifactZenodoDoi?: string;
     artifactIsUploading: boolean;
