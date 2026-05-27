@@ -246,6 +246,10 @@
                     <div class="mode-btn-title">Reproduce from DOI</div>
                     <div class="mode-btn-desc">Provide a Zenodo DOI for a published artifact and I'll automatically download, run, and reproduce the experiment.</div>
                 </button>
+                <button type="button" class="mode-btn" (click)="onSelectMode('datadirect')">
+                    <div class="mode-btn-title">Upload data to Zenodo</div>
+                    <div class="mode-btn-desc">Upload a dataset file or ZIP directly to Zenodo. SciConv uses AI to infer the metadata (title, description, creators, keywords) — you review it before publishing. Large datasets are automatically split across multiple records.</div>
+                </button>
             </div>
 
             <!-- Repro onboarding overview -->
@@ -285,6 +289,19 @@
                     <span *ngIf="!s.isLoading">Upload</span>
                     <span *ngIf="s.isLoading"><i class="fa fa-spinner fa-spin"></i> Loading...</span>
                 </button>
+            </div>
+
+            <!-- Upload: Direct data to Zenodo -->
+            <div *ngIf="selectedMode === 'datadirect'" class="chat-input" style="flex-direction: column; align-items: flex-start; gap: 6px;">
+                <div style="display: flex; gap: 8px; width: 100%;">
+                    <input type="file" (change)="onFileChangeDirect($event)" style="flex: 1;">
+                    <button type="button" [disabled]="!fileToUploadDirect" (click)="onSubmitDirect()">
+                        Upload &amp; Analyse
+                    </button>
+                </div>
+                <p class="upload-hint">
+                    Upload any file or ZIP archive. SciConv will scan the contents and use AI to suggest Zenodo metadata before publishing.
+                </p>
             </div>
 
             <!-- DOI input: Reproduce from DOI -->
@@ -591,11 +608,12 @@
             </button>
         </div>
 
-        <!-- Universal chat input — shown for all active workflows except Welcome/ReproFromDoi/metadata editors -->
+        <!-- Universal chat input — shown for all active workflows except Welcome/ReproFromDoi/DataUpload/metadata editors -->
         <div
                 class="chat-input"
                 *ngIf="appStage != appStages.Welcome
       && appStage != appStages.ReproFromDoi
+      && appStage != appStages.DataUpload
       && (!isDataState(s) || s.stage !== dataStages.EditZenodoMetadata)
       && (isDataState(s) || s.stage !== reproStages.InferDatasetMetadata)
       && (isDataState(s) || s.stage !== reproStages.InferArtifactMetadata)"
@@ -700,6 +718,94 @@
         <button type="button" (click)="goToAppStart()" [disabled]="s.isLoading">
             Back to Start
         </button>
+
+        <!-- ══ Standalone: Upload Data to Zenodo ══════════════════════════════ -->
+        <ng-container *ngIf="appStage === appStages.DataUpload">
+            <ng-container *ngIf="dataUpload.state$ | async as du">
+
+                <!-- Analysing: spinner while GPT infers metadata -->
+                <div *ngIf="du.stage === dataUploadStages.AnalysingData" style="margin: 16px 10px;">
+                    <div class="run-progress-detail">
+                        <i class="fa fa-spinner fa-spin"></i>
+                        Analysing your data and inferring Zenodo metadata…
+                    </div>
+                    <p style="font-size: 12px; color: #888; margin: 6px 0 0;">
+                        This step samples your files and asks AI to generate a metadata draft. It usually takes <strong>1–3 minutes</strong> depending on dataset size.
+                    </p>
+                </div>
+
+                <!-- Review Metadata: editor -->
+                <div *ngIf="du.stage === dataUploadStages.ReviewMetadata" style="padding: 0 10px 16px;">
+                    <div style="margin-bottom: 10px;">
+                        <strong>Review inferred metadata</strong>
+                        <p style="margin: 4px 0 0; font-size: 13px; color: #555;">
+                            SciConv has inferred the following metadata for your Zenodo record.
+                            Please review and edit before publishing.
+                            <span *ngIf="du.totalBytes">
+                                Dataset size: <strong>{{ (du.totalBytes! / 1048576).toFixed(1) }} MB</strong>
+                                <span *ngIf="du.totalBytes! > 50 * 1024 * 1024 * 1024"> — will be split into multiple records</span>.
+                            </span>
+                        </p>
+                    </div>
+                    <app-zenodo-metadata-editor
+                        [template]="du.zenodoTemplate"
+                        [draft]="du.zenodoMetadata"
+                        saveLabel="Confirm &amp; Publish to Zenodo"
+                        (save)="onConfirmDirectUpload($event)"
+                        (cancel)="dataUpload.reset(); goToAppStart()"
+                    ></app-zenodo-metadata-editor>
+                </div>
+
+                <!-- Publishing: progress updates while background job runs -->
+                <div *ngIf="du.stage === dataUploadStages.Publishing" style="padding: 16px 10px;">
+                    <div class="run-progress-detail">
+                        <i class="fa fa-spinner fa-spin"></i>
+                        {{ du.progressText || 'Uploading to Zenodo…' }}
+                    </div>
+                    <p style="font-size: 12px; color: #888; margin: 8px 0 0;">
+                        This may take a while for large datasets. You can leave this page and come back — the upload continues in the background.
+                    </p>
+                </div>
+
+                <!-- Completed: show DOI(s) -->
+                <div *ngIf="du.stage === dataUploadStages.Completed" class="chat-window" style="margin-top: 8px;">
+                    <div class="chat-message">
+                        <strong>assistant</strong>
+                        <div style="margin-bottom: 8px;">
+                            🎉 Your dataset has been published on Zenodo!
+                            <span *ngIf="du.dois && du.dois.length > 1"> It was split into {{ du.dois.length }} records.</span>
+                        </div>
+                        <div *ngFor="let doi of du.dois; let i = index" style="margin: 4px 0;">
+                            <span *ngIf="du.dois!.length > 1"><strong>Part {{ i + 1 }}:</strong></span>
+                            <a [href]="'https://doi.org/' + doi" target="_blank"
+                               style="color: #4a6cf7; text-decoration: underline;">
+                                {{ doi }}
+                            </a>
+                        </div>
+                        <div *ngIf="!du.dois?.length" style="color: #888; font-size: 13px;">
+                            (DOIs not available — check Zenodo directly)
+                        </div>
+                    </div>
+                    <div style="padding: 10px 0;">
+                        <button type="button" (click)="dataUpload.reset(); goToAppStart()">
+                            Start over
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Error -->
+                <div *ngIf="du.stage === dataUploadStages.Error"
+                     style="color: #c62828; background: #ffebee; border-radius: 6px; padding: 12px 16px; margin: 10px 0;">
+                    <strong>Upload failed</strong>
+                    <div style="font-size: 13px; margin-top: 4px;">{{ du.errorMessage }}</div>
+                    <button type="button" style="margin-top: 10px;" (click)="dataUpload.reset(); goToAppStart()">
+                        Try again
+                    </button>
+                </div>
+
+            </ng-container>
+        </ng-container>
+        <!-- ══ End Standalone Data Upload ══════════════════════════════════ -->
 
     </ng-container>
 </div>

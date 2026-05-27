@@ -277,4 +277,20 @@ export class BackendService {
 
 
 
+    // ── Standalone Data Upload to Zenodo ──────────────────────────────────────
+
+    uploadDataDirect(formData: FormData) {
+        return this.http.post(`${this.baseUrl}/data-upload/upload`, formData,
+            {headers: this.headers});
+    }
+
+    confirmDataUpload(uuid: string, body: any) {
+        return this.http.post(`${this.baseUrl}/data-upload/${uuid}/confirm`, body,
+            {headers: this.headers});
+    }
+
+    getDataUploadProgress(uuid: string) {
+        return this.http.get(`${this.baseUrl}/data-upload/${uuid}/progress`,
+            {headers: this.headers});
+    }
 }

@@ -4,16 +4,19 @@ import { Observable } from 'rxjs';
 import { ReproWorkflowService } from '../../service/repro-workflow/repro-workflow.service';
 import { DatasetAnalysisService } from '../../service/dataset-analysis/dataset-analysis.service';
 import { BackendService } from '../../service/backend.service';
+import { DataUploadService } from '../../service/data-upload/data-upload.service';
 
 import { ReproStages, ReproState, ReproFromDoiState } from '../../service/repro-workflow/repro-workflow.types';
 import { DataStages, DataState,  } from '../../service/dataset-analysis/dataset-analysis.types';
+import { DataUploadStages } from '../../service/data-upload/data-upload.types';
 
 
 enum AppStage {
     Welcome = 'Welcome',
     Repro = 'Repro',
     Dataset = 'Dataset',
-    ReproFromDoi = 'ReproFromDoi'
+    ReproFromDoi = 'ReproFromDoi',
+    DataUpload = 'DataUpload',
 }
 
 /** JSON keys that should NOT be displayed as labels */
@@ -39,9 +42,13 @@ export class HomeComponent {
     // App stage (UI-level)
     appStages = AppStage;
     appStage: AppStage = AppStage.Welcome;
-    selectedMode: 'repro' | 'dataset' | 'doi' | null = null;
+    selectedMode: 'repro' | 'dataset' | 'doi' | 'datadirect' | null = null;
     zenodoDraftText: string = '';
     metadataJsonError: string = '';
+
+    // Standalone data upload
+    dataUploadStages = DataUploadStages;
+    fileToUploadDirect: File | null = null;
 
 
     // Uploads (separados)
@@ -80,7 +87,8 @@ export class HomeComponent {
     constructor(
         public workflow: ReproWorkflowService,
         public analysis: DatasetAnalysisService,
-        public backend: BackendService
+        public backend: BackendService,
+        public dataUpload: DataUploadService,
     ) {
         // default (Start screen only needs isLoading/error/messages, so any state works)
         this.state$ = this.workflow.state$;
@@ -160,19 +168,21 @@ export class HomeComponent {
         this.fileToUploadData = file ?? null;
     }
 
-    onSelectMode(mode: 'repro' | 'dataset' | 'doi' | null) {
+    onSelectMode(mode: 'repro' | 'dataset' | 'doi' | 'datadirect' | null) {
         this.selectedMode = mode;
         this.showReproIntro = mode === 'repro';
         this.fileToUploadRepro = null;
         this.fileToUploadPdf = null;
+        this.fileToUploadDirect = null;
         this.artifactDoiInput = '';
     }
 
     get modeUserMessage(): string {
         switch (this.selectedMode) {
-            case 'repro': return 'I want to package an experiment.';
-            case 'dataset': return 'I want to analyse a paper\'s datasets.';
-            case 'doi': return 'I want to reproduce an experiment from a DOI.';
+            case 'repro':       return 'I want to package an experiment.';
+            case 'dataset':     return 'I want to analyse a paper\'s datasets.';
+            case 'doi':         return 'I want to reproduce an experiment from a DOI.';
+            case 'datadirect':  return 'I want to upload data directly to Zenodo.';
             default: return '';
         }
     }
@@ -188,6 +198,12 @@ export class HomeComponent {
             );
             case 'dataset': return 'Please upload the scientific article in PDF format. I\'ll identify all datasets used, check their FAIR compliance, and help you publish any that are missing a proper reference.';
             case 'doi': return 'Please provide the Zenodo DOI or URL of the published research artifact you want to reproduce (e.g. 10.5281/zenodo.1234567). I\'ll download it, set up the environment, and run the experiment automatically.';
+            case 'datadirect': return (
+                'Upload your dataset file or ZIP below.\n\n' +
+                'SciConv will analyse the contents and use AI to infer the Zenodo metadata (title, description, creators, keywords, etc.). ' +
+                'You can review and edit everything before publishing. ' +
+                'Large datasets (>50 GB) are automatically split across multiple Zenodo records.'
+            );
             default: return '';
         }
     }
@@ -208,6 +224,22 @@ export class HomeComponent {
         const file: File | null = event?.target?.files?.[0] ?? null;
         if (!file) return;
         this.workflow.provideDataFile(file);
+    }
+
+    // ── Standalone data upload to Zenodo ─────────────────────────────────────
+
+    onFileChangeDirect(event: any) {
+        this.fileToUploadDirect = event?.target?.files?.[0] ?? null;
+    }
+
+    onSubmitDirect() {
+        if (!this.fileToUploadDirect) return;
+        this.appStage = AppStage.DataUpload;
+        this.dataUpload.uploadFile(this.fileToUploadDirect);
+    }
+
+    onConfirmDirectUpload(metadata: any) {
+        this.dataUpload.confirmUpload(metadata);
     }
 
     /** Upload (PDF Dataset Analysis) */
@@ -342,12 +374,14 @@ export class HomeComponent {
         this.userMessage = '';
         this.fileToUploadRepro = null;
         this.fileToUploadPdf = null;
+        this.fileToUploadDirect = null;
         this.artifactDoiInput = '';
         this.state$ = this.workflow.state$;
 
         if (resetWorkflows) {
             this.workflow.reset();
             this.analysis.reset?.();
+            this.dataUpload.reset();
         }
     }
 

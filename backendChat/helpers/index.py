@@ -53,8 +53,7 @@ def return_messages(requestData, messagesToUser):
     return requestData["messages"]
 
 
-#def callGPTModel(messagesToChat, modelUsed="gpt-4.1", temperature=0.2):
-def callGPTModel(messagesToChat, modelUsed="o4-mini"):
+def callGPTModel(messagesToChat, modelUsed="gpt-5.4-mini", temperature=0.2):
 
     """
     Calls OpenAI Chat Completions API.
@@ -69,12 +68,13 @@ def callGPTModel(messagesToChat, modelUsed="o4-mini"):
     if not openai_api_key:
         raise EnvironmentError("Missing OPENAI_API_KEY in environment or .env file.")
 
-    client = OpenAI(api_key=openai_api_key)
+    # timeout=120: raise an error after 2 minutes rather than hanging forever
+    client = OpenAI(api_key=openai_api_key, timeout=120)
 
     completion = client.chat.completions.create(
         model=modelUsed,
         messages=messagesToChat,
-        #temperature=temperature,
+        temperature=temperature,
     )
 
     result = completion.choices[0].message.content

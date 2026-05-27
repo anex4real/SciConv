@@ -1081,6 +1081,7 @@ def infer_dataset_metadata_from_data(
         "- Use code imports and script names ONLY to understand the scientific domain and what the data represents — do NOT mention them in the description.\n"
         "- The description must read as if written by the dataset author: describe what the data contains, its format, value ranges, measurement type, and scientific domain.\n"
         "- Do NOT reference any code files, script names, or how to run anything in the title or description.\n"
+        "- ALWAYS include a 'keywords' array with 3–8 relevant terms inferred from the data content, file names, formats, and scientific domain (e.g. file format names, measurement types, physical quantities, domain keywords).\n"
         "- Return exactly 1 metadata object.\n"
     )
 
@@ -1093,7 +1094,8 @@ def infer_dataset_metadata_from_data(
         "required_output_schema": {
             "metadata_list": [{"metadata": {
                 "title": "", "upload_type": "dataset",
-                "description": "", "creators": [], "access_right": ""
+                "description": "", "creators": [], "access_right": "",
+                "keywords": []
             }}]
         }
     }
