@@ -186,11 +186,13 @@ def _detect_data_folder_alias(files_location):
     prompt = [{
         "role": "user",
         "content": (
-            "Look at the following code files and identify the relative folder path used "
-            "to read or load data files (e.g. pd.read_csv, open, read.csv, load, etc.).\n"
-            "Return ONLY the folder name — no explanation, no quotes.\n"
+            "Look at the following code files and identify the folder name used to READ or LOAD "
+            "INPUT data files — such as pd.read_csv(), open() for reading, read.csv(), np.load(), etc.\n"
+            "IMPORTANT: ignore folders used only for WRITING output/results (e.g. open('output/x','w'), "
+            "os.makedirs('results'), savefig, to_csv for saving). Those are output folders, not input data.\n"
+            "Return ONLY the input data folder name — no explanation, no quotes.\n"
             "Examples: 'mydata/file.csv' → mydata | 'raw/data.csv' → raw | './data/x.csv' → data\n"
-            "If no data folder is referenced, or it is already named 'data', return: none\n\n"
+            "If no input data folder is referenced, or it is already named 'data', return: none\n\n"
             + "\n\n".join(snippets)
         )
     }]
@@ -2599,8 +2601,11 @@ def buildDockerFileChat(projectUuid):
             for p in _spec_paths
             if os.path.dirname(p).strip("/")  # skip files in root (no parent dir)
         })
+        # Skip any directory already covered by the data alias symlink —
+        # mkdir over a symlink fails with exit code 1.
+        _output_dirs = {d for d in _output_dirs if d != _alias}
         if _output_dirs:
-            _mkdir_args = " ".join(f"/files/{d}" for d in _output_dirs)
+            _mkdir_args = " ".join(f"/files/{d}" for d in sorted(_output_dirs))
             with open(projectPath + "Dockerfile", "a", encoding="utf-8") as _df:
                 _df.write(f"\nRUN mkdir -p {_mkdir_args}\n")
 
