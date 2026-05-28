@@ -837,100 +837,115 @@ def _sample_code_files(files_dir: str, max_total_chars: int = 3000) -> Dict[str,
 
 def _sample_data_files(data_dir: str, max_total_chars: int = 8000) -> List[Dict[str, Any]]:
     """
-    Walk data_dir, sample one file per extension type for GPT context.
-    Returns list of sample dicts with filename, size, and a content preview
-    where possible. Caps total characters sent to avoid overloading the LLM.
+    Walk data_dir and sample up to MAX_FILES_PER_EXT files per extension type
+    for GPT context.  Sampling multiple files of the same type lets GPT see
+    structurally different files (e.g. sensors.csv vs metadata.csv) instead of
+    just one representative.  Total characters sent to GPT is capped at
+    max_total_chars to avoid overloading the LLM.
     """
     import csv as _csv_mod
 
-    # One representative file per extension
-    by_ext: Dict[str, str] = {}
+    MAX_FILES_PER_EXT = 3   # how many files to sample per extension
+
+    # Collect up to MAX_FILES_PER_EXT files for each extension (sorted → deterministic)
+    by_ext: Dict[str, List[str]] = {}
     for root, _, files in os.walk(data_dir):
         for fname in sorted(files):
             ext = os.path.splitext(fname)[1].lower() or ".bin"
-            if ext not in by_ext:
-                by_ext[ext] = os.path.join(root, fname)
+            by_ext.setdefault(ext, [])
+            if len(by_ext[ext]) < MAX_FILES_PER_EXT:
+                by_ext[ext].append(os.path.join(root, fname))
 
     samples: List[Dict[str, Any]] = []
     chars_used = 0
 
-    for ext, path in by_ext.items():
+    for ext, paths in by_ext.items():
         if chars_used >= max_total_chars:
             break
-        fname = os.path.basename(path)
-        try:
-            size = os.path.getsize(path)
-        except Exception:
-            size = 0
-        remaining = max_total_chars - chars_used
-        sample: Dict[str, Any] = {"filename": fname, "extension": ext, "size_bytes": size}
 
-        try:
-            if ext in ('.csv', '.tsv'):
-                sep = '\t' if ext == '.tsv' else ','
-                rows: List[Any] = []
-                with open(path, 'r', encoding='utf-8', errors='replace') as f:
-                    reader = _csv_mod.reader(f, delimiter=sep)
-                    for i, row in enumerate(reader):
-                        if i >= 4:
-                            break
-                        rows.append(row)
-                sample['preview'] = rows
-                chars_used += sum(len(' '.join(str(c) for c in r)) for r in rows)
+        # Divide the remaining budget evenly across the files of this extension
+        # so one large file can't swallow the entire quota.
+        for path in paths:
+            if chars_used >= max_total_chars:
+                break
 
-            elif ext == '.json':
-                with open(path, 'r', encoding='utf-8', errors='replace') as f:
-                    content = f.read(min(1000, remaining))
-                sample['preview'] = content
-                chars_used += len(content)
+            # Per-file budget: at most 1/3 of the total cap, or whatever remains
+            per_file_cap = min(max_total_chars // 3, max_total_chars - chars_used)
 
-            elif ext in ('.txt', '.md', '.rst'):
-                with open(path, 'r', encoding='utf-8', errors='replace') as f:
-                    content = f.read(min(600, remaining))
-                sample['preview'] = content
-                chars_used += len(content)
+            fname = os.path.basename(path)
+            try:
+                size = os.path.getsize(path)
+            except Exception:
+                size = 0
 
-            elif ext == '.npy':
-                try:
-                    import numpy as np
-                    arr = np.load(path, allow_pickle=False)
-                    sample['shape'] = list(arr.shape)
-                    sample['dtype'] = str(arr.dtype)
-                    if arr.size > 0:
-                        flat = arr.flatten()
-                        sample['value_range'] = {
-                            'min': float(flat.min()),
-                            'max': float(flat.max()),
-                            'mean': float(flat.mean()),
-                        }
-                        sample['values_preview'] = flat[:5].tolist()
-                    chars_used += 100
-                except ImportError:
-                    pass
+            sample: Dict[str, Any] = {"filename": fname, "extension": ext, "size_bytes": size}
 
-            elif ext in ('.h5', '.hdf5'):
-                try:
-                    import h5py
-                    with h5py.File(path, 'r') as hf:
-                        sample['keys'] = list(hf.keys())[:20]
-                    chars_used += 100
-                except ImportError:
-                    pass
+            try:
+                if ext in ('.csv', '.tsv'):
+                    sep = '\t' if ext == '.tsv' else ','
+                    rows: List[Any] = []
+                    with open(path, 'r', encoding='utf-8', errors='replace') as f:
+                        reader = _csv_mod.reader(f, delimiter=sep)
+                        for i, row in enumerate(reader):
+                            if i >= 4:   # header + 3 data rows
+                                break
+                            rows.append(row)
+                    sample['preview'] = rows
+                    chars_used += sum(len(' '.join(str(c) for c in r)) for r in rows)
 
-            elif ext == '.nc':
-                try:
-                    import netCDF4 as nc4
-                    with nc4.Dataset(path, 'r') as ds:
-                        sample['variables'] = list(ds.variables.keys())[:20]
-                        sample['dimensions'] = {k: len(v) for k, v in list(ds.dimensions.items())[:10]}
-                    chars_used += 100
-                except ImportError:
-                    pass
+                elif ext == '.json':
+                    with open(path, 'r', encoding='utf-8', errors='replace') as f:
+                        content = f.read(min(1000, per_file_cap))
+                    sample['preview'] = content
+                    chars_used += len(content)
 
-        except Exception:
-            pass
+                elif ext in ('.txt', '.md', '.rst'):
+                    with open(path, 'r', encoding='utf-8', errors='replace') as f:
+                        content = f.read(min(600, per_file_cap))
+                    sample['preview'] = content
+                    chars_used += len(content)
 
-        samples.append(sample)
+                elif ext == '.npy':
+                    try:
+                        import numpy as np
+                        arr = np.load(path, allow_pickle=False)
+                        sample['shape'] = list(arr.shape)
+                        sample['dtype'] = str(arr.dtype)
+                        if arr.size > 0:
+                            flat = arr.flatten()
+                            sample['value_range'] = {
+                                'min': float(flat.min()),
+                                'max': float(flat.max()),
+                                'mean': float(flat.mean()),
+                            }
+                            sample['values_preview'] = flat[:5].tolist()
+                        chars_used += 100
+                    except ImportError:
+                        pass
+
+                elif ext in ('.h5', '.hdf5'):
+                    try:
+                        import h5py
+                        with h5py.File(path, 'r') as hf:
+                            sample['keys'] = list(hf.keys())[:20]
+                        chars_used += 100
+                    except ImportError:
+                        pass
+
+                elif ext == '.nc':
+                    try:
+                        import netCDF4 as nc4
+                        with nc4.Dataset(path, 'r') as ds:
+                            sample['variables'] = list(ds.variables.keys())[:20]
+                            sample['dimensions'] = {k: len(v) for k, v in list(ds.dimensions.items())[:10]}
+                        chars_used += 100
+                    except ImportError:
+                        pass
+
+            except Exception:
+                pass
+
+            samples.append(sample)
 
     return samples
 
