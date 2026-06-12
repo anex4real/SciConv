@@ -715,10 +715,6 @@
             {{ s.errorMessage }}
         </div>
 
-        <button type="button" (click)="goToAppStart()" [disabled]="s.isLoading">
-            Back to Start
-        </button>
-
         <!-- ══ Standalone: Upload Data to Zenodo ══════════════════════════════ -->
         <ng-container *ngIf="appStage === appStages.DataUpload">
             <ng-container *ngIf="dataUpload.state$ | async as du">
@@ -806,6 +802,10 @@
             </ng-container>
         </ng-container>
         <!-- ══ End Standalone Data Upload ══════════════════════════════════ -->
+
+        <button type="button" (click)="goToAppStart()" [disabled]="s.isLoading">
+            Back to Start
+        </button>
 
     </ng-container>
 </div>
