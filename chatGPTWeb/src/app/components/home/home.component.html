@@ -216,7 +216,7 @@
             <div class="chat-window">
                 <div class="chat-message">
                     <strong>assistant</strong>
-                    <div>Hi! I'm SciConv, your research reproducibility assistant. What would you like to do?</div>
+                    <div>Hi! I'm SciSuite, your research reproducibility assistant. What would you like to do?</div>
                 </div>
 
                 <!-- Echo user choice + assistant prompt after selection -->
@@ -248,7 +248,7 @@
                 </button>
                 <button type="button" class="mode-btn" (click)="onSelectMode('datadirect')">
                     <div class="mode-btn-title">Upload data to Zenodo</div>
-                    <div class="mode-btn-desc">Upload a dataset file or ZIP directly to Zenodo. SciConv uses AI to infer the metadata (title, description, creators, keywords) — you review it before publishing. Large datasets are automatically split across multiple records.</div>
+                    <div class="mode-btn-desc">Upload a dataset file or ZIP directly to Zenodo. SciSuite uses AI to infer the metadata (title, description, creators, keywords) — you review it before publishing. Large datasets are automatically split across multiple records.</div>
                 </button>
             </div>
 
@@ -258,9 +258,9 @@
                 <ol class="repro-intro-steps">
                     <li><strong>Upload</strong> — Upload your experiment as a ZIP file (code only) or a single script. If your data is small and already part of the project, include it in a folder named <code>data/</code> inside the ZIP — your code can then reference it as <code>data/filename</code>.</li>
                     <li><strong>Dataset</strong> — If your data is separate, upload it here or provide a Zenodo DOI. It will be available at <code>/data/</code> inside the container. Skip if your experiment needs no external data.</li>
-                    <li><strong>Run Command</strong> — Tell SciConv the command to run your experiment (e.g. <code>python main.py</code>).</li>
+                    <li><strong>Run Command</strong> — Tell SciSuite the command to run your experiment (e.g. <code>python main.py</code>).</li>
                     <li><strong>Output Files</strong> — Specify which files your experiment produces so they can be captured.</li>
-                    <li><strong>Environment</strong> — SciConv detects your language and dependencies. You review and confirm.</li>
+                    <li><strong>Environment</strong> — SciSuite detects your language and dependencies. You review and confirm.</li>
                     <li><strong>Build &amp; Run</strong> — A Docker image is built and your experiment runs inside it.</li>
                     <li><strong>Review</strong> — You confirm the results look correct before packaging.</li>
                     <li><strong>Package</strong> — Download the reproducibility artifact or publish it to Zenodo with a citable DOI.</li>
@@ -300,7 +300,7 @@
                     </button>
                 </div>
                 <p class="upload-hint">
-                    Upload any file or ZIP archive. SciConv will scan the contents and use AI to suggest Zenodo metadata before publishing.
+                    Upload any file or ZIP archive. SciSuite will scan the contents and use AI to suggest Zenodo metadata before publishing.
                 </p>
             </div>
 
@@ -735,7 +735,7 @@
                     <div style="margin-bottom: 10px;">
                         <strong>Review inferred metadata</strong>
                         <p style="margin: 4px 0 0; font-size: 13px; color: #555;">
-                            SciConv has inferred the following metadata for your Zenodo record.
+                            SciSuite has inferred the following metadata for your Zenodo record.
                             Please review and edit before publishing.
                             <span *ngIf="du.totalBytes">
                                 Dataset size: <strong>{{ (du.totalBytes! / 1048576).toFixed(1) }} MB</strong>

@@ -200,7 +200,7 @@ export class HomeComponent {
             case 'doi': return 'Please provide the Zenodo DOI or URL of the published research artifact you want to reproduce (e.g. 10.5281/zenodo.1234567). I\'ll download it, set up the environment, and run the experiment automatically.';
             case 'datadirect': return (
                 'Upload your dataset file or ZIP below.\n\n' +
-                'SciConv will analyse the contents and use AI to infer the Zenodo metadata (title, description, creators, keywords, etc.). ' +
+                'SciSuite will analyse the contents and use AI to infer the Zenodo metadata (title, description, creators, keywords, etc.). ' +
                 'You can review and edit everything before publishing. ' +
                 'Large datasets (>50 GB) are automatically split across multiple Zenodo records.'
             );
